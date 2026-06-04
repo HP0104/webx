@@ -1,0 +1,1 @@
+import{G as e,p as t,y as n}from"./index.esm-C-YCUSaI.js";export{e as doc,t as getDoc,n as setDoc};
