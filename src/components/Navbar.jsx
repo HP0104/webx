@@ -81,7 +81,7 @@ function Navbar() {
     <nav className="navbar">
       <Link to="/" className="nav-brand" onClick={() => setIsMenuOpen(false)}>
         <Gamepad2 size={28} color="var(--color-accent)" />
-        WEBK
+        WEB18P
       </Link>
 
       <button className="mobile-toggle" onClick={() => setIsMenuOpen(!isMenuOpen)}>

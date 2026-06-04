@@ -1,5 +1,5 @@
 /**
- * CẤU HÌNH HỆ THỐNG THANH TOÁN VIETQR WEBK
+ * CẤU HÌNH HỆ THỐNG THANH TOÁN VIETQR WEB18P
  * Bạn hãy thay đổi các thông số dưới đây để kết nối với tài khoản ngân hàng thật của bạn.
  */
 

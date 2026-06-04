@@ -218,7 +218,7 @@ function Blog() {
           maxWidth: '480px',
           zIndex: 1
         }}>
-          Tính năng <strong style={{ color: 'var(--color-text-light)' }}>Cộng đồng Blog</strong> của WebK đang được nâng cấp bảo mật và tối ưu hóa hệ thống. Chúng tôi sẽ sớm ra mắt với diện mạo hoàn toàn mới!
+          Tính năng <strong style={{ color: 'var(--color-text-light)' }}>Cộng đồng Blog</strong> của WEB18P đang được nâng cấp bảo mật và tối ưu hóa hệ thống. Chúng tôi sẽ sớm ra mắt với diện mạo hoàn toàn mới!
         </p>
 
         {/* Call to Action Button */}

@@ -4,6 +4,54 @@ import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 
+const GEMINI_MODELS = ['gemini-3-flash-preview', 'gemini-2.0-flash', 'gemini-1.5-flash-latest'];
+
+const extractJsonObject = (text) => {
+  const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error('AI không trả về JSON hợp lệ.');
+    }
+
+    return JSON.parse(cleaned.slice(start, end + 1));
+  }
+};
+
+const getGeminiText = (data) => {
+  if (data?.error) {
+    throw new Error(data.error.message || 'Gemini API trả về lỗi.');
+  }
+
+  const candidate = data?.candidates?.[0];
+  if (!candidate) {
+    const blockReason = data?.promptFeedback?.blockReason;
+    throw new Error(blockReason
+      ? `Gemini đã chặn yêu cầu (${blockReason}). Hãy thử tên game ít nhạy cảm hơn hoặc nhập thủ công.`
+      : 'Gemini không trả về nội dung nào.');
+  }
+
+  if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+    throw new Error(`Gemini dừng phản hồi vì ${candidate.finishReason}. Hãy thử lại hoặc nhập thủ công.`);
+  }
+
+  const text = candidate.content?.parts
+    ?.map(part => part.text)
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+
+  if (!text) {
+    throw new Error('Gemini trả về phản hồi rỗng.');
+  }
+
+  return text;
+};
+
 function Admin() {
   const { games, addGameToStore, deleteGameFromStore, updateGameInStore, revenue } = useAppContext();
   const [users, setUsers] = useState([]);
@@ -100,26 +148,44 @@ function Admin() {
     if (!apiKey) return alert('Vui lòng nhập Google AI Studio API Key để dùng tính năng này!');
     
     setIsSearching(true);
-    const prompt = `Give me information about the video game "${searchQuery}". 
-Return ONLY a valid JSON object with these keys: price (VND), image, tags (array), description (Vietnamese), developer, releaseDate, systemRequirements (Vietnamese), screenshots (array), rating (float 1.0 to 5.0), downloads (number), is18Plus (boolean).`;
+    const prompt = `Find public information about the video game "${searchQuery}".
+If the exact game is obscure, return the best available public information and keep unknown fields empty instead of inventing facts.
+Return ONLY a valid JSON object with these keys: price (VND number), image (URL string), tags (array), description (Vietnamese string), developer (string), releaseDate (string), systemRequirements (Vietnamese string), screenshots (array of URL strings), rating (float 1.0 to 5.0), downloads (number), is18Plus (boolean).`;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
-      const data = await response.json();
-      const parts = data.candidates[0].content.parts;
-      const textPart = parts.find(p => p.text);
-      const rawText = textPart.text;
-      const cleanJsonStr = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const aiData = JSON.parse(cleanJsonStr);
+      let rawText = '';
+      let lastError = null;
+
+      for (const model of GEMINI_MODELS) {
+        for (const useSearch of [true, false]) {
+          try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                ...(useSearch ? { tools: [{ google_search: {} }] } : {})
+              })
+            });
+            const data = await response.json();
+            rawText = getGeminiText(data);
+            break;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+
+        if (rawText) break;
+      }
+
+      if (!rawText) throw lastError || new Error('Không thể lấy dữ liệu từ Gemini.');
+
+      const aiData = extractJsonObject(rawText);
 
       const is18 = aiData.is18Plus || searchQuery.toLowerCase().includes('slut') || searchQuery.toLowerCase().includes('18+');
 
-      setNewGame({
-        ...newGame,
+      setNewGame(prev => ({
+        ...prev,
         title: searchQuery,
         price: aiData.price || 0,
         image: aiData.image || '',
@@ -138,7 +204,7 @@ Return ONLY a valid JSON object with these keys: price (VND), image, tags (array
         is18Uncensored: is18,
         is18Pc: true,
         is18Android: is18
-      });
+      }));
       alert('Thành công! AI đã tìm thấy thông tin game.');
     } catch (error) {
       alert('Lỗi AI: ' + error.message);
