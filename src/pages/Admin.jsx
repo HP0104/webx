@@ -11,9 +11,77 @@ const ADULT_KEYWORDS = [
 const TAVILY_API_KEY_STORAGE_KEY = 'web18p_tavily_api_key';
 
 const cleanText = (text = '') => String(text)
+  .replace(/&nbsp;/gi, ' ')
+  .replace(/&amp;/gi, '&')
+  .replace(/&quot;/gi, '"')
+  .replace(/&#39;/gi, "'")
   .replace(/<[^>]*>/g, ' ')
   .replace(/\s+/g, ' ')
   .trim();
+
+const MONTH_MAP = {
+  jan: '01',
+  january: '01',
+  feb: '02',
+  february: '02',
+  mar: '03',
+  march: '03',
+  apr: '04',
+  april: '04',
+  may: '05',
+  jun: '06',
+  june: '06',
+  jul: '07',
+  july: '07',
+  aug: '08',
+  august: '08',
+  sep: '09',
+  sept: '09',
+  september: '09',
+  oct: '10',
+  october: '10',
+  nov: '11',
+  november: '11',
+  dec: '12',
+  december: '12'
+};
+
+const normalizeReleaseDate = (dateText = '') => {
+  const raw = cleanText(dateText).split('|')[0].trim();
+  if (!raw) return '';
+
+  const isoMatch = raw.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+  }
+
+  const dayMonthYear = raw.match(/\b(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\b/);
+  if (dayMonthYear) {
+    const month = MONTH_MAP[dayMonthYear[2].toLowerCase()];
+    if (month) return `${dayMonthYear[3]}-${month}-${dayMonthYear[1].padStart(2, '0')}`;
+  }
+
+  const monthDayYear = raw.match(/\b([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})\b/);
+  if (monthDayYear) {
+    const month = MONTH_MAP[monthDayYear[1].toLowerCase()];
+    if (month) return `${monthDayYear[3]}-${month}-${monthDayYear[2].padStart(2, '0')}`;
+  }
+
+  return raw;
+};
+
+const translateSystemRequirements = (text = '') => cleanText(text)
+  .replace(/\bMinimum\b/gi, 'Tối thiểu')
+  .replace(/\bRecommended\b/gi, 'Đề nghị')
+  .replace(/\bOS\b/gi, 'Hệ điều hành')
+  .replace(/\bProcessor\b/gi, 'Bộ xử lý')
+  .replace(/\bMemory\b/gi, 'Bộ nhớ')
+  .replace(/\bGraphics\b/gi, 'Card đồ họa')
+  .replace(/\bDirectX\b/gi, 'DirectX')
+  .replace(/\bStorage\b/gi, 'Lưu trữ')
+  .replace(/\bSound Card\b/gi, 'Card âm thanh')
+  .replace(/\bAdditional Notes\b/gi, 'Ghi chú thêm')
+  .replace(/\s*:\s*/g, ': ');
 
 const getJson = async (url) => {
   const response = await fetch(url);
@@ -43,18 +111,25 @@ const getSteamInfo = async (gameName) => {
     `https://store.steampowered.com/api/appdetails?appids=${app.id}&l=english&cc=us`
   );
   const details = detailData?.[app.id]?.data;
+  const minimumRequirements = details?.pc_requirements?.minimum || '';
+  const recommendedRequirements = details?.pc_requirements?.recommended || '';
+  const systemRequirements = translateSystemRequirements([
+    minimumRequirements,
+    recommendedRequirements
+  ].filter(Boolean).join(' '));
 
   return {
     title: details?.name || app.name || gameName,
     image: details?.header_image || app.tiny_image || '',
     description: cleanText(details?.short_description || ''),
     developer: Array.isArray(details?.developers) ? details.developers.join(', ') : '',
-    releaseDate: details?.release_date?.date || '',
+    releaseDate: normalizeReleaseDate(details?.release_date?.date || ''),
     price: 0,
     tags: [
       ...(details?.genres || []).map(item => item.description),
       ...(details?.categories || []).map(item => item.description)
     ].filter(Boolean),
+    systemRequirements,
     screenshots: (details?.screenshots || []).map(item => item.path_full).filter(Boolean).slice(0, 6),
     source: `https://store.steampowered.com/app/${app.id}`
   };
@@ -101,6 +176,28 @@ const getGameTagsFromText = (text) => {
   return tags.filter(([, pattern]) => pattern.test(text)).map(([tag]) => tag);
 };
 
+const hasVietnameseText = (text = '') => /[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i.test(text);
+
+const getVietnameseDescription = (gameName, tavilyAnswer, fallbackText, tags) => {
+  const answer = cleanText(tavilyAnswer);
+  if (hasVietnameseText(answer)) return answer;
+
+  const tagText = tags.slice(0, 4).join(', ').toLowerCase();
+  const shortFallback = cleanText(fallbackText)
+    .replace(/\bgame\b/gi, 'trò chơi')
+    .replace(/\bvisual novel\b/gi, 'visual novel')
+    .replace(/\badult\b/gi, 'dành cho người lớn')
+    .replace(/\bmature\b/gi, 'nội dung trưởng thành')
+    .replace(/\bfeatures\b/gi, 'có')
+    .replace(/\bavailable on Steam\b/gi, 'có trên Steam');
+
+  if (shortFallback) {
+    return `${gameName} là một trò chơi ${tagText || 'PC'} có nội dung và lối chơi được tổng hợp từ các nguồn công khai. ${shortFallback}`;
+  }
+
+  return `${gameName} là một trò chơi ${tagText || 'PC'}. Thông tin được tổng hợp từ Tavily và các nguồn công khai; bạn có thể chỉnh lại mô tả cho sát nội dung game trước khi đăng.`;
+};
+
 const searchTavilyGameInfo = async (apiKey, gameName) => {
   const response = await fetch('https://api.tavily.com/search', {
     method: 'POST',
@@ -109,7 +206,7 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      query: `${gameName} game information developer release date official page screenshots`,
+      query: `Tìm thông tin game "${gameName}". Trả lời hoàn toàn bằng tiếng Việt, không dùng tiếng Anh trừ tên riêng. Cần có: mô tả cốt truyện và lối chơi 3-5 câu, nhà phát triển, ngày phát hành dạng YYYY-MM-DD nếu biết, giá, nền tảng, thể loại, cấu hình hệ thống tối thiểu, link nguồn chính thức hoặc Steam.`,
       topic: 'general',
       search_depth: 'advanced',
       include_answer: true,
@@ -141,15 +238,18 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
     /(?:ngày phát hành|phát hành)\s*(?:là|:)?\s*([^.;]+)/i
   ]);
   const tags = [...new Set([...(steamInfo?.tags || []), ...getGameTagsFromText(text), 'PC'])];
+  const fallbackDescription = results[0]?.content || steamInfo?.description || '';
 
   const merged = {
     title: steamInfo?.title || gameName,
     price: steamInfo?.price ?? 0,
     image: steamInfo?.image || images[0] || '',
-    description: cleanText(data.answer || results[0]?.content || steamInfo?.description || ''),
+    description: getVietnameseDescription(gameName, data.answer, fallbackDescription, tags),
     developer,
-    releaseDate,
-    systemRequirements: '',
+    releaseDate: normalizeReleaseDate(releaseDate),
+    systemRequirements: steamInfo?.systemRequirements || translateSystemRequirements(findInText(text, [
+      /(?:cấu hình hệ thống|system requirements|minimum requirements)\s*(?:là|:)?\s*([^]+?)(?:\s*(?:link nguồn|source|developer|nhà phát triển|release date|ngày phát hành)|$)/i
+    ])),
     screenshots,
     rating: 5.0,
     downloads: Math.floor(Math.random() * 500) + 15,
