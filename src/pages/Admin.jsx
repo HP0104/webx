@@ -247,6 +247,13 @@ const getOptionalJson = async (url) => {
   }
 };
 
+const getSteamPriceValue = (priceData) => {
+  if (!priceData) return 0;
+  if (typeof priceData.final === 'number') return Math.round(priceData.final / 100);
+  if (typeof priceData.initial === 'number') return Math.round(priceData.initial / 100);
+  return 0;
+};
+
 const getSteamInfo = async (gameName) => {
   const searchData = await getOptionalJson(
     `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&l=english&cc=us`
@@ -254,11 +261,29 @@ const getSteamInfo = async (gameName) => {
   const app = (searchData?.items || []).find(item => hasGameNameMatch(gameName, item.name || ''));
   if (!app?.id) return null;
 
+  const searchFallback = {
+    title: app.name || gameName,
+    image: app.tiny_image || '',
+    description: `${app.name || gameName} hiện có trên Steam.`,
+    developer: '',
+    releaseDate: '',
+    price: getSteamPriceValue(app.price),
+    tags: [
+      app.platforms?.windows ? 'PC' : '',
+      app.platforms?.mac ? 'Mac' : '',
+      app.platforms?.linux ? 'Linux' : ''
+    ].filter(Boolean),
+    systemRequirements: '',
+    screenshots: [],
+    source: `https://store.steampowered.com/app/${app.id}`
+  };
+
   const detailData = await getOptionalJson(
     `https://store.steampowered.com/api/appdetails?appids=${app.id}&l=english&cc=us`
   );
   const details = detailData?.[app.id]?.data;
-  if (!hasGameNameMatch(gameName, `${details?.name || ''} ${app.name || ''}`)) return null;
+  if (!details) return searchFallback;
+  if (!hasGameNameMatch(gameName, `${details?.name || ''} ${app.name || ''}`)) return searchFallback;
 
   const minimumRequirements = details?.pc_requirements?.minimum || '';
   const recommendedRequirements = details?.pc_requirements?.recommended || '';
@@ -273,7 +298,7 @@ const getSteamInfo = async (gameName) => {
     description: cleanText(details?.short_description || ''),
     developer: Array.isArray(details?.developers) ? details.developers.join(', ') : '',
     releaseDate: normalizeReleaseDate(details?.release_date?.date || ''),
-    price: 0,
+    price: getSteamPriceValue(details?.price_overview || app.price),
     tags: [
       ...(details?.genres || []).map(item => item.description),
       ...(details?.categories || []).map(item => item.description)
