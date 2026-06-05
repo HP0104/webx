@@ -4,20 +4,26 @@ import { ShoppingCart, Download, ArrowLeft, Monitor, History, Calendar, Eye } fr
 import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { doc, updateDoc, increment } from 'firebase/firestore';
+import { findGameByRouteParam, getGamePath } from '../utils/gameRoutes';
 
 function GameDetail() {
-  const { id } = useParams();
+  const { gameSlug } = useParams();
   const navigate = useNavigate();
   const { user, buyGame, ownedGames, games } = useAppContext();
   
-  const game = games.find(g => g.id.toString() === id.toString());
+  const game = findGameByRouteParam(games, gameSlug);
+
+  useEffect(() => {
+    if (!game || gameSlug === getGamePath(game).split('/').pop()) return;
+    navigate(getGamePath(game), { replace: true });
+  }, [game?.id, gameSlug, navigate]);
 
   // Tự động tăng lượt xem (views) khi người dùng truy cập trang chi tiết game này
   useEffect(() => {
-    if (!id) return;
+    if (!game?.id) return;
     const incrementViews = async () => {
       try {
-        const gameRef = doc(db, 'games', id.toString());
+        const gameRef = doc(db, 'games', game.id.toString());
         await updateDoc(gameRef, {
           views: increment(1)
         });
@@ -26,7 +32,7 @@ function GameDetail() {
       }
     };
     incrementViews();
-  }, [id]);
+  }, [game?.id]);
 
   if (!game) {
     return <div style={{ color: 'white', textAlign: 'center', marginTop: '4rem' }}>Không tìm thấy game!</div>;

@@ -18,6 +18,7 @@ import { MOCK_USERS } from './data/users';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { findGameByRouteParam } from './utils/gameRoutes';
 
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
@@ -53,8 +54,8 @@ function PageTitle({ games }) {
       const categoryType = pathname.split('/').filter(Boolean)[1];
       pageTitle = CATEGORY_TITLES[categoryType] || 'Kho Game';
     } else if (pathname.startsWith('/game/')) {
-      const gameId = pathname.split('/').filter(Boolean)[1];
-      const game = games.find(item => item.id.toString() === gameId);
+      const gameSlug = pathname.split('/').filter(Boolean)[1];
+      const game = findGameByRouteParam(games, gameSlug);
       pageTitle = game?.title || 'Chi Tiết Game';
     } else if (pathname === '/blog') {
       pageTitle = 'Blog';
@@ -291,7 +292,7 @@ function App() {
                 <Route path="/" element={<Home />} />
                 <Route path="/category/:categoryType" element={<Category />} />
                 <Route path="/games" element={<Category />} />
-                <Route path="/game/:id" element={<GameDetail />} />
+                <Route path="/game/:gameSlug" element={<GameDetail />} />
                 <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
                 <Route path="/wallet" element={user ? <Wallet /> : <Navigate to="/auth" />} />
                 <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />

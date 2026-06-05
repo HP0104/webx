@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { Gamepad2, Star, Download, Calendar, ArrowLeft } from 'lucide-react';
 import { useAppContext } from '../App';
+import { getGamePath } from '../utils/gameRoutes';
 
 function Category() {
   const { categoryType } = useParams();
@@ -118,7 +119,7 @@ function Category() {
         }}>
           {filteredGames.map(game => (
             <Link 
-              to={`/game/${game.id}`} 
+              to={getGamePath(game)} 
               key={game.id} 
               className="game-card fade-in"
             >

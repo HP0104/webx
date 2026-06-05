@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Wallet, User, LogOut, ShieldAlert, Menu, X, ChevronDown, Search } from 'lucide-react';
 import { useAppContext } from '../App';
+import { getGamePath } from '../utils/gameRoutes';
 
 function Navbar() {
   const { user, logout, balance, games } = useAppContext();
@@ -218,7 +219,7 @@ function Navbar() {
               return matches.map(game => (
                 <Link
                   key={game.id}
-                  to={`/game/${game.id}`}
+                  to={getGamePath(game)}
                   onClick={() => {
                     setNavSearch('');
                     setShowSuggestions(false);

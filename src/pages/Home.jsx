@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Gamepad2, TrendingUp, Clock, Star, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
+import { getGamePath } from '../utils/gameRoutes';
 
 function Home() {
   const { games } = useAppContext();
@@ -71,7 +72,7 @@ function Home() {
           }}>
             {paginatedNewGames.map(game => (
               <Link 
-                to={`/game/${game.id}`} 
+                to={getGamePath(game)} 
                 key={game.id} 
                 className="game-card fade-in"
                 style={{ textDecoration: 'none' }}
@@ -219,7 +220,7 @@ function Home() {
         }}>
           {hotGames.map((game, index) => (
             <Link 
-              to={`/game/${game.id}`} 
+              to={getGamePath(game)} 
               key={game.id} 
               className="game-card fade-in"
               style={{ textDecoration: 'none' }}
