@@ -167,6 +167,65 @@ const getTrustedGameResults = (results, gameName) => results
     return (b.score || 0) - (a.score || 0);
   });
 
+const getTavilyErrorMessage = (data, status) => {
+  const errorValue = data?.detail || data?.error || data?.message;
+  if (!errorValue) return `Tavily trả về lỗi ${status}`;
+  if (typeof errorValue === 'string') return errorValue;
+  if (Array.isArray(errorValue)) {
+    return errorValue
+      .map(item => item?.msg || item?.message || JSON.stringify(item))
+      .join('; ');
+  }
+  return JSON.stringify(errorValue);
+};
+
+const shouldRetryTavilyWithoutDomainParam = (message) => /include_domains|domain|extra|schema|validation|field/i.test(message);
+
+const buildTavilyQuery = (gameName) => {
+  const trustedSites = TRUSTED_GAME_DOMAINS
+    .slice(0, 9)
+    .map(domain => `site:${domain}`)
+    .join(' OR ');
+
+  return `(${trustedSites}) Tìm chính xác game "${gameName}" trên các nguồn game lớn như Steam, F95Zone, VNDB, itch.io, DLsite, GOG, Epic Games, MobyGames, IGDB. Bỏ qua kết quả trùng tên nhưng không phải game này. Trả lời hoàn toàn bằng tiếng Việt, không dùng tiếng Anh trừ tên riêng. Cần có: mô tả cốt truyện và lối chơi 3-5 câu, nhà phát triển, ngày phát hành dạng YYYY-MM-DD nếu biết, giá, nền tảng, thể loại, cấu hình hệ thống tối thiểu, link nguồn chính thức hoặc Steam/F95/VNDB.`;
+};
+
+const fetchTavilySearch = async (apiKey, gameName, useDomainParam = true) => {
+  const body = {
+    query: buildTavilyQuery(gameName),
+    topic: 'general',
+    search_depth: 'advanced',
+    include_answer: true,
+    include_images: true,
+    max_results: 10
+  };
+
+  if (useDomainParam) {
+    body.include_domains = TRUSTED_GAME_DOMAINS;
+  }
+
+  const response = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const message = getTavilyErrorMessage(data, response.status);
+    if (useDomainParam && shouldRetryTavilyWithoutDomainParam(message)) {
+      return fetchTavilySearch(apiKey, gameName, false);
+    }
+    throw new Error(message);
+  }
+
+  return data;
+};
+
 const getJson = async (url) => {
   const response = await fetch(url);
   if (!response.ok) {
@@ -285,28 +344,7 @@ const getVietnameseDescription = (gameName, tavilyAnswer, fallbackText, tags) =>
 };
 
 const searchTavilyGameInfo = async (apiKey, gameName) => {
-  const response = await fetch('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      query: `Tìm chính xác game "${gameName}" trên các nguồn game lớn như Steam, F95Zone, VNDB, itch.io, DLsite, GOG, Epic Games, MobyGames, IGDB. Bỏ qua kết quả trùng tên nhưng không phải game này. Trả lời hoàn toàn bằng tiếng Việt, không dùng tiếng Anh trừ tên riêng. Cần có: mô tả cốt truyện và lối chơi 3-5 câu, nhà phát triển, ngày phát hành dạng YYYY-MM-DD nếu biết, giá, nền tảng, thể loại, cấu hình hệ thống tối thiểu, link nguồn chính thức hoặc Steam/F95/VNDB.`,
-      topic: 'general',
-      search_depth: 'advanced',
-      include_answer: true,
-      include_images: true,
-      include_domains: TRUSTED_GAME_DOMAINS,
-      max_results: 8
-    })
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data?.detail || data?.error || `Tavily trả về lỗi ${response.status}`);
-  }
+  const data = await fetchTavilySearch(apiKey, gameName);
 
   const results = getTrustedGameResults(Array.isArray(data.results) ? data.results : [], gameName);
   const text = cleanText([
