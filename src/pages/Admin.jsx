@@ -8,6 +8,8 @@ const ADULT_KEYWORDS = [
   '18+', 'adult', 'nsfw', 'hentai', 'eroge', 'sex', 'slut', 'porn', 'uncensored', 'nude'
 ];
 
+const TAVILY_API_KEY_STORAGE_KEY = 'web18p_tavily_api_key';
+
 const cleanText = (text = '') => String(text)
   .replace(/<[^>]*>/g, ' ')
   .replace(/\s+/g, ' ')
@@ -25,44 +27,9 @@ const getOptionalJson = async (url) => {
   try {
     return await getJson(url);
   } catch (error) {
-    console.warn('Free web search source warning:', error.message);
+    console.warn('Optional game source warning:', error.message);
     return null;
   }
-};
-
-const getWikipediaInfo = async (gameName) => {
-  const searchData = await getOptionalJson(
-    `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(`${gameName} video game`)}&format=json&origin=*`
-  );
-  const pageTitle = searchData?.query?.search?.[0]?.title;
-  if (!pageTitle) return null;
-
-  const summary = await getOptionalJson(
-    `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle)}`
-  );
-  if (!summary || summary.type === 'disambiguation') return null;
-
-  return {
-    title: summary.title,
-    description: cleanText(summary.extract),
-    image: summary.thumbnail?.source || summary.originalimage?.source || '',
-    source: summary.content_urls?.desktop?.page || ''
-  };
-};
-
-const getDuckDuckGoInfo = async (gameName) => {
-  const data = await getOptionalJson(
-    `https://api.duckduckgo.com/?q=${encodeURIComponent(`${gameName} video game`)}&format=json&no_html=1&skip_disambig=1`
-  );
-
-  if (!data?.AbstractText && !data?.Heading) return null;
-
-  return {
-    title: data.Heading || gameName,
-    description: cleanText(data.AbstractText),
-    image: data.Image?.startsWith('http') ? data.Image : '',
-    source: data.AbstractURL || ''
-  };
 };
 
 const getSteamInfo = async (gameName) => {
@@ -104,31 +71,95 @@ const hasAdultSignal = (gameName, info) => {
   return ADULT_KEYWORDS.some(keyword => text.includes(keyword));
 };
 
-const searchFreeGameInfo = async (gameName) => {
-  const [steamInfo, wikiInfo, duckInfo] = await Promise.all([
-    getSteamInfo(gameName),
-    getWikipediaInfo(gameName),
-    getDuckDuckGoInfo(gameName)
+const getTavilyImageUrl = (image) => {
+  if (!image) return '';
+  if (typeof image === 'string') return image;
+  return image.url || image.src || image.image_url || '';
+};
+
+const findInText = (text, patterns) => {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return cleanText(match[1]).replace(/[.;,]$/, '');
+  }
+  return '';
+};
+
+const getGameTagsFromText = (text) => {
+  const tags = [
+    ['VN', /\b(vietnamese|tiếng việt|việt hóa|việt nam)\b/i],
+    ['Android', /\b(android|apk|mobile)\b/i],
+    ['PC', /\b(pc|windows|steam)\b/i],
+    ['Visual Novel', /\bvisual novel\b/i],
+    ['RPG', /\brpg\b/i],
+    ['Adventure', /\badventure\b/i],
+    ['Simulation', /\bsimulation\b/i],
+    ['Action', /\baction\b/i],
+    ['Indie', /\bindie\b/i]
+  ];
+
+  return tags.filter(([, pattern]) => pattern.test(text)).map(([tag]) => tag);
+};
+
+const searchTavilyGameInfo = async (apiKey, gameName) => {
+  const response = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      query: `${gameName} game information developer release date official page screenshots`,
+      topic: 'general',
+      search_depth: 'advanced',
+      include_answer: true,
+      include_images: true,
+      max_results: 8
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data?.detail || data?.error || `Tavily trả về lỗi ${response.status}`);
+  }
+
+  const results = Array.isArray(data.results) ? data.results : [];
+  const text = cleanText([
+    data.answer,
+    ...results.map(result => `${result.title || ''}. ${result.content || result.raw_content || ''}`)
+  ].join(' '));
+  const steamInfo = await getSteamInfo(gameName);
+  const images = Array.isArray(data.images) ? data.images.map(getTavilyImageUrl).filter(Boolean) : [];
+  const screenshots = [...images, ...(steamInfo?.screenshots || [])].filter(Boolean).slice(0, 6);
+  const developer = steamInfo?.developer || findInText(text, [
+    /(?:developer|developed by)\s*(?:is|was|:)?\s*([^.;]+)/i,
+    /(?:nhà phát triển|phát triển bởi)\s*(?:là|:)?\s*([^.;]+)/i
   ]);
+  const releaseDate = steamInfo?.releaseDate || findInText(text, [
+    /(?:release date|released on|released)\s*(?:is|was|:)?\s*([^.;]+)/i,
+    /(?:ngày phát hành|phát hành)\s*(?:là|:)?\s*([^.;]+)/i
+  ]);
+  const tags = [...new Set([...(steamInfo?.tags || []), ...getGameTagsFromText(text), 'PC'])];
 
   const merged = {
-    title: steamInfo?.title || wikiInfo?.title || duckInfo?.title || gameName,
+    title: steamInfo?.title || gameName,
     price: steamInfo?.price ?? 0,
-    image: steamInfo?.image || wikiInfo?.image || duckInfo?.image || '',
-    description: steamInfo?.description || wikiInfo?.description || duckInfo?.description || '',
-    developer: steamInfo?.developer || '',
-    releaseDate: steamInfo?.releaseDate || '',
+    image: steamInfo?.image || images[0] || '',
+    description: cleanText(data.answer || results[0]?.content || steamInfo?.description || ''),
+    developer,
+    releaseDate,
     systemRequirements: '',
-    screenshots: steamInfo?.screenshots || [],
+    screenshots,
     rating: 5.0,
     downloads: Math.floor(Math.random() * 500) + 15,
-    tags: [...(steamInfo?.tags || []), 'PC']
+    tags
   };
 
   return {
     ...merged,
     is18Plus: hasAdultSignal(gameName, merged),
-    sources: [steamInfo?.source, wikiInfo?.source, duckInfo?.source].filter(Boolean)
+    sources: [...results.map(result => result.url), steamInfo?.source].filter(Boolean)
   };
 };
 
@@ -138,6 +169,7 @@ function Admin() {
   const [isSearching, setIsSearching] = useState(false);
   const [editingGameId, setEditingGameId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [tavilyApiKey, setTavilyApiKey] = useState(() => localStorage.getItem(TAVILY_API_KEY_STORAGE_KEY) || '');
   const [currentUpdateVersion, setCurrentUpdateVersion] = useState('');
   const [currentUpdateLog, setCurrentUpdateLog] = useState('');
   const [editingUserId, setEditingUserId] = useState(null);
@@ -169,6 +201,14 @@ function Admin() {
   });
 
   const [manualScreenshotUrl, setManualScreenshotUrl] = useState('');
+
+  useEffect(() => {
+    if (tavilyApiKey.trim()) {
+      localStorage.setItem(TAVILY_API_KEY_STORAGE_KEY, tavilyApiKey.trim());
+    } else {
+      localStorage.removeItem(TAVILY_API_KEY_STORAGE_KEY);
+    }
+  }, [tavilyApiKey]);
 
   // Theo dõi danh sách người dùng từ Firestore theo thời gian thực
   useEffect(() => {
@@ -225,14 +265,15 @@ function Admin() {
   const handleSearchAI = async () => {
     const gameName = searchQuery.trim();
     if (!gameName) return alert('Vui lòng nhập Tên Game để tìm kiếm!');
+    if (!tavilyApiKey.trim()) return alert('Vui lòng nhập Tavily API Key để tìm kiếm!');
     
     setIsSearching(true);
 
     try {
-      const webData = await searchFreeGameInfo(gameName);
+      const webData = await searchTavilyGameInfo(tavilyApiKey.trim(), gameName);
 
       if (!webData.description && !webData.image && webData.tags.length <= 1) {
-        throw new Error('Chưa tìm thấy dữ liệu rõ ràng. Bạn thử tên game đầy đủ hơn hoặc nhập thủ công nhé.');
+        throw new Error('Tavily chưa tìm thấy dữ liệu rõ ràng. Bạn thử tên game đầy đủ hơn hoặc nhập thủ công nhé.');
       }
 
       setNewGame(prev => ({
@@ -256,9 +297,9 @@ function Admin() {
         is18Pc: true,
         is18Android: webData.is18Plus
       }));
-      alert(`Thành công! Đã tìm thông tin miễn phí từ web${webData.sources.length ? ` (${webData.sources.length} nguồn)` : ''}.`);
+      alert(`Thành công! Tavily đã tìm thấy thông tin${webData.sources.length ? ` (${webData.sources.length} nguồn)` : ''}.`);
     } catch (error) {
-      alert('Lỗi tìm kiếm web: ' + error.message);
+      alert('Lỗi Tavily: ' + error.message);
     } finally {
       setIsSearching(false);
     }
@@ -507,14 +548,22 @@ function Admin() {
             {editingGameId ? 'Chỉnh sửa Game' : 'Thêm Game Mới'}
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
-            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>Tìm thông tin game miễn phí trên web</label>
+            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>Tìm thông tin game bằng Tavily</label>
+            <input
+              type="password"
+              className="input-field"
+              placeholder="Nhập Tavily API Key..."
+              value={tavilyApiKey}
+              onChange={e => setTavilyApiKey(e.target.value)}
+              style={{ fontSize: '0.85rem' }}
+            />
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <input type="text" className="input-field" placeholder="Nhập tên game cần tìm..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1 }} />
               <button type="button" onClick={handleSearchAI} className="btn" style={{ background: 'var(--color-accent)', color: 'white', padding: '0 1.5rem' }} disabled={isSearching}>
-                {isSearching ? 'Đang tìm...' : 'Tìm web'}
+                {isSearching ? 'Đang tìm...' : 'Tavily'}
               </button>
             </div>
-            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Không cần API key. Nguồn miễn phí: Steam, Wikipedia, DuckDuckGo.</span>
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Key được lưu trong trình duyệt admin. Tavily dùng web search nâng cao, Steam chỉ phụ trợ ảnh khi có.</span>
           </div>
 
           <form onSubmit={handleAddGame} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
