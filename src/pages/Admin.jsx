@@ -104,7 +104,7 @@ const normalizeReleaseDate = (dateText = '') => {
     if (month) return `${monthDayYear[3]}-${month}-${monthDayYear[2].padStart(2, '0')}`;
   }
 
-  return raw;
+  return '';
 };
 
 const translateSystemRequirements = (text = '') => cleanText(text)
@@ -283,13 +283,8 @@ const getSteamAssetUrls = (appId) => {
   ];
 };
 
-const getImageUrlsFromText = (text = '') => {
-  const matches = String(text).match(/https?:\/\/[^\s"'<>]+?\.(?:png|jpe?g|webp|gif|avif)(?:\?[^\s"'<>]*)?/gi) || [];
-  return matches;
-};
-
 const getResultImageUrls = (result = {}) => {
-  const collected = [
+  return [
     result.image,
     result.image_url,
     result.thumbnail,
@@ -298,12 +293,6 @@ const getResultImageUrls = (result = {}) => {
   ]
     .map(getTavilyImageUrl)
     .filter(Boolean);
-
-  return [
-    ...collected,
-    ...getImageUrlsFromText(result.content || ''),
-    ...getImageUrlsFromText(result.raw_content || '')
-  ];
 };
 
 const uniqueUrls = (urls = []) => [...new Set(urls.filter(Boolean))];
@@ -381,6 +370,7 @@ const getSteamInfo = async (gameName) => {
   const steamAssets = getSteamAssetUrls(app.id);
 
   const searchFallback = {
+    appId: app.id.toString(),
     title: app.name || gameName,
     image: app.tiny_image || steamAssets[0] || '',
     description: `${app.name || gameName} hiện có trên Steam.`,
@@ -412,6 +402,7 @@ const getSteamInfo = async (gameName) => {
   ].filter(Boolean).join(' '));
 
   return {
+    appId: app.id.toString(),
     title: details?.name || app.name || gameName,
     image: details?.header_image || app.tiny_image || steamAssets[0] || '',
     description: cleanText(details?.short_description || ''),
@@ -480,19 +471,14 @@ const getGameTagsFromText = (text) => {
 
 const hasVietnameseText = (text = '') => /[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i.test(text);
 
-const getVietnameseDescription = (gameName, tavilyAnswer, fallbackText, tags) => {
-  const answer = cleanText(tavilyAnswer);
-  if (hasVietnameseText(answer) && answer.length >= 40) return answer;
-
-  const translatedFallback = translateTextToVietnamese(fallbackText);
-  if (hasVietnameseText(translatedFallback) && translatedFallback.length >= 30) {
-    return translatedFallback;
-  }
-
+const getVietnameseDescription = ({ gameName, tags, text, developer, releaseDate, price }) => {
   return buildVietnameseGameSummary({
     gameName,
     tags,
-    text: `${answer} ${fallbackText}`
+    text,
+    developer,
+    releaseDate,
+    price
   });
 };
 
@@ -512,14 +498,15 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
     throw new Error('Không tìm thấy thông tin khớp tên game trên Tavily, Steam hoặc các nguồn web liên quan.');
   }
 
-  const resultImages = results.flatMap(getResultImageUrls);
-  const steamAppIdFromResults = results.map(result => getSteamAppIdFromUrl(result.url)).find(Boolean);
+  const verifiedResults = trustedResults;
+  const resultImages = verifiedResults.flatMap(getResultImageUrls);
+  const steamAppIdFromResults = verifiedResults.map(result => getSteamAppIdFromUrl(result.url)).find(Boolean);
   const steamAssetsFromResults = getSteamAssetUrls(steamAppIdFromResults);
   const images = uniqueUrls([
-    ...(Array.isArray(data.images) ? data.images.map(getTavilyImageUrl) : []),
-    ...resultImages,
+    ...(steamInfo?.image ? [steamInfo.image] : []),
+    ...(steamInfo?.screenshots || []),
     ...steamAssetsFromResults,
-    ...(steamInfo?.image ? [steamInfo.image] : [])
+    ...resultImages
   ]);
   const screenshots = uniqueUrls([
     ...(steamInfo?.screenshots || []),
@@ -535,7 +522,6 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
     /(?:ngày phát hành|phát hành)\s*(?:là|:)?\s*([^.;,\n]+)/i
   ]);
   const tags = [...new Set([...(steamInfo?.tags || []), ...getGameTagsFromText(text), 'PC'])];
-  const fallbackDescription = results[0]?.content || steamInfo?.description || cleanText(data.answer || '');
   const translatedRequirements = translateTextToVietnamese(findInText(text, [
     /(?:cấu hình hệ thống|system requirements|minimum requirements)\s*(?:là|:)?\s*([^]+?)(?:\s*(?:link nguồn|source|developer|nhà phát triển|release date|ngày phát hành)|$)/i
   ]));
@@ -544,7 +530,14 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
     title: steamInfo?.title || gameName,
     price: steamInfo?.price ?? 0,
     image: steamInfo?.image || images[0] || screenshots[0] || '',
-    description: getVietnameseDescription(gameName, data.answer, fallbackDescription, tags),
+    description: getVietnameseDescription({
+      gameName,
+      tags,
+      text,
+      developer,
+      releaseDate: normalizeReleaseDate(releaseDate),
+      price: steamInfo?.price ?? 0
+    }),
     developer,
     releaseDate: normalizeReleaseDate(releaseDate),
     systemRequirements: steamInfo?.systemRequirements || translateSystemRequirements(translatedRequirements),
