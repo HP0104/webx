@@ -8,40 +8,6 @@ const ADULT_KEYWORDS = [
   '18+', 'adult', 'nsfw', 'hentai', 'eroge', 'sex', 'slut', 'porn', 'uncensored', 'nude'
 ];
 
-const TAVILY_API_KEY_STORAGE_KEY = 'web18p_tavily_api_key';
-const TAVILY_MAX_QUERY_LENGTH = 400;
-
-const TRUSTED_GAME_DOMAINS = [
-  'store.steampowered.com',
-  'f95zone.to',
-  'vndb.org',
-  'itch.io',
-  'dlsite.com',
-  'gog.com',
-  'epicgames.com',
-  'mobygames.com',
-  'igdb.com',
-  'giantbomb.com',
-  'gamejolt.com',
-  'nutaku.net',
-  'jastusa.com',
-  'kaguragames.com',
-  'patreon.com',
-  'subscribestar.adult'
-];
-
-const DOMAIN_PRIORITY = [
-  'store.steampowered.com',
-  'f95zone.to',
-  'vndb.org',
-  'itch.io',
-  'dlsite.com',
-  'gog.com',
-  'epicgames.com',
-  'mobygames.com',
-  'igdb.com'
-];
-
 const cleanText = (text = '') => String(text)
   .replace(/&nbsp;/gi, ' ')
   .replace(/&amp;/gi, '&')
@@ -50,11 +16,6 @@ const cleanText = (text = '') => String(text)
   .replace(/<[^>]*>/g, ' ')
   .replace(/\s+/g, ' ')
   .trim();
-
-const truncateText = (text = '', maxLength = TAVILY_MAX_QUERY_LENGTH) => {
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
-};
 
 const MONTH_MAP = {
   jan: '01',
@@ -131,25 +92,6 @@ const getGameNameTokens = (gameName) => normalizeSearchText(gameName)
   .split(' ')
   .filter(token => token.length > 1 && !['the', 'game', 'vn'].includes(token));
 
-const getHostname = (url = '') => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return '';
-  }
-};
-
-const getDomainPriority = (url) => {
-  const hostname = getHostname(url);
-  const index = DOMAIN_PRIORITY.findIndex(domain => hostname === domain || hostname.endsWith(`.${domain}`));
-  return index === -1 ? DOMAIN_PRIORITY.length + 1 : index;
-};
-
-const hasTrustedDomain = (url) => {
-  const hostname = getHostname(url);
-  return TRUSTED_GAME_DOMAINS.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
-};
-
 const hasGameNameMatch = (gameName, text) => {
   const normalizedName = normalizeSearchText(gameName);
   const haystack = normalizeSearchText(text);
@@ -160,113 +102,6 @@ const hasGameNameMatch = (gameName, text) => {
   if (tokens.length <= 1) return tokens.length === 1 && haystack.includes(tokens[0]);
 
   return tokens.every(token => haystack.includes(token));
-};
-
-const getTrustedGameResults = (results, gameName) => results
-  .filter(result => {
-    const searchableText = `${result.title || ''} ${result.url || ''} ${result.content || ''} ${result.raw_content || ''}`;
-    return hasTrustedDomain(result.url) && hasGameNameMatch(gameName, searchableText);
-  })
-  .sort((a, b) => {
-    const domainDiff = getDomainPriority(a.url) - getDomainPriority(b.url);
-    if (domainDiff !== 0) return domainDiff;
-    return (b.score || 0) - (a.score || 0);
-  });
-
-const getRelevantGameResults = (results, gameName) => results
-  .filter(result => {
-    const searchableText = `${result.title || ''} ${result.url || ''} ${result.content || ''} ${result.raw_content || ''}`;
-    return hasGameNameMatch(gameName, searchableText);
-  })
-  .sort((a, b) => {
-    const trustedDiff = Number(hasTrustedDomain(b.url)) - Number(hasTrustedDomain(a.url));
-    if (trustedDiff !== 0) return trustedDiff;
-
-    const domainDiff = getDomainPriority(a.url) - getDomainPriority(b.url);
-    if (domainDiff !== 0) return domainDiff;
-
-    return (b.score || 0) - (a.score || 0);
-  });
-
-const getTavilyErrorMessage = (data, status) => {
-  const errorValue = data?.detail || data?.error || data?.message;
-  if (!errorValue) return `Tavily trả về lỗi ${status}`;
-  if (typeof errorValue === 'string') return errorValue;
-  if (Array.isArray(errorValue)) {
-    return errorValue
-      .map(item => item?.msg || item?.message || JSON.stringify(item))
-      .join('; ');
-  }
-  return JSON.stringify(errorValue);
-};
-
-const shouldRetryTavilyWithoutDomainParam = (message) => /include_domains|domain|extra|schema|validation|field/i.test(message);
-
-const buildTavilyQuery = (gameName) => {
-  const safeGameName = cleanText(gameName).replace(/"/g, '').slice(0, 140).trim();
-  const shortQuery = `"${safeGameName}" game. Tra loi tieng Viet: mo ta ngan, nha phat trien, ngay phat hanh, gia, nen tang, the loai, cau hinh toi thieu, link chinh thuc.`;
-
-  return truncateText(shortQuery, TAVILY_MAX_QUERY_LENGTH);
-};
-
-const fetchTavilySearch = async (apiKey, gameName, useDomainParam = true) => {
-  const body = {
-    query: buildTavilyQuery(gameName),
-    topic: 'general',
-    search_depth: 'advanced',
-    include_answer: 'advanced',
-    include_images: true,
-    include_image_descriptions: true,
-    include_raw_content: 'text',
-    max_results: 8
-  };
-
-  if (useDomainParam) {
-    body.include_domains = TRUSTED_GAME_DOMAINS;
-  }
-
-  const response = await fetch('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify(body)
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const message = getTavilyErrorMessage(data, response.status);
-    if (useDomainParam && shouldRetryTavilyWithoutDomainParam(message)) {
-      return fetchTavilySearch(apiKey, gameName, false);
-    }
-    throw new Error(message);
-  }
-
-  return data;
-};
-
-const fetchTavilyImageSearch = async (apiKey, gameName) => {
-  const response = await fetch('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      query: `"${cleanText(gameName).replace(/"/g, '')}" game cover screenshots Steam F95Zone VNDB itch.io DLsite`,
-      topic: 'general',
-      search_depth: 'basic',
-      include_answer: false,
-      include_images: true,
-      include_image_descriptions: true,
-      max_results: 5
-    })
-  });
-
-  const data = await response.json().catch(() => ({}));
-  return response.ok ? data : { images: [], results: [] };
 };
 
 const getJson = async (url) => {
@@ -298,14 +133,6 @@ const getSteamAppIdFromUrl = (url = '') => {
   return match?.[1] || '';
 };
 
-const getSteamAppIdFromResults = (results = [], gameName) => results
-  .map(result => {
-    const appId = getSteamAppIdFromUrl(result.url);
-    const context = `${result.title || ''} ${result.url || ''} ${result.content || ''} ${result.raw_content || ''}`;
-    return appId && hasGameNameMatch(gameName, context) ? appId : '';
-  })
-  .find(Boolean) || '';
-
 const getSteamAssetUrls = (appId) => {
   if (!appId) return [];
   return [
@@ -316,63 +143,6 @@ const getSteamAssetUrls = (appId) => {
 };
 
 const uniqueUrls = (urls = []) => [...new Set(urls.filter(Boolean))];
-
-const getTavilyImageUrl = (image) => {
-  if (!image) return '';
-  if (typeof image === 'string') return image;
-  return image.url || image.src || image.image_url || '';
-};
-
-const getImageContext = (image) => {
-  if (!image || typeof image === 'string') return '';
-  return cleanText([
-    image.description,
-    image.title,
-    image.alt,
-    image.source,
-    image.url
-  ].filter(Boolean).join(' '));
-};
-
-const isLikelyBadImageUrl = (url = '') => {
-  const normalized = url.toLowerCase();
-  return !/^https?:\/\//i.test(url) ||
-    /\.(svg|ico)(\?|$)/i.test(normalized) ||
-    /(avatar|profile|logo|favicon|icon|sprite|placeholder|blank|loading|spinner|default|grey|gray|transparent)/i.test(normalized);
-};
-
-const getResultImageUrls = (result = {}, gameName) => {
-  const context = cleanText(`${result.title || ''} ${result.url || ''} ${result.content || ''} ${result.raw_content || ''}`);
-  if (!hasTrustedDomain(result.url) || !hasGameNameMatch(gameName, context)) return [];
-
-  return [
-    result.image,
-    result.image_url,
-    result.thumbnail,
-    result.thumbnail_url,
-    ...(Array.isArray(result.images) ? result.images : [])
-  ]
-    .map(getTavilyImageUrl)
-    .filter(url => url && !isLikelyBadImageUrl(url));
-};
-
-const getGlobalImageUrls = (images = [], gameName) => images
-  .filter(image => {
-    const context = `${getImageContext(image)} ${getTavilyImageUrl(image)}`;
-    return hasGameNameMatch(gameName, context);
-  })
-  .map(getTavilyImageUrl)
-  .filter(url => url && !isLikelyBadImageUrl(url));
-
-const isJunkSnippet = (text = '') => {
-  const normalized = normalizeSearchText(text);
-  return !normalized ||
-    /publishers.*under.*usd/.test(normalized) ||
-    /new releases.*top sellers.*popular/.test(normalized) ||
-    /see more.*under/.test(normalized) ||
-    /free you know/.test(normalized) ||
-    normalized.length < 80;
-};
 
 const getDefaultSystemRequirements = (tags = []) => {
   const hasPc = tags.some(tag => /pc|windows|steam/i.test(tag));
@@ -406,64 +176,6 @@ const buildVietnameseGameSummary = ({ gameName, tags = [], text = '', developer 
   ].filter(Boolean);
 
   return [intro, detailSentence, ...metaParts].join(' ').trim();
-};
-
-const translateTextToVietnamese = (text = '') => {
-  const normalized = cleanText(text);
-  if (!normalized) return '';
-  if (hasVietnameseText(normalized)) return normalized;
-
-  return normalized
-    .replace(/\bThis game\b/gi, 'Trò chơi này')
-    .replace(/\bThis title\b/gi, 'Tựa game này')
-    .replace(/\bis an adult visual novel\b/gi, 'là một visual novel dành cho người lớn')
-    .replace(/\bis an adult\b/gi, 'là một trò chơi dành cho người lớn')
-    .replace(/\bis a visual novel\b/gi, 'là một visual novel')
-    .replace(/\bis a game\b/gi, 'là một trò chơi')
-    .replace(/\bset in\b/gi, 'lấy bối cảnh tại')
-    .replace(/\bfeatures\b/gi, 'có')
-    .replace(/\bfeaturing\b/gi, 'bao gồm')
-    .replace(/\bincludes\b/gi, 'bao gồm')
-    .replace(/\bwith\b/gi, 'với')
-    .replace(/\band\b/gi, 'và')
-    .replace(/\bfor women\b/gi, 'dành cho nữ')
-    .replace(/\baudio series\b/gi, 'chuỗi nội dung âm thanh')
-    .replace(/\berotic content\b/gi, 'nội dung gợi cảm')
-    .replace(/\bexplicit scenes\b/gi, 'cảnh nhạy cảm')
-    .replace(/\bpriced at\b/gi, 'có giá')
-    .replace(/\bdeveloper\b/gi, 'nhà phát triển')
-    .replace(/\brelease date\b/gi, 'ngày phát hành')
-    .replace(/\bplatforms?\b/gi, 'nền tảng')
-    .replace(/\bsystem requirements\b/gi, 'cấu hình hệ thống')
-    .replace(/\bminimum requirements\b/gi, 'cấu hình tối thiểu')
-    .replace(/\bavailable on Steam\b/gi, 'có trên Steam')
-    .replace(/\bWindows 10 or above\b/gi, 'Windows 10 trở lên')
-    .replace(/\bIntel or AMD\b/gi, 'Intel hoặc AMD')
-    .replace(/\bDirect X compatible\b/gi, 'tương thích DirectX')
-    .replace(/\bGB RAM\b/gi, 'GB RAM')
-    .replace(/\s+/g, ' ')
-    .trim();
-};
-
-const getCleanDescriptionText = ({ gameName, tavilyAnswer, steamDescription, results }) => {
-  const candidates = [
-    tavilyAnswer,
-    steamDescription,
-    ...results.map(result => result.raw_content || result.content || '')
-  ]
-    .map(cleanText)
-    .filter(text => text && !isJunkSnippet(text));
-
-  const vietnameseCandidate = candidates.find(text => hasVietnameseText(text) && hasGameNameMatch(gameName, text));
-  if (vietnameseCandidate) return truncateText(vietnameseCandidate, 700);
-
-  return '';
-};
-
-const getSystemRequirementsFromText = (text = '') => {
-  const clean = cleanText(text);
-  const match = clean.match(/(?:cấu hình hệ thống|system requirements|minimum requirements|minimum:)\s*(?:là|:)?\s*([^]+?)(?:\s*(?:link nguồn|source|developer|nhà phát triển|release date|ngày phát hành|about this game)|$)/i);
-  return translateSystemRequirements(translateTextToVietnamese(match?.[1] || ''));
 };
 
 const getSteamInfo = async (gameName) => {
@@ -535,7 +247,8 @@ const getSteamInfoByAppId = async (appId, gameName) => {
     `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english&cc=us`
   );
   const details = detailData?.[appId]?.data;
-  if (!details || !hasGameNameMatch(gameName, details.name || '')) return null;
+  const shouldCheckName = gameName && !getSteamAppIdFromUrl(gameName) && !/^\d+$/.test(gameName.trim());
+  if (!details || (shouldCheckName && !hasGameNameMatch(gameName, details.name || ''))) return null;
 
   const minimumRequirements = details?.pc_requirements?.minimum || '';
   const recommendedRequirements = details?.pc_requirements?.recommended || '';
@@ -565,6 +278,42 @@ const getSteamInfoByAppId = async (appId, gameName) => {
   };
 };
 
+const searchSteamGameInfo = async (input) => {
+  const query = cleanText(input);
+  const appId = getSteamAppIdFromUrl(query) || (/^\d+$/.test(query) ? query : '');
+  const steamInfo = appId
+    ? await getSteamInfoByAppId(appId, '')
+    : await getSteamInfo(query);
+
+  if (!steamInfo) {
+    throw new Error('Không tìm thấy game trên Steam. Bạn thử dán link Steam hoặc appId của game để lấy chính xác hơn.');
+  }
+
+  const tags = [...new Set([...(steamInfo.tags || []), 'PC'])];
+  const releaseDate = normalizeReleaseDate(steamInfo.releaseDate);
+  const description = buildVietnameseGameSummary({
+    gameName: steamInfo.title || query,
+    tags,
+    text: steamInfo.description,
+    developer: steamInfo.developer,
+    releaseDate,
+    price: steamInfo.price || 0
+  });
+
+  return {
+    ...steamInfo,
+    description,
+    releaseDate,
+    systemRequirements: steamInfo.systemRequirements || getDefaultSystemRequirements(tags),
+    screenshots: Array.isArray(steamInfo.screenshots) ? steamInfo.screenshots : [],
+    rating: 5.0,
+    downloads: Math.floor(Math.random() * 500) + 15,
+    tags,
+    is18Plus: hasAdultSignal(query, { ...steamInfo, tags, description }),
+    sources: [steamInfo.source].filter(Boolean)
+  };
+};
+
 const hasAdultSignal = (gameName, info) => {
   const text = [
     gameName,
@@ -576,143 +325,12 @@ const hasAdultSignal = (gameName, info) => {
   return ADULT_KEYWORDS.some(keyword => text.includes(keyword));
 };
 
-const findInText = (text, patterns) => {
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match?.[1]) return cleanText(match[1]).replace(/[.;,]$/, '');
-  }
-  return '';
-};
-
-const normalizeDeveloperName = (text = '') => cleanText(text)
-  .replace(/\b(with a )?release date.*$/i, '')
-  .replace(/\bpriced at.*$/i, '')
-  .replace(/\bngày phát hành.*$/i, '')
-  .trim();
-
-const getGameTagsFromText = (text) => {
-  const tags = [
-    ['VN', /\b(vietnamese|tiếng việt|việt hóa|việt nam)\b/i],
-    ['Android', /\b(android|apk|mobile)\b/i],
-    ['PC', /\b(pc|windows|steam)\b/i],
-    ['Visual Novel', /\bvisual novel\b/i],
-    ['RPG', /\brpg\b/i],
-    ['Adventure', /\badventure\b/i],
-    ['Simulation', /\bsimulation\b/i],
-    ['Action', /\baction\b/i],
-    ['Indie', /\bindie\b/i]
-  ];
-
-  return tags.filter(([, pattern]) => pattern.test(text)).map(([tag]) => tag);
-};
-
-const hasVietnameseText = (text = '') => /[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i.test(text);
-
-const getVietnameseDescription = ({ gameName, tags, text, developer, releaseDate, price }) => {
-  return buildVietnameseGameSummary({
-    gameName,
-    tags,
-    text,
-    developer,
-    releaseDate,
-    price
-  });
-};
-
-const searchTavilyGameInfo = async (apiKey, gameName) => {
-  const data = await fetchTavilySearch(apiKey, gameName);
-
-  const rawResults = Array.isArray(data.results) ? data.results : [];
-  const trustedResults = getTrustedGameResults(rawResults, gameName);
-  const results = trustedResults.length > 0 ? trustedResults : getRelevantGameResults(rawResults, gameName);
-  const text = cleanText([
-    data.answer,
-    ...results.map(result => `${result.title || ''}. ${result.content || result.raw_content || ''}`)
-  ].join(' '));
-  const steamAppIdFromAllResults = getSteamAppIdFromResults(rawResults, gameName);
-  const steamInfo = await getSteamInfo(gameName) || await getSteamInfoByAppId(steamAppIdFromAllResults, gameName);
-  const hasAnswerMatch = hasGameNameMatch(gameName, `${data.answer || ''} ${text}`);
-  if (results.length === 0 && !steamInfo && !hasAnswerMatch) {
-    throw new Error('Không tìm thấy thông tin khớp tên game trên Tavily, Steam hoặc các nguồn web liên quan.');
-  }
-
-  const steamAppIdFromResults = getSteamAppIdFromResults(trustedResults, gameName) || steamAppIdFromAllResults;
-  const steamAssetsFromResults = getSteamAssetUrls(steamInfo?.appId || steamAppIdFromResults);
-  const resultImages = trustedResults.flatMap(result => getResultImageUrls(result, gameName));
-  const globalImages = getGlobalImageUrls(Array.isArray(data.images) ? data.images : [], gameName);
-  const baseImages = uniqueUrls([
-    steamInfo?.image,
-    ...steamAssetsFromResults,
-    ...resultImages,
-    ...globalImages
-  ]);
-  const imageSearchData = baseImages.length === 0 ? await fetchTavilyImageSearch(apiKey, gameName) : null;
-  const imageSearchImages = imageSearchData ? uniqueUrls([
-    ...getGlobalImageUrls(Array.isArray(imageSearchData.images) ? imageSearchData.images : [], gameName),
-    ...(Array.isArray(imageSearchData.results) ? imageSearchData.results : []).flatMap(result => getResultImageUrls(result, gameName))
-  ]) : [];
-  const images = uniqueUrls([...baseImages, ...imageSearchImages]);
-  const screenshots = uniqueUrls([
-    ...(steamInfo?.screenshots || []),
-    ...resultImages,
-    ...globalImages,
-    ...imageSearchImages,
-    ...steamAssetsFromResults
-  ]).slice(0, 6);
-  const developer = normalizeDeveloperName(steamInfo?.developer || findInText(text, [
-    /(?:developer|developed by)\s*(?:is|was|:)?\s*([^.;,\n]+)/i,
-    /(?:nhà phát triển|phát triển bởi)\s*(?:là|:)?\s*([^.;,\n]+)/i
-  ]));
-  const releaseDate = steamInfo?.releaseDate || findInText(text, [
-    /(?:release date|released on|released)\s*(?:is|was|:)?\s*([^.;,\n]+)/i,
-    /(?:ngày phát hành|phát hành)\s*(?:là|:)?\s*([^.;,\n]+)/i
-  ]);
-  const tags = [...new Set([...(steamInfo?.tags || []), ...getGameTagsFromText(text), 'PC'])];
-  const cleanDescription = getCleanDescriptionText({
-    gameName,
-    tavilyAnswer: data.answer,
-    steamDescription: steamInfo?.description,
-    results
-  });
-  const systemRequirements = steamInfo?.systemRequirements ||
-    getSystemRequirementsFromText(text) ||
-    getDefaultSystemRequirements(tags);
-
-  const merged = {
-    title: steamInfo?.title || gameName,
-    price: steamInfo?.price ?? 0,
-    image: images[0] || '',
-    description: cleanDescription || getVietnameseDescription({
-      gameName,
-      tags,
-      text,
-      developer,
-      releaseDate: normalizeReleaseDate(releaseDate),
-      price: steamInfo?.price ?? 0
-    }),
-    developer,
-    releaseDate: normalizeReleaseDate(releaseDate),
-    systemRequirements,
-    screenshots,
-    rating: 5.0,
-    downloads: Math.floor(Math.random() * 500) + 15,
-    tags
-  };
-
-  return {
-    ...merged,
-    is18Plus: hasAdultSignal(gameName, merged),
-    sources: [...results.map(result => result.url), steamInfo?.source].filter(Boolean)
-  };
-};
-
 function Admin() {
   const { games, addGameToStore, deleteGameFromStore, updateGameInStore, revenue } = useAppContext();
   const [users, setUsers] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [editingGameId, setEditingGameId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [tavilyApiKey, setTavilyApiKey] = useState(() => localStorage.getItem(TAVILY_API_KEY_STORAGE_KEY) || '');
   const [currentUpdateVersion, setCurrentUpdateVersion] = useState('');
   const [currentUpdateLog, setCurrentUpdateLog] = useState('');
   const [editingUserId, setEditingUserId] = useState(null);
@@ -744,14 +362,6 @@ function Admin() {
   });
 
   const [manualScreenshotUrl, setManualScreenshotUrl] = useState('');
-
-  useEffect(() => {
-    if (tavilyApiKey.trim()) {
-      localStorage.setItem(TAVILY_API_KEY_STORAGE_KEY, tavilyApiKey.trim());
-    } else {
-      localStorage.removeItem(TAVILY_API_KEY_STORAGE_KEY);
-    }
-  }, [tavilyApiKey]);
 
   // Theo dõi danh sách người dùng từ Firestore theo thời gian thực
   useEffect(() => {
@@ -808,15 +418,14 @@ function Admin() {
   const handleSearchAI = async () => {
     const gameName = searchQuery.trim();
     if (!gameName) return alert('Vui lòng nhập Tên Game để tìm kiếm!');
-    if (!tavilyApiKey.trim()) return alert('Vui lòng nhập Tavily API Key để tìm kiếm!');
     
     setIsSearching(true);
 
     try {
-      const webData = await searchTavilyGameInfo(tavilyApiKey.trim(), gameName);
+      const webData = await searchSteamGameInfo(gameName);
 
       if (!webData.description && !webData.image && webData.tags.length <= 1) {
-        throw new Error('Tavily chưa tìm thấy dữ liệu rõ ràng. Bạn thử tên game đầy đủ hơn hoặc nhập thủ công nhé.');
+        throw new Error('Steam chưa trả đủ dữ liệu rõ ràng. Bạn thử dán link Steam hoặc appId của game.');
       }
 
       setNewGame(prev => ({
@@ -840,9 +449,9 @@ function Admin() {
         is18Pc: true,
         is18Android: webData.is18Plus
       }));
-      alert(`Thành công! Tavily đã tìm thấy thông tin${webData.sources.length ? ` (${webData.sources.length} nguồn)` : ''}.`);
+      alert('Thành công! Đã lấy thông tin từ Steam.');
     } catch (error) {
-      alert('Lỗi Tavily: ' + error.message);
+      alert('Lỗi Steam: ' + error.message);
     } finally {
       setIsSearching(false);
     }
@@ -1091,22 +700,14 @@ function Admin() {
             {editingGameId ? 'Chỉnh sửa Game' : 'Thêm Game Mới'}
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
-            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>Tìm thông tin game bằng Tavily</label>
-            <input
-              type="password"
-              className="input-field"
-              placeholder="Nhập Tavily API Key..."
-              value={tavilyApiKey}
-              onChange={e => setTavilyApiKey(e.target.value)}
-              style={{ fontSize: '0.85rem' }}
-            />
+            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>Tìm thông tin game từ Steam</label>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input type="text" className="input-field" placeholder="Nhập tên game cần tìm..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1 }} />
+              <input type="text" className="input-field" placeholder="Nhập tên game, link Steam hoặc appId..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1 }} />
               <button type="button" onClick={handleSearchAI} className="btn" style={{ background: 'var(--color-accent)', color: 'white', padding: '0 1.5rem' }} disabled={isSearching}>
-                {isSearching ? 'Đang tìm...' : 'Tavily'}
+                {isSearching ? 'Đang tìm...' : 'Steam'}
               </button>
             </div>
-            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Ưu tiên nguồn lớn: Steam, F95Zone, VNDB, itch.io, DLsite, GOG, Epic, MobyGames, IGDB. Kết quả trùng tên sẽ bị lọc.</span>
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Chỉ lấy dữ liệu từ Steam. Với game 18+ khó tìm bằng tên, hãy dán link Steam hoặc appId để lấy ảnh và cấu hình chính xác.</span>
           </div>
 
           <form onSubmit={handleAddGame} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
