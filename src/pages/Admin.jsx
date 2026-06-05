@@ -164,12 +164,27 @@ const hasGameNameMatch = (gameName, text) => {
 
 const getTrustedGameResults = (results, gameName) => results
   .filter(result => {
-    const searchableText = `${result.title || ''} ${result.url || ''} ${result.content || ''}`;
+    const searchableText = `${result.title || ''} ${result.url || ''} ${result.content || ''} ${result.raw_content || ''}`;
     return hasTrustedDomain(result.url) && hasGameNameMatch(gameName, searchableText);
   })
   .sort((a, b) => {
     const domainDiff = getDomainPriority(a.url) - getDomainPriority(b.url);
     if (domainDiff !== 0) return domainDiff;
+    return (b.score || 0) - (a.score || 0);
+  });
+
+const getRelevantGameResults = (results, gameName) => results
+  .filter(result => {
+    const searchableText = `${result.title || ''} ${result.url || ''} ${result.content || ''} ${result.raw_content || ''}`;
+    return hasGameNameMatch(gameName, searchableText);
+  })
+  .sort((a, b) => {
+    const trustedDiff = Number(hasTrustedDomain(b.url)) - Number(hasTrustedDomain(a.url));
+    if (trustedDiff !== 0) return trustedDiff;
+
+    const domainDiff = getDomainPriority(a.url) - getDomainPriority(b.url);
+    if (domainDiff !== 0) return domainDiff;
+
     return (b.score || 0) - (a.score || 0);
   });
 
@@ -375,14 +390,17 @@ const getVietnameseDescription = (gameName, tavilyAnswer, fallbackText, tags) =>
 const searchTavilyGameInfo = async (apiKey, gameName) => {
   const data = await fetchTavilySearch(apiKey, gameName);
 
-  const results = getTrustedGameResults(Array.isArray(data.results) ? data.results : [], gameName);
+  const rawResults = Array.isArray(data.results) ? data.results : [];
+  const trustedResults = getTrustedGameResults(rawResults, gameName);
+  const results = trustedResults.length > 0 ? trustedResults : getRelevantGameResults(rawResults, gameName);
   const text = cleanText([
     data.answer,
     ...results.map(result => `${result.title || ''}. ${result.content || result.raw_content || ''}`)
   ].join(' '));
   const steamInfo = await getSteamInfo(gameName);
-  if (results.length === 0 && !steamInfo) {
-    throw new Error('Không tìm thấy nguồn uy tín khớp đúng tên game trên Steam/F95Zone/VNDB/itch.io/DLsite và các trang lớn.');
+  const hasAnswerMatch = hasGameNameMatch(gameName, `${data.answer || ''} ${text}`);
+  if (results.length === 0 && !steamInfo && !hasAnswerMatch) {
+    throw new Error('Không tìm thấy thông tin khớp tên game trên Tavily, Steam hoặc các nguồn web liên quan.');
   }
 
   const images = Array.isArray(data.images) ? data.images.map(getTavilyImageUrl).filter(Boolean) : [];
@@ -396,7 +414,7 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
     /(?:ngày phát hành|phát hành)\s*(?:là|:)?\s*([^.;]+)/i
   ]);
   const tags = [...new Set([...(steamInfo?.tags || []), ...getGameTagsFromText(text), 'PC'])];
-  const fallbackDescription = results[0]?.content || steamInfo?.description || '';
+  const fallbackDescription = results[0]?.content || steamInfo?.description || cleanText(data.answer || '');
 
   const merged = {
     title: steamInfo?.title || gameName,
