@@ -10,6 +10,37 @@ const ADULT_KEYWORDS = [
 
 const TAVILY_API_KEY_STORAGE_KEY = 'web18p_tavily_api_key';
 
+const TRUSTED_GAME_DOMAINS = [
+  'store.steampowered.com',
+  'f95zone.to',
+  'vndb.org',
+  'itch.io',
+  'dlsite.com',
+  'gog.com',
+  'epicgames.com',
+  'mobygames.com',
+  'igdb.com',
+  'giantbomb.com',
+  'gamejolt.com',
+  'nutaku.net',
+  'jastusa.com',
+  'kaguragames.com',
+  'patreon.com',
+  'subscribestar.adult'
+];
+
+const DOMAIN_PRIORITY = [
+  'store.steampowered.com',
+  'f95zone.to',
+  'vndb.org',
+  'itch.io',
+  'dlsite.com',
+  'gog.com',
+  'epicgames.com',
+  'mobygames.com',
+  'igdb.com'
+];
+
 const cleanText = (text = '') => String(text)
   .replace(/&nbsp;/gi, ' ')
   .replace(/&amp;/gi, '&')
@@ -83,6 +114,59 @@ const translateSystemRequirements = (text = '') => cleanText(text)
   .replace(/\bAdditional Notes\b/gi, 'Ghi chú thêm')
   .replace(/\s*:\s*/g, ': ');
 
+const normalizeSearchText = (text = '') => cleanText(text)
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+const getGameNameTokens = (gameName) => normalizeSearchText(gameName)
+  .split(' ')
+  .filter(token => token.length > 1 && !['the', 'game', 'vn'].includes(token));
+
+const getHostname = (url = '') => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+};
+
+const getDomainPriority = (url) => {
+  const hostname = getHostname(url);
+  const index = DOMAIN_PRIORITY.findIndex(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+  return index === -1 ? DOMAIN_PRIORITY.length + 1 : index;
+};
+
+const hasTrustedDomain = (url) => {
+  const hostname = getHostname(url);
+  return TRUSTED_GAME_DOMAINS.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+};
+
+const hasGameNameMatch = (gameName, text) => {
+  const normalizedName = normalizeSearchText(gameName);
+  const haystack = normalizeSearchText(text);
+  const tokens = getGameNameTokens(gameName);
+
+  if (!normalizedName || !haystack) return false;
+  if (haystack.includes(normalizedName)) return true;
+  if (tokens.length <= 1) return tokens.length === 1 && haystack.includes(tokens[0]);
+
+  return tokens.every(token => haystack.includes(token));
+};
+
+const getTrustedGameResults = (results, gameName) => results
+  .filter(result => {
+    const searchableText = `${result.title || ''} ${result.url || ''} ${result.content || ''}`;
+    return hasTrustedDomain(result.url) && hasGameNameMatch(gameName, searchableText);
+  })
+  .sort((a, b) => {
+    const domainDiff = getDomainPriority(a.url) - getDomainPriority(b.url);
+    if (domainDiff !== 0) return domainDiff;
+    return (b.score || 0) - (a.score || 0);
+  });
+
 const getJson = async (url) => {
   const response = await fetch(url);
   if (!response.ok) {
@@ -104,13 +188,15 @@ const getSteamInfo = async (gameName) => {
   const searchData = await getOptionalJson(
     `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&l=english&cc=us`
   );
-  const app = searchData?.items?.[0];
+  const app = (searchData?.items || []).find(item => hasGameNameMatch(gameName, item.name || ''));
   if (!app?.id) return null;
 
   const detailData = await getOptionalJson(
     `https://store.steampowered.com/api/appdetails?appids=${app.id}&l=english&cc=us`
   );
   const details = detailData?.[app.id]?.data;
+  if (!hasGameNameMatch(gameName, `${details?.name || ''} ${app.name || ''}`)) return null;
+
   const minimumRequirements = details?.pc_requirements?.minimum || '';
   const recommendedRequirements = details?.pc_requirements?.recommended || '';
   const systemRequirements = translateSystemRequirements([
@@ -206,11 +292,12 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      query: `Tìm thông tin game "${gameName}". Trả lời hoàn toàn bằng tiếng Việt, không dùng tiếng Anh trừ tên riêng. Cần có: mô tả cốt truyện và lối chơi 3-5 câu, nhà phát triển, ngày phát hành dạng YYYY-MM-DD nếu biết, giá, nền tảng, thể loại, cấu hình hệ thống tối thiểu, link nguồn chính thức hoặc Steam.`,
+      query: `Tìm chính xác game "${gameName}" trên các nguồn game lớn như Steam, F95Zone, VNDB, itch.io, DLsite, GOG, Epic Games, MobyGames, IGDB. Bỏ qua kết quả trùng tên nhưng không phải game này. Trả lời hoàn toàn bằng tiếng Việt, không dùng tiếng Anh trừ tên riêng. Cần có: mô tả cốt truyện và lối chơi 3-5 câu, nhà phát triển, ngày phát hành dạng YYYY-MM-DD nếu biết, giá, nền tảng, thể loại, cấu hình hệ thống tối thiểu, link nguồn chính thức hoặc Steam/F95/VNDB.`,
       topic: 'general',
       search_depth: 'advanced',
       include_answer: true,
       include_images: true,
+      include_domains: TRUSTED_GAME_DOMAINS,
       max_results: 8
     })
   });
@@ -221,12 +308,16 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
     throw new Error(data?.detail || data?.error || `Tavily trả về lỗi ${response.status}`);
   }
 
-  const results = Array.isArray(data.results) ? data.results : [];
+  const results = getTrustedGameResults(Array.isArray(data.results) ? data.results : [], gameName);
   const text = cleanText([
     data.answer,
     ...results.map(result => `${result.title || ''}. ${result.content || result.raw_content || ''}`)
   ].join(' '));
   const steamInfo = await getSteamInfo(gameName);
+  if (results.length === 0 && !steamInfo) {
+    throw new Error('Không tìm thấy nguồn uy tín khớp đúng tên game trên Steam/F95Zone/VNDB/itch.io/DLsite và các trang lớn.');
+  }
+
   const images = Array.isArray(data.images) ? data.images.map(getTavilyImageUrl).filter(Boolean) : [];
   const screenshots = [...images, ...(steamInfo?.screenshots || [])].filter(Boolean).slice(0, 6);
   const developer = steamInfo?.developer || findInText(text, [
@@ -663,7 +754,7 @@ function Admin() {
                 {isSearching ? 'Đang tìm...' : 'Tavily'}
               </button>
             </div>
-            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Key được lưu trong trình duyệt admin. Tavily dùng web search nâng cao, Steam chỉ phụ trợ ảnh khi có.</span>
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Ưu tiên nguồn lớn: Steam, F95Zone, VNDB, itch.io, DLsite, GOG, Epic, MobyGames, IGDB. Kết quả trùng tên sẽ bị lọc.</span>
           </div>
 
           <form onSubmit={handleAddGame} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
