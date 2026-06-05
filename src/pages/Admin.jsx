@@ -247,6 +247,28 @@ const fetchTavilySearch = async (apiKey, gameName, useDomainParam = true) => {
   return data;
 };
 
+const fetchTavilyImageSearch = async (apiKey, gameName) => {
+  const response = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      query: `"${cleanText(gameName).replace(/"/g, '')}" game cover screenshots Steam F95Zone VNDB itch.io DLsite`,
+      topic: 'general',
+      search_depth: 'basic',
+      include_answer: false,
+      include_images: true,
+      include_image_descriptions: true,
+      max_results: 5
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  return response.ok ? data : { images: [], results: [] };
+};
+
 const getJson = async (url) => {
   const response = await fetch(url);
   if (!response.ok) {
@@ -275,6 +297,14 @@ const getSteamAppIdFromUrl = (url = '') => {
   const match = String(url).match(/store\.steampowered\.com\/app\/(\d+)/i);
   return match?.[1] || '';
 };
+
+const getSteamAppIdFromResults = (results = [], gameName) => results
+  .map(result => {
+    const appId = getSteamAppIdFromUrl(result.url);
+    const context = `${result.title || ''} ${result.url || ''} ${result.content || ''} ${result.raw_content || ''}`;
+    return appId && hasGameNameMatch(gameName, context) ? appId : '';
+  })
+  .find(Boolean) || '';
 
 const getSteamAssetUrls = (appId) => {
   if (!appId) return [];
@@ -497,6 +527,44 @@ const getSteamInfo = async (gameName) => {
   };
 };
 
+const getSteamInfoByAppId = async (appId, gameName) => {
+  if (!appId) return null;
+
+  const steamAssets = getSteamAssetUrls(appId);
+  const detailData = await getOptionalJson(
+    `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english&cc=us`
+  );
+  const details = detailData?.[appId]?.data;
+  if (!details || !hasGameNameMatch(gameName, details.name || '')) return null;
+
+  const minimumRequirements = details?.pc_requirements?.minimum || '';
+  const recommendedRequirements = details?.pc_requirements?.recommended || '';
+  const systemRequirements = translateSystemRequirements([
+    minimumRequirements,
+    recommendedRequirements
+  ].filter(Boolean).join(' '));
+
+  return {
+    appId: appId.toString(),
+    title: details?.name || gameName,
+    image: details?.header_image || steamAssets[0] || '',
+    description: cleanText(details?.short_description || ''),
+    developer: Array.isArray(details?.developers) ? details.developers.join(', ') : '',
+    releaseDate: normalizeReleaseDate(details?.release_date?.date || ''),
+    price: getSteamPriceValue(details?.price_overview),
+    tags: [
+      ...(details?.genres || []).map(item => item.description),
+      ...(details?.categories || []).map(item => item.description)
+    ].filter(Boolean),
+    systemRequirements,
+    screenshots: uniqueUrls([
+      ...(details?.screenshots || []).map(item => item.path_full).filter(Boolean),
+      ...steamAssets
+    ]).slice(0, 6),
+    source: `https://store.steampowered.com/app/${appId}`
+  };
+};
+
 const hasAdultSignal = (gameName, info) => {
   const text = [
     gameName,
@@ -561,28 +629,34 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
     data.answer,
     ...results.map(result => `${result.title || ''}. ${result.content || result.raw_content || ''}`)
   ].join(' '));
-  const steamInfo = await getSteamInfo(gameName);
+  const steamAppIdFromAllResults = getSteamAppIdFromResults(rawResults, gameName);
+  const steamInfo = await getSteamInfo(gameName) || await getSteamInfoByAppId(steamAppIdFromAllResults, gameName);
   const hasAnswerMatch = hasGameNameMatch(gameName, `${data.answer || ''} ${text}`);
   if (results.length === 0 && !steamInfo && !hasAnswerMatch) {
     throw new Error('Không tìm thấy thông tin khớp tên game trên Tavily, Steam hoặc các nguồn web liên quan.');
   }
 
-  const steamAppIdFromResults = trustedResults
-    .map(result => getSteamAppIdFromUrl(result.url))
-    .find(Boolean);
+  const steamAppIdFromResults = getSteamAppIdFromResults(trustedResults, gameName) || steamAppIdFromAllResults;
   const steamAssetsFromResults = getSteamAssetUrls(steamInfo?.appId || steamAppIdFromResults);
   const resultImages = trustedResults.flatMap(result => getResultImageUrls(result, gameName));
   const globalImages = getGlobalImageUrls(Array.isArray(data.images) ? data.images : [], gameName);
-  const images = uniqueUrls([
+  const baseImages = uniqueUrls([
     steamInfo?.image,
     ...steamAssetsFromResults,
     ...resultImages,
     ...globalImages
   ]);
+  const imageSearchData = baseImages.length === 0 ? await fetchTavilyImageSearch(apiKey, gameName) : null;
+  const imageSearchImages = imageSearchData ? uniqueUrls([
+    ...getGlobalImageUrls(Array.isArray(imageSearchData.images) ? imageSearchData.images : [], gameName),
+    ...(Array.isArray(imageSearchData.results) ? imageSearchData.results : []).flatMap(result => getResultImageUrls(result, gameName))
+  ]) : [];
+  const images = uniqueUrls([...baseImages, ...imageSearchImages]);
   const screenshots = uniqueUrls([
     ...(steamInfo?.screenshots || []),
     ...resultImages,
     ...globalImages,
+    ...imageSearchImages,
     ...steamAssetsFromResults
   ]).slice(0, 6);
   const developer = normalizeDeveloperName(steamInfo?.developer || findInText(text, [
