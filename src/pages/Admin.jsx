@@ -215,7 +215,7 @@ const fetchTavilySearch = async (apiKey, gameName, useDomainParam = true) => {
     topic: 'general',
     search_depth: 'advanced',
     include_answer: true,
-    include_images: true,
+    include_images: false,
     max_results: 10
   };
 
@@ -277,22 +277,10 @@ const getSteamAppIdFromUrl = (url = '') => {
 const getSteamAssetUrls = (appId) => {
   if (!appId) return [];
   return [
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/capsule_616x353.jpg`,
-    `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appId}/library_600x900_2x.jpg`
+    `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg`,
+    `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/capsule_616x353.jpg`,
+    `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/library_600x900_2x.jpg`
   ];
-};
-
-const getResultImageUrls = (result = {}) => {
-  return [
-    result.image,
-    result.image_url,
-    result.thumbnail,
-    result.thumbnail_url,
-    ...(Array.isArray(result.images) ? result.images : [])
-  ]
-    .map(getTavilyImageUrl)
-    .filter(Boolean);
 };
 
 const uniqueUrls = (urls = []) => [...new Set(urls.filter(Boolean))];
@@ -433,12 +421,6 @@ const hasAdultSignal = (gameName, info) => {
   return ADULT_KEYWORDS.some(keyword => text.includes(keyword));
 };
 
-const getTavilyImageUrl = (image) => {
-  if (!image) return '';
-  if (typeof image === 'string') return image;
-  return image.url || image.src || image.image_url || '';
-};
-
 const findInText = (text, patterns) => {
   for (const pattern of patterns) {
     const match = text.match(pattern);
@@ -498,21 +480,18 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
     throw new Error('Không tìm thấy thông tin khớp tên game trên Tavily, Steam hoặc các nguồn web liên quan.');
   }
 
-  const verifiedResults = trustedResults;
-  const resultImages = verifiedResults.flatMap(getResultImageUrls);
-  const steamAppIdFromResults = verifiedResults.map(result => getSteamAppIdFromUrl(result.url)).find(Boolean);
-  const steamAssetsFromResults = getSteamAssetUrls(steamAppIdFromResults);
-  const images = uniqueUrls([
-    ...(steamInfo?.image ? [steamInfo.image] : []),
-    ...(steamInfo?.screenshots || []),
-    ...steamAssetsFromResults,
-    ...resultImages
-  ]);
-  const screenshots = uniqueUrls([
-    ...(steamInfo?.screenshots || []),
-    ...images,
+  const steamAppIdFromResults = trustedResults
+    .map(result => getSteamAppIdFromUrl(result.url))
+    .find(Boolean);
+  const steamAssetsFromResults = steamInfo ? getSteamAssetUrls(steamInfo.appId || steamAppIdFromResults) : [];
+  const images = steamInfo ? uniqueUrls([
+    steamInfo.image,
     ...steamAssetsFromResults
-  ]).slice(0, 6);
+  ]) : [];
+  const screenshots = steamInfo ? uniqueUrls([
+    ...(steamInfo.screenshots || []),
+    ...steamAssetsFromResults
+  ]).slice(0, 6) : [];
   const developer = normalizeDeveloperName(steamInfo?.developer || findInText(text, [
     /(?:developer|developed by)\s*(?:is|was|:)?\s*([^.;,\n]+)/i,
     /(?:nhà phát triển|phát triển bởi)\s*(?:là|:)?\s*([^.;,\n]+)/i
@@ -529,7 +508,7 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
   const merged = {
     title: steamInfo?.title || gameName,
     price: steamInfo?.price ?? 0,
-    image: steamInfo?.image || images[0] || screenshots[0] || '',
+    image: images[0] || '',
     description: getVietnameseDescription({
       gameName,
       tags,
