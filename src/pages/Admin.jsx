@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Gamepad2, Plus, Search, Sparkles, User as UserIcon, Upload, Trash2, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Upload, X } from 'lucide-react';
 import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc } from 'firebase/firestore';
@@ -9,6 +9,7 @@ const ADULT_KEYWORDS = [
 ];
 
 const TAVILY_API_KEY_STORAGE_KEY = 'web18p_tavily_api_key';
+const TAVILY_MAX_QUERY_LENGTH = 400;
 
 const TRUSTED_GAME_DOMAINS = [
   'store.steampowered.com',
@@ -49,6 +50,11 @@ const cleanText = (text = '') => String(text)
   .replace(/<[^>]*>/g, ' ')
   .replace(/\s+/g, ' ')
   .trim();
+
+const truncateText = (text = '', maxLength = TAVILY_MAX_QUERY_LENGTH) => {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+};
 
 const MONTH_MAP = {
   jan: '01',
@@ -182,12 +188,10 @@ const getTavilyErrorMessage = (data, status) => {
 const shouldRetryTavilyWithoutDomainParam = (message) => /include_domains|domain|extra|schema|validation|field/i.test(message);
 
 const buildTavilyQuery = (gameName) => {
-  const trustedSites = TRUSTED_GAME_DOMAINS
-    .slice(0, 9)
-    .map(domain => `site:${domain}`)
-    .join(' OR ');
+  const safeGameName = cleanText(gameName).replace(/"/g, '').slice(0, 140).trim();
+  const shortQuery = `"${safeGameName}" game. Tra loi tieng Viet: mo ta ngan, nha phat trien, ngay phat hanh, gia, nen tang, the loai, cau hinh toi thieu, link chinh thuc.`;
 
-  return `(${trustedSites}) Tìm chính xác game "${gameName}" trên các nguồn game lớn như Steam, F95Zone, VNDB, itch.io, DLsite, GOG, Epic Games, MobyGames, IGDB. Bỏ qua kết quả trùng tên nhưng không phải game này. Trả lời hoàn toàn bằng tiếng Việt, không dùng tiếng Anh trừ tên riêng. Cần có: mô tả cốt truyện và lối chơi 3-5 câu, nhà phát triển, ngày phát hành dạng YYYY-MM-DD nếu biết, giá, nền tảng, thể loại, cấu hình hệ thống tối thiểu, link nguồn chính thức hoặc Steam/F95/VNDB.`;
+  return truncateText(shortQuery, TAVILY_MAX_QUERY_LENGTH);
 };
 
 const fetchTavilySearch = async (apiKey, gameName, useDomainParam = true) => {
