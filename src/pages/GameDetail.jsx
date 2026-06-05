@@ -231,9 +231,14 @@ function GameDetail() {
             </div>
             
             {isOwned ? (
-              <a href={game.downloadUrl || '#'} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ display: 'flex', width: '100%', justifyContent: 'center', padding: '1rem', borderRadius: '8px' }}>
-                <Download size={20} /> Tải xuống ngay
-              </a>
+              <>
+                <a href={game.downloadUrl || '#'} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ display: 'flex', width: '100%', justifyContent: 'center', padding: '1rem', borderRadius: '8px' }}>
+                  <Download size={20} /> Tải xuống ngay
+                </a>
+                <div style={{ marginTop: '0.85rem', color: 'var(--color-text-light)', fontSize: '0.9rem', textAlign: 'center', lineHeight: 1.5 }}>
+                  Mật khẩu giải nén là: <strong>web18p.xyz</strong>
+                </div>
+              </>
             ) : (
               <button onClick={handleBuy} className="btn btn-success" style={{ width: '100%', justifyContent: 'center', padding: '1rem', borderRadius: '8px' }}>
                 <ShoppingCart size={20} /> Mua ngay

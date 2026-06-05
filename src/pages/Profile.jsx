@@ -158,9 +158,14 @@ function Profile() {
                           <h3 style={{ color: 'var(--color-text-light)', fontSize: '1rem', marginBottom: '0.3rem' }}>{game.title}</h3>
                           <span style={{ color: 'var(--color-success)', fontSize: '0.75rem', fontWeight: '600' }}>SẴN SÀNG</span>
                         </div>
-                        <a href={game.downloadUrl || '#'} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
-                          <Download size={16} /> Tải game
-                        </a>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.45rem' }}>
+                          <a href={game.downloadUrl || '#'} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                            <Download size={16} /> Tải game
+                          </a>
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', textAlign: 'right' }}>
+                            Mật khẩu giải nén: <strong style={{ color: 'var(--color-text-light)' }}>web18p.xyz</strong>
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}
