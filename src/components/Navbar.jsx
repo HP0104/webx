@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Gamepad2, Wallet, User, LogOut, ShieldAlert, Menu, X, ChevronDown, Search } from 'lucide-react';
+import { Wallet, User, LogOut, ShieldAlert, Menu, X, ChevronDown, Search } from 'lucide-react';
 import { useAppContext } from '../App';
 
 function Navbar() {
@@ -80,7 +80,7 @@ function Navbar() {
   return (
     <nav className="navbar">
       <Link to="/" className="nav-brand" onClick={() => setIsMenuOpen(false)}>
-        <Gamepad2 size={28} color="var(--color-accent)" />
+        <img src="/favicon.svg" alt="WEB18P" className="brand-logo" />
         WEB18P
       </Link>
 

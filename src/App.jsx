@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { useState, createContext, useContext } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import NotificationBanner from './components/NotificationBanner';
 import ChatBox from './components/ChatBox';
@@ -21,6 +21,60 @@ import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDo
 
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
+
+const CATEGORY_TITLES = {
+  hot: 'Game Hot',
+  new: 'Game Mới Nhất',
+  popular: 'Game Nhiều Người Chơi',
+  'top-rated': 'Game Đánh Giá Cao',
+  '18-plus': 'Game 18+',
+  '18-all': 'Tất Cả Game 18+',
+  '18-vn': 'Việt Hóa 18+',
+  '18-uncensored': '18+ Không Che',
+  '18-pc': 'Game 18+ Cho PC',
+  '18-android': 'Game 18+ Cho Android'
+};
+
+function PageTitle({ games }) {
+  const location = useLocation();
+
+  React.useEffect(() => {
+    const { pathname, search } = location;
+    const searchParams = new URLSearchParams(search);
+    let pageTitle = 'WEB18P';
+
+    if (pathname === '/') {
+      pageTitle = 'Trang Chủ';
+    } else if (pathname === '/games') {
+      pageTitle = searchParams.get('search')
+        ? `Tìm Kiếm: ${searchParams.get('search')}`
+        : 'Tất Cả Trò Chơi';
+    } else if (pathname.startsWith('/category/')) {
+      const categoryType = pathname.split('/').filter(Boolean)[1];
+      pageTitle = CATEGORY_TITLES[categoryType] || 'Kho Game';
+    } else if (pathname.startsWith('/game/')) {
+      const gameId = pathname.split('/').filter(Boolean)[1];
+      const game = games.find(item => item.id.toString() === gameId);
+      pageTitle = game?.title || 'Chi Tiết Game';
+    } else if (pathname === '/blog') {
+      pageTitle = 'Blog';
+    } else if (pathname === '/report') {
+      pageTitle = 'Báo Lỗi';
+    } else if (pathname === '/auth') {
+      pageTitle = 'Đăng Nhập';
+    } else if (pathname === '/wallet') {
+      pageTitle = 'Ví Của Tôi';
+    } else if (pathname === '/profile') {
+      pageTitle = 'Hồ Sơ';
+    } else if (pathname === '/admin') {
+      pageTitle = 'Quản Trị';
+    }
+
+    document.title = `${pageTitle} | WEB18P`;
+  }, [games, location.pathname, location.search]);
+
+  return null;
+}
 
 function App() {
   const [user, setUser] = useState(null);
@@ -226,6 +280,7 @@ function App() {
       games, users, revenue, addGameToStore, deleteGameFromStore, updateGameInStore
     }}>
       <Router>
+        <PageTitle games={games} />
         <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
           <Navbar />
           <NotificationBanner />

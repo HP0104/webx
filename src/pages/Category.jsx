@@ -35,6 +35,13 @@ function Category() {
     );
   } else {
     switch (categoryType) {
+      case 'hot':
+      case '18-plus':
+        title = categoryType === 'hot' ? 'GAME HOT' : 'GAME 18+';
+        filteredGames = categoryType === 'hot'
+          ? filteredGames.sort((a, b) => (b.views || 0) - (a.views || 0))
+          : filteredGames.filter(g => g.is18Plus || g.is18Vn || g.is18Uncensored || g.is18Pc || g.is18Android || g.tags?.some(t => ['Mature', '18+'].includes(t)));
+        break;
       case 'new':
         title = 'GAME MỚI NHẤT';
         filteredGames = filteredGames.filter(g => g.isNew);
