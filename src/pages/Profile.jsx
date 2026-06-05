@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { User, Wallet, Gamepad2, Download, Save, Mail, Lock, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
@@ -17,7 +17,9 @@ function Profile() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   
-  const myGames = games.filter(game => ownedGames.includes(game.id));
+  const myGames = games.filter(game =>
+    ownedGames.some(ownedId => ownedId.toString() === game.id.toString())
+  );
 
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];

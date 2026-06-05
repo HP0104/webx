@@ -456,6 +456,12 @@ const findInText = (text, patterns) => {
   return '';
 };
 
+const normalizeDeveloperName = (text = '') => cleanText(text)
+  .replace(/\b(with a )?release date.*$/i, '')
+  .replace(/\bpriced at.*$/i, '')
+  .replace(/\bngày phát hành.*$/i, '')
+  .trim();
+
 const getGameTagsFromText = (text) => {
   const tags = [
     ['VN', /\b(vietnamese|tiếng việt|việt hóa|việt nam)\b/i],
@@ -520,13 +526,13 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
     ...images,
     ...steamAssetsFromResults
   ]).slice(0, 6);
-  const developer = steamInfo?.developer || findInText(text, [
-    /(?:developer|developed by)\s*(?:is|was|:)?\s*([^.;]+)/i,
-    /(?:nhà phát triển|phát triển bởi)\s*(?:là|:)?\s*([^.;]+)/i
-  ]);
+  const developer = normalizeDeveloperName(steamInfo?.developer || findInText(text, [
+    /(?:developer|developed by)\s*(?:is|was|:)?\s*([^.;,\n]+)/i,
+    /(?:nhà phát triển|phát triển bởi)\s*(?:là|:)?\s*([^.;,\n]+)/i
+  ]));
   const releaseDate = steamInfo?.releaseDate || findInText(text, [
-    /(?:release date|released on|released)\s*(?:is|was|:)?\s*([^.;]+)/i,
-    /(?:ngày phát hành|phát hành)\s*(?:là|:)?\s*([^.;]+)/i
+    /(?:release date|released on|released)\s*(?:is|was|:)?\s*([^.;,\n]+)/i,
+    /(?:ngày phát hành|phát hành)\s*(?:là|:)?\s*([^.;,\n]+)/i
   ]);
   const tags = [...new Set([...(steamInfo?.tags || []), ...getGameTagsFromText(text), 'PC'])];
   const fallbackDescription = results[0]?.content || steamInfo?.description || cleanText(data.answer || '');
@@ -537,7 +543,7 @@ const searchTavilyGameInfo = async (apiKey, gameName) => {
   const merged = {
     title: steamInfo?.title || gameName,
     price: steamInfo?.price ?? 0,
-    image: steamInfo?.image || images[0] || '',
+    image: steamInfo?.image || images[0] || screenshots[0] || '',
     description: getVietnameseDescription(gameName, data.answer, fallbackDescription, tags),
     developer,
     releaseDate: normalizeReleaseDate(releaseDate),

@@ -213,13 +213,35 @@ function App() {
     setOwnedGames([]);
   };
 
-  const buyGame = (game) => {
-    if (balance >= game.price) {
-      setBalance(prev => prev - game.price);
-      setOwnedGames(prev => [...prev, game.id]);
-      return true;
+  const buyGame = async (game) => {
+    if (!user) return { ok: false, reason: 'not_logged_in' };
+
+    const gameId = game.id.toString();
+    const alreadyOwned = ownedGames.some(ownedId => ownedId.toString() === gameId);
+    if (alreadyOwned) return { ok: true, reason: 'already_owned' };
+
+    const gamePrice = Number(game.price) || 0;
+    if (balance < gamePrice) return { ok: false, reason: 'insufficient_balance' };
+
+    const nextBalance = balance - gamePrice;
+    const nextOwnedGames = [...new Set([...ownedGames.map(id => id.toString()), gameId])];
+
+    // Cập nhật giao diện trước để cảm giác mua game mượt hơn.
+    setBalance(nextBalance);
+    setOwnedGames(nextOwnedGames);
+
+    try {
+      await setDoc(doc(db, 'users', user.id), {
+        balance: nextBalance,
+        ownedGames: nextOwnedGames
+      }, { merge: true });
+      return { ok: true };
+    } catch (error) {
+      console.warn("Firestore error buying game, reverting local state:", error.message);
+      setBalance(balance);
+      setOwnedGames(ownedGames);
+      return { ok: false, reason: 'save_failed' };
     }
-    return false;
   };
 
   const updateUserInfo = async (newData) => {

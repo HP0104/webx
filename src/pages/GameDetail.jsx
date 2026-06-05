@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ShoppingCart, Download, ArrowLeft, Monitor, History, Calendar, Eye } from 'lucide-react';
+import { ShoppingCart, Download, ArrowLeft, Monitor, History, Calendar } from 'lucide-react';
 import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { doc, updateDoc, increment } from 'firebase/firestore';
@@ -16,7 +16,7 @@ function GameDetail() {
   useEffect(() => {
     if (!game || gameSlug === getGamePath(game).split('/').pop()) return;
     navigate(getGamePath(game), { replace: true });
-  }, [game?.id, gameSlug, navigate]);
+  }, [game, gameSlug, navigate]);
 
   // Tự động tăng lượt xem (views) khi người dùng truy cập trang chi tiết game này
   useEffect(() => {
@@ -40,10 +40,14 @@ function GameDetail() {
 
   const isOwned = ownedGames.some(ownedId => ownedId.toString() === game.id.toString());
 
-  const handleBuy = () => {
+  const handleBuy = async () => {
     if (!user) return alert('Vui lòng đăng nhập để mua game!');
-    if (buyGame(game)) {
+    const result = await buyGame(game);
+
+    if (result?.ok) {
       alert('Mua game thành công! Game đã được thêm vào thư viện của bạn.');
+    } else if (result?.reason === 'save_failed') {
+      alert('Mua game thất bại do không lưu được vào tài khoản. Vui lòng thử lại.');
     } else {
       alert('Số dư không đủ, vui lòng nạp thêm tiền!');
     }
