@@ -4,7 +4,13 @@ import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 
-const GEMINI_MODELS = ['gemini-3-flash-preview', 'gemini-2.0-flash', 'gemini-1.5-flash-latest'];
+const PREFERRED_GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash'
+];
 
 const extractJsonObject = (text) => {
   const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -50,6 +56,34 @@ const getGeminiText = (data) => {
   }
 
   return text;
+};
+
+const getAvailableGeminiModels = async (apiKey) => {
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    const data = await response.json();
+
+    if (data?.error) {
+      throw new Error(data.error.message || 'Không đọc được danh sách model Gemini.');
+    }
+
+    const availableModels = (data.models || [])
+      .filter(model => model.supportedGenerationMethods?.includes('generateContent'))
+      .map(model => model.name?.replace(/^models\//, ''))
+      .filter(Boolean);
+
+    const preferredAvailable = PREFERRED_GEMINI_MODELS.filter(model => availableModels.includes(model));
+    const otherFlashModels = availableModels.filter(model =>
+      model.includes('gemini') &&
+      model.includes('flash') &&
+      !preferredAvailable.includes(model)
+    );
+
+    return [...preferredAvailable, ...otherFlashModels];
+  } catch (error) {
+    console.warn('Gemini model list warning:', error.message);
+    return PREFERRED_GEMINI_MODELS;
+  }
 };
 
 function Admin() {
@@ -155,8 +189,13 @@ Return ONLY a valid JSON object with these keys: price (VND number), image (URL 
     try {
       let rawText = '';
       let lastError = null;
+      const geminiModels = await getAvailableGeminiModels(apiKey);
 
-      for (const model of GEMINI_MODELS) {
+      if (geminiModels.length === 0) {
+        throw new Error('API key này không có model Gemini nào hỗ trợ generateContent.');
+      }
+
+      for (const model of geminiModels) {
         for (const useSearch of [true, false]) {
           try {
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
