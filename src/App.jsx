@@ -18,7 +18,7 @@ import { MOCK_USERS } from './data/users';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc } from 'firebase/firestore';
-import { findGameByRouteParam } from './utils/gameRoutes';
+import { findGameByRouteParam, getGamePath } from './utils/gameRoutes';
 
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
@@ -43,24 +43,35 @@ function PageTitle({ games }) {
     const { pathname, search } = location;
     const searchParams = new URLSearchParams(search);
     let pageTitle = 'WEB18P';
+    let description = 'WEB18P - kho game Việt hóa, game PC và Android được cập nhật thường xuyên.';
+    let canonicalPath = pathname;
 
     if (pathname === '/') {
       pageTitle = 'Trang Chủ';
+      canonicalPath = '/';
     } else if (pathname === '/games') {
       pageTitle = searchParams.get('search')
         ? `Tìm Kiếm: ${searchParams.get('search')}`
         : 'Tất Cả Trò Chơi';
+      description = searchParams.get('search')
+        ? `Kết quả tìm kiếm game "${searchParams.get('search')}" trên WEB18P.`
+        : 'Danh sách tất cả trò chơi đang có trên WEB18P.';
     } else if (pathname.startsWith('/category/')) {
       const categoryType = pathname.split('/').filter(Boolean)[1];
       pageTitle = CATEGORY_TITLES[categoryType] || 'Kho Game';
+      description = `${pageTitle} được cập nhật trên WEB18P.`;
     } else if (pathname.startsWith('/game/')) {
       const gameSlug = pathname.split('/').filter(Boolean)[1];
       const game = findGameByRouteParam(games, gameSlug);
       pageTitle = game?.title || 'Chi Tiết Game';
+      description = game?.description || 'Thông tin chi tiết game trên WEB18P.';
+      canonicalPath = game ? getGamePath(game) : pathname;
     } else if (pathname === '/blog') {
       pageTitle = 'Blog';
+      description = 'Bài viết và cập nhật từ WEB18P.';
     } else if (pathname === '/report') {
       pageTitle = 'Báo Lỗi';
+      description = 'Gửi báo lỗi và góp ý cho WEB18P.';
     } else if (pathname === '/auth') {
       pageTitle = 'Đăng Nhập';
     } else if (pathname === '/wallet') {
@@ -72,6 +83,19 @@ function PageTitle({ games }) {
     }
 
     document.title = `${pageTitle} | WEB18P`;
+    const canonicalUrl = `https://web18p.xyz${canonicalPath}`;
+    const setMeta = (selector, attr, value) => {
+      const element = document.querySelector(selector);
+      if (element) element.setAttribute(attr, value);
+    };
+
+    setMeta('meta[name="description"]', 'content', description);
+    setMeta('meta[property="og:title"]', 'content', `${pageTitle} | WEB18P`);
+    setMeta('meta[property="og:description"]', 'content', description);
+    setMeta('meta[property="og:url"]', 'content', canonicalUrl);
+    setMeta('meta[name="twitter:title"]', 'content', `${pageTitle} | WEB18P`);
+    setMeta('meta[name="twitter:description"]', 'content', description);
+    setMeta('link[rel="canonical"]', 'href', canonicalUrl);
   }, [games, location.pathname, location.search]);
 
   return null;

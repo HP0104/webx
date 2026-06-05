@@ -37,8 +37,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Add single-page app fallback
-        run: cp dist/index.html dist/404.html
+      - name: Generate SEO files
+        run: node scripts/generate-seo-pages.mjs
 
       - name: Preserve custom domain
         run: cp CNAME dist/CNAME
