@@ -4,86 +4,132 @@ import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 
-const PREFERRED_GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-1.5-flash'
+const ADULT_KEYWORDS = [
+  '18+', 'adult', 'nsfw', 'hentai', 'eroge', 'sex', 'slut', 'porn', 'uncensored', 'nude'
 ];
 
-const extractJsonObject = (text) => {
-  const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+const cleanText = (text = '') => String(text)
+  .replace(/<[^>]*>/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
 
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start === -1 || end === -1 || end <= start) {
-      throw new Error('AI không trả về JSON hợp lệ.');
-    }
-
-    return JSON.parse(cleaned.slice(start, end + 1));
+const getJson = async (url) => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Không đọc được nguồn (${response.status})`);
   }
+  return response.json();
 };
 
-const getGeminiText = (data) => {
-  if (data?.error) {
-    throw new Error(data.error.message || 'Gemini API trả về lỗi.');
-  }
-
-  const candidate = data?.candidates?.[0];
-  if (!candidate) {
-    const blockReason = data?.promptFeedback?.blockReason;
-    throw new Error(blockReason
-      ? `Gemini đã chặn yêu cầu (${blockReason}). Hãy thử tên game ít nhạy cảm hơn hoặc nhập thủ công.`
-      : 'Gemini không trả về nội dung nào.');
-  }
-
-  if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-    throw new Error(`Gemini dừng phản hồi vì ${candidate.finishReason}. Hãy thử lại hoặc nhập thủ công.`);
-  }
-
-  const text = candidate.content?.parts
-    ?.map(part => part.text)
-    .filter(Boolean)
-    .join('\n')
-    .trim();
-
-  if (!text) {
-    throw new Error('Gemini trả về phản hồi rỗng.');
-  }
-
-  return text;
-};
-
-const getAvailableGeminiModels = async (apiKey) => {
+const getOptionalJson = async (url) => {
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    const data = await response.json();
-
-    if (data?.error) {
-      throw new Error(data.error.message || 'Không đọc được danh sách model Gemini.');
-    }
-
-    const availableModels = (data.models || [])
-      .filter(model => model.supportedGenerationMethods?.includes('generateContent'))
-      .map(model => model.name?.replace(/^models\//, ''))
-      .filter(Boolean);
-
-    const preferredAvailable = PREFERRED_GEMINI_MODELS.filter(model => availableModels.includes(model));
-    const otherFlashModels = availableModels.filter(model =>
-      model.includes('gemini') &&
-      model.includes('flash') &&
-      !preferredAvailable.includes(model)
-    );
-
-    return [...preferredAvailable, ...otherFlashModels];
+    return await getJson(url);
   } catch (error) {
-    console.warn('Gemini model list warning:', error.message);
-    return PREFERRED_GEMINI_MODELS;
+    console.warn('Free web search source warning:', error.message);
+    return null;
   }
+};
+
+const getWikipediaInfo = async (gameName) => {
+  const searchData = await getOptionalJson(
+    `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(`${gameName} video game`)}&format=json&origin=*`
+  );
+  const pageTitle = searchData?.query?.search?.[0]?.title;
+  if (!pageTitle) return null;
+
+  const summary = await getOptionalJson(
+    `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle)}`
+  );
+  if (!summary || summary.type === 'disambiguation') return null;
+
+  return {
+    title: summary.title,
+    description: cleanText(summary.extract),
+    image: summary.thumbnail?.source || summary.originalimage?.source || '',
+    source: summary.content_urls?.desktop?.page || ''
+  };
+};
+
+const getDuckDuckGoInfo = async (gameName) => {
+  const data = await getOptionalJson(
+    `https://api.duckduckgo.com/?q=${encodeURIComponent(`${gameName} video game`)}&format=json&no_html=1&skip_disambig=1`
+  );
+
+  if (!data?.AbstractText && !data?.Heading) return null;
+
+  return {
+    title: data.Heading || gameName,
+    description: cleanText(data.AbstractText),
+    image: data.Image?.startsWith('http') ? data.Image : '',
+    source: data.AbstractURL || ''
+  };
+};
+
+const getSteamInfo = async (gameName) => {
+  const searchData = await getOptionalJson(
+    `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&l=english&cc=us`
+  );
+  const app = searchData?.items?.[0];
+  if (!app?.id) return null;
+
+  const detailData = await getOptionalJson(
+    `https://store.steampowered.com/api/appdetails?appids=${app.id}&l=english&cc=us`
+  );
+  const details = detailData?.[app.id]?.data;
+
+  return {
+    title: details?.name || app.name || gameName,
+    image: details?.header_image || app.tiny_image || '',
+    description: cleanText(details?.short_description || ''),
+    developer: Array.isArray(details?.developers) ? details.developers.join(', ') : '',
+    releaseDate: details?.release_date?.date || '',
+    price: 0,
+    tags: [
+      ...(details?.genres || []).map(item => item.description),
+      ...(details?.categories || []).map(item => item.description)
+    ].filter(Boolean),
+    screenshots: (details?.screenshots || []).map(item => item.path_full).filter(Boolean).slice(0, 6),
+    source: `https://store.steampowered.com/app/${app.id}`
+  };
+};
+
+const hasAdultSignal = (gameName, info) => {
+  const text = [
+    gameName,
+    info.description,
+    info.developer,
+    ...(info.tags || [])
+  ].join(' ').toLowerCase();
+
+  return ADULT_KEYWORDS.some(keyword => text.includes(keyword));
+};
+
+const searchFreeGameInfo = async (gameName) => {
+  const [steamInfo, wikiInfo, duckInfo] = await Promise.all([
+    getSteamInfo(gameName),
+    getWikipediaInfo(gameName),
+    getDuckDuckGoInfo(gameName)
+  ]);
+
+  const merged = {
+    title: steamInfo?.title || wikiInfo?.title || duckInfo?.title || gameName,
+    price: steamInfo?.price ?? 0,
+    image: steamInfo?.image || wikiInfo?.image || duckInfo?.image || '',
+    description: steamInfo?.description || wikiInfo?.description || duckInfo?.description || '',
+    developer: steamInfo?.developer || '',
+    releaseDate: steamInfo?.releaseDate || '',
+    systemRequirements: '',
+    screenshots: steamInfo?.screenshots || [],
+    rating: 5.0,
+    downloads: Math.floor(Math.random() * 500) + 15,
+    tags: [...(steamInfo?.tags || []), 'PC']
+  };
+
+  return {
+    ...merged,
+    is18Plus: hasAdultSignal(gameName, merged),
+    sources: [steamInfo?.source, wikiInfo?.source, duckInfo?.source].filter(Boolean)
+  };
 };
 
 function Admin() {
@@ -92,7 +138,6 @@ function Admin() {
   const [isSearching, setIsSearching] = useState(false);
   const [editingGameId, setEditingGameId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [apiKey, setApiKey] = useState('');
   const [currentUpdateVersion, setCurrentUpdateVersion] = useState('');
   const [currentUpdateLog, setCurrentUpdateLog] = useState('');
   const [editingUserId, setEditingUserId] = useState(null);
@@ -178,75 +223,42 @@ function Admin() {
   };
 
   const handleSearchAI = async () => {
-    if (!searchQuery) return alert('Vui lòng nhập Tên Game để tìm kiếm!');
-    if (!apiKey) return alert('Vui lòng nhập Google AI Studio API Key để dùng tính năng này!');
+    const gameName = searchQuery.trim();
+    if (!gameName) return alert('Vui lòng nhập Tên Game để tìm kiếm!');
     
     setIsSearching(true);
-    const prompt = `Find public information about the video game "${searchQuery}".
-If the exact game is obscure, return the best available public information and keep unknown fields empty instead of inventing facts.
-Return ONLY a valid JSON object with these keys: price (VND number), image (URL string), tags (array), description (Vietnamese string), developer (string), releaseDate (string), systemRequirements (Vietnamese string), screenshots (array of URL strings), rating (float 1.0 to 5.0), downloads (number), is18Plus (boolean).`;
 
     try {
-      let rawText = '';
-      let lastError = null;
-      const geminiModels = await getAvailableGeminiModels(apiKey);
+      const webData = await searchFreeGameInfo(gameName);
 
-      if (geminiModels.length === 0) {
-        throw new Error('API key này không có model Gemini nào hỗ trợ generateContent.');
+      if (!webData.description && !webData.image && webData.tags.length <= 1) {
+        throw new Error('Chưa tìm thấy dữ liệu rõ ràng. Bạn thử tên game đầy đủ hơn hoặc nhập thủ công nhé.');
       }
-
-      for (const model of geminiModels) {
-        for (const useSearch of [true, false]) {
-          try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                ...(useSearch ? { tools: [{ google_search: {} }] } : {})
-              })
-            });
-            const data = await response.json();
-            rawText = getGeminiText(data);
-            break;
-          } catch (error) {
-            lastError = error;
-          }
-        }
-
-        if (rawText) break;
-      }
-
-      if (!rawText) throw lastError || new Error('Không thể lấy dữ liệu từ Gemini.');
-
-      const aiData = extractJsonObject(rawText);
-
-      const is18 = aiData.is18Plus || searchQuery.toLowerCase().includes('slut') || searchQuery.toLowerCase().includes('18+');
 
       setNewGame(prev => ({
         ...prev,
-        title: searchQuery,
-        price: aiData.price || 0,
-        image: aiData.image || '',
-        tags: aiData.tags ? (Array.isArray(aiData.tags) ? aiData.tags.join(', ') : aiData.tags) : '',
-        description: aiData.description || '',
-        developer: aiData.developer || '',
-        releaseDate: aiData.releaseDate || '',
-        systemRequirements: aiData.systemRequirements || '',
-        screenshots: Array.isArray(aiData.screenshots) ? aiData.screenshots : [],
-        rating: aiData.rating || 5.0,
-        downloads: aiData.downloads || Math.floor(Math.random() * 500) + 15,
+        title: webData.title || gameName,
+        price: webData.price || 0,
+        image: webData.image || '',
+        tags: Array.isArray(webData.tags) ? webData.tags.join(', ') : '',
+        description: webData.description || '',
+        developer: webData.developer || '',
+        releaseDate: webData.releaseDate || '',
+        systemRequirements: webData.systemRequirements || '',
+        screenshots: Array.isArray(webData.screenshots) ? webData.screenshots : [],
+        rating: webData.rating || 5.0,
+        downloads: webData.downloads || Math.floor(Math.random() * 500) + 15,
         isNew: true,
         isPopular: true,
         isTopRated: true,
-        is18Vn: is18,
-        is18Uncensored: is18,
+        is18Vn: webData.is18Plus,
+        is18Uncensored: webData.is18Plus,
         is18Pc: true,
-        is18Android: is18
+        is18Android: webData.is18Plus
       }));
-      alert('Thành công! AI đã tìm thấy thông tin game.');
+      alert(`Thành công! Đã tìm thông tin miễn phí từ web${webData.sources.length ? ` (${webData.sources.length} nguồn)` : ''}.`);
     } catch (error) {
-      alert('Lỗi AI: ' + error.message);
+      alert('Lỗi tìm kiếm web: ' + error.message);
     } finally {
       setIsSearching(false);
     }
@@ -495,21 +507,14 @@ Return ONLY a valid JSON object with these keys: price (VND number), image (URL 
             {editingGameId ? 'Chỉnh sửa Game' : 'Thêm Game Mới'}
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
-            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>Cấu hình AI Search (Gemini)</label>
-            <input 
-              type="password" 
-              className="input-field" 
-              placeholder="Nhập Google AI Studio API Key..." 
-              value={apiKey} 
-              onChange={e => setApiKey(e.target.value)} 
-              style={{ fontSize: '0.85rem' }}
-            />
+            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>Tìm thông tin game miễn phí trên web</label>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input type="text" className="input-field" placeholder="Nhập tên game..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1 }} />
+              <input type="text" className="input-field" placeholder="Nhập tên game cần tìm..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1 }} />
               <button type="button" onClick={handleSearchAI} className="btn" style={{ background: 'var(--color-accent)', color: 'white', padding: '0 1.5rem' }} disabled={isSearching}>
-                {isSearching ? 'Đang tìm...' : 'AI'}
+                {isSearching ? 'Đang tìm...' : 'Tìm web'}
               </button>
             </div>
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Không cần API key. Nguồn miễn phí: Steam, Wikipedia, DuckDuckGo.</span>
           </div>
 
           <form onSubmit={handleAddGame} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
