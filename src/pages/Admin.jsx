@@ -280,6 +280,75 @@ const normalizeGeminiGameData = (gameName, data = {}) => {
   };
 };
 
+const isLikelyDirectImageUrl = (url = '') => {
+  const value = cleanText(url);
+  if (!/^https?:\/\//i.test(value)) return false;
+  if (/\.(svg|ico)(\?|#|$)/i.test(value)) return false;
+  if (/(avatar|profile|logo|favicon|icon|sprite|placeholder|blank|loading|spinner|default|transparent)/i.test(value)) return false;
+  return true;
+};
+
+const canLoadImage = (url, timeoutMs = 5000) => new Promise(resolve => {
+  if (!isLikelyDirectImageUrl(url)) {
+    resolve(false);
+    return;
+  }
+
+  const image = new Image();
+  let done = false;
+
+  const finish = (result) => {
+    if (done) return;
+    done = true;
+    image.onload = null;
+    image.onerror = null;
+    resolve(result);
+  };
+
+  const timer = window.setTimeout(() => finish(false), timeoutMs);
+
+  image.onload = () => {
+    window.clearTimeout(timer);
+    finish(image.naturalWidth >= 120 && image.naturalHeight >= 80);
+  };
+
+  image.onerror = () => {
+    window.clearTimeout(timer);
+    finish(false);
+  };
+
+  image.referrerPolicy = 'no-referrer';
+  image.crossOrigin = 'anonymous';
+  image.src = url;
+});
+
+const getVerifiedImageUrls = async (urls = [], limit = 8) => {
+  const candidates = uniqueUrls(urls.map(cleanText).filter(Boolean));
+  const verified = [];
+
+  for (const url of candidates) {
+    if (verified.length >= limit) break;
+    if (await canLoadImage(url)) {
+      verified.push(url);
+    }
+  }
+
+  return verified;
+};
+
+const verifyGeminiGameImages = async (gameData) => {
+  const verifiedScreenshots = await getVerifiedImageUrls([
+    gameData.image,
+    ...(gameData.screenshots || [])
+  ], 8);
+
+  return {
+    ...gameData,
+    image: verifiedScreenshots[0] || '',
+    screenshots: verifiedScreenshots
+  };
+};
+
 const searchGeminiGameInfo = async (apiKey, gameName) => {
   const models = await getAvailableGeminiModels(apiKey);
   if (!models.length) {
@@ -290,7 +359,8 @@ const searchGeminiGameInfo = async (apiKey, gameName) => {
 Ưu tiên nguồn chính thức/Steam nếu có, nhưng có thể dùng nguồn web khác khi game không có trên Steam.
 Yêu cầu:
 - Trả lời hoàn toàn bằng tiếng Việt, trừ tên riêng.
-- Không bịa link ảnh. Chỉ điền image/screenshots nếu là URL ảnh trực tiếp có khả năng truy cập công khai.
+- Không bịa link ảnh. Chỉ điền image/screenshots nếu là URL ảnh trực tiếp có khả năng truy cập công khai, ưu tiên CDN chính thức như steamstatic, itch.zone, cloudfront, imgur.
+- Không dùng URL trang HTML, URL ảnh bị rút gọn, URL cần token đăng nhập, hoặc URL không có ảnh thật.
 - releaseDate dùng định dạng YYYY-MM-DD nếu biết.
 - price là số VND, nếu không rõ thì 0.
 - systemRequirements viết tiếng Việt.
@@ -633,7 +703,9 @@ function Admin() {
     setIsSearching(true);
 
     try {
-      const webData = await searchGeminiGameInfo(geminiApiKey.trim(), gameName);
+      const webData = await verifyGeminiGameImages(
+        await searchGeminiGameInfo(geminiApiKey.trim(), gameName)
+      );
 
       if (!webData.description && !webData.image && webData.tags.length <= 1) {
         throw new Error('Gemini chưa trả đủ dữ liệu rõ ràng. Bạn thử tên game đầy đủ hơn hoặc nhập thủ công.');
