@@ -288,7 +288,7 @@ const isLikelyDirectImageUrl = (url = '') => {
   return true;
 };
 
-const canLoadImage = (url, timeoutMs = 5000) => new Promise(resolve => {
+const canLoadImage = (url, timeoutMs = 2500) => new Promise(resolve => {
   if (!isLikelyDirectImageUrl(url)) {
     resolve(false);
     return;
@@ -317,23 +317,20 @@ const canLoadImage = (url, timeoutMs = 5000) => new Promise(resolve => {
     finish(false);
   };
 
-  image.referrerPolicy = 'no-referrer';
-  image.crossOrigin = 'anonymous';
   image.src = url;
 });
 
 const getVerifiedImageUrls = async (urls = [], limit = 8) => {
   const candidates = uniqueUrls(urls.map(cleanText).filter(Boolean));
-  const verified = [];
+  const results = await Promise.all(candidates.map(async url => ({
+    url,
+    ok: await canLoadImage(url)
+  })));
 
-  for (const url of candidates) {
-    if (verified.length >= limit) break;
-    if (await canLoadImage(url)) {
-      verified.push(url);
-    }
-  }
-
-  return verified;
+  return results
+    .filter(result => result.ok)
+    .map(result => result.url)
+    .slice(0, limit);
 };
 
 const verifyGeminiGameImages = async (gameData) => {
