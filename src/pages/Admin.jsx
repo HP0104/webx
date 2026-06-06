@@ -239,47 +239,6 @@ const getAvailableGeminiModels = async (apiKey) => {
   }
 };
 
-const normalizeGeminiGameData = (gameName, data = {}) => {
-  const title = cleanText(data.title || gameName);
-  const tags = Array.isArray(data.tags)
-    ? data.tags.map(cleanText).filter(Boolean)
-    : String(data.tags || '').split(',').map(cleanText).filter(Boolean);
-  const screenshots = Array.isArray(data.screenshots)
-    ? data.screenshots.map(cleanText).filter(url => /^https?:\/\//i.test(url)).slice(0, 8)
-    : [];
-  const image = cleanText(data.image || screenshots[0] || '');
-  const releaseDate = normalizeReleaseDate(data.releaseDate || '');
-  const price = Number(data.price || 0);
-  const description = cleanText(data.description || buildVietnameseGameSummary({
-    gameName: title,
-    tags,
-    text: '',
-    developer: data.developer || '',
-    releaseDate,
-    price
-  }));
-  const systemRequirements = cleanText(data.systemRequirements || getDefaultSystemRequirements(tags));
-
-  return {
-    title,
-    price: Number.isFinite(price) ? price : 0,
-    image,
-    tags,
-    description,
-    developer: cleanText(data.developer || ''),
-    releaseDate,
-    systemRequirements,
-    screenshots,
-    rating: Number(data.rating || 5.0) || 5.0,
-    downloads: Number(data.downloads || 0) || Math.floor(Math.random() * 500) + 15,
-    is18Plus: Boolean(data.is18Plus) || hasAdultSignal(gameName, {
-      description,
-      developer: data.developer || '',
-      tags
-    })
-  };
-};
-
 const isLikelyDirectImageUrl = (url = '') => {
   const value = cleanText(url);
   if (!/^https?:\/\//i.test(value)) return false;
@@ -331,85 +290,6 @@ const getVerifiedImageUrls = async (urls = [], limit = 8) => {
     .filter(result => result.ok)
     .map(result => result.url)
     .slice(0, limit);
-};
-
-const verifyGeminiGameImages = async (gameData) => {
-  const verifiedScreenshots = await getVerifiedImageUrls([
-    gameData.image,
-    ...(gameData.screenshots || [])
-  ], 8);
-
-  return {
-    ...gameData,
-    image: verifiedScreenshots[0] || '',
-    screenshots: verifiedScreenshots
-  };
-};
-
-const searchGeminiGameInfo = async (apiKey, gameName) => {
-  const models = await getAvailableGeminiModels(apiKey);
-  if (!models.length) {
-    throw new Error('API key này không có model Gemini nào hỗ trợ generateContent.');
-  }
-
-  const prompt = `Tìm thông tin công khai về game "${gameName}".
-Ưu tiên nguồn chính thức/Steam nếu có, nhưng có thể dùng nguồn web khác khi game không có trên Steam.
-Yêu cầu:
-- Trả lời hoàn toàn bằng tiếng Việt, trừ tên riêng.
-- Không bịa link ảnh. Chỉ điền image/screenshots nếu là URL ảnh trực tiếp có khả năng truy cập công khai, ưu tiên CDN chính thức như steamstatic, itch.zone, cloudfront, imgur.
-- Không dùng URL trang HTML, URL ảnh bị rút gọn, URL cần token đăng nhập, hoặc URL không có ảnh thật.
-- releaseDate dùng định dạng YYYY-MM-DD nếu biết.
-- price là số VND, nếu không rõ thì 0.
-- systemRequirements viết tiếng Việt.
-- Nếu không chắc một trường nào thì để chuỗi rỗng hoặc mảng rỗng.
-Chỉ trả về JSON object hợp lệ với các khóa:
-{
-  "title": "string",
-  "price": 0,
-  "image": "https://...",
-  "tags": ["PC"],
-  "description": "string tiếng Việt",
-  "developer": "string",
-  "releaseDate": "YYYY-MM-DD",
-  "systemRequirements": "string tiếng Việt",
-  "screenshots": ["https://..."],
-  "rating": 5,
-  "downloads": 100,
-  "is18Plus": false
-}`;
-
-  let lastError = null;
-
-  for (const model of models) {
-    for (const useSearch of [true, false]) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.2,
-              response_mime_type: 'application/json'
-            },
-            ...(useSearch ? { tools: [{ google_search: {} }] } : {})
-          })
-        });
-        const data = await response.json().catch(() => ({}));
-
-        if (!response.ok || data?.error) {
-          throw new Error(getGeminiErrorMessage(data, `Gemini trả về lỗi ${response.status}.`));
-        }
-
-        const rawText = getGeminiText(data);
-        return normalizeGeminiGameData(gameName, extractJsonObject(rawText));
-      } catch (error) {
-        lastError = error;
-      }
-    }
-  }
-
-  throw lastError || new Error('Không thể lấy dữ liệu từ Gemini.');
 };
 
 const getDefaultSystemRequirements = (tags = []) => {
@@ -582,6 +462,131 @@ const searchSteamGameInfo = async (input) => {
   };
 };
 
+const getSteamGameInfoFromInput = async (input) => {
+  const query = cleanText(input);
+  const appId = getSteamAppIdFromUrl(query) || (/^\d+$/.test(query) ? query : '');
+  const steamInfo = appId
+    ? await getSteamInfoByAppId(appId, '')
+    : await getSteamInfo(query);
+
+  if (!steamInfo) {
+    throw new Error('Không tìm thấy game trên Steam. Với game 18+ khó tìm bằng tên, hãy dán link Steam hoặc appId.');
+  }
+
+  return steamInfo;
+};
+
+const translateSteamGameInfoWithGemini = async (apiKey, steamInfo) => {
+  const models = await getAvailableGeminiModels(apiKey);
+  if (!models.length) {
+    throw new Error('API key này không có model Gemini nào hỗ trợ generateContent.');
+  }
+
+  const prompt = `Bạn chỉ được dùng dữ liệu Steam bên dưới để dịch/tóm tắt. Không tự tìm web, không thêm chi tiết không có trong dữ liệu Steam.
+Trả lời hoàn toàn bằng tiếng Việt, trừ tên riêng.
+Mục tiêu:
+- description: mô tả tiếng Việt tự nhiên 3-5 câu, đúng theo mô tả Steam.
+- systemRequirements: dịch cấu hình hệ thống sang tiếng Việt, giữ thông số kỹ thuật.
+- tags: giữ thể loại/nền tảng ngắn gọn, có thể giữ tên thể loại tiếng Anh quen thuộc như Visual Novel, RPG.
+Chỉ trả về JSON object hợp lệ:
+{
+  "description": "string",
+  "systemRequirements": "string",
+  "tags": ["PC"]
+}
+
+Dữ liệu Steam:
+${JSON.stringify({
+    title: steamInfo.title,
+    developer: steamInfo.developer,
+    releaseDate: steamInfo.releaseDate,
+    price: steamInfo.price,
+    tags: steamInfo.tags,
+    description: steamInfo.description,
+    systemRequirements: steamInfo.systemRequirements
+  }, null, 2)}`;
+
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.15,
+            response_mime_type: 'application/json'
+          }
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || data?.error) {
+        throw new Error(getGeminiErrorMessage(data, `Gemini trả về lỗi ${response.status}.`));
+      }
+
+      return extractJsonObject(getGeminiText(data));
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('Không thể dịch dữ liệu Steam bằng Gemini.');
+};
+
+const searchSteamThenTranslateGameInfo = async (apiKey, input) => {
+  const steamInfo = await getSteamGameInfoFromInput(input);
+  const tags = [...new Set([...(steamInfo.tags || []), 'PC'])];
+  let translated = {};
+
+  try {
+    translated = await translateSteamGameInfoWithGemini(apiKey, {
+      ...steamInfo,
+      tags
+    });
+  } catch (error) {
+    console.warn('Gemini Steam translation warning:', error.message);
+  }
+
+  const translatedTags = Array.isArray(translated.tags)
+    ? translated.tags.map(cleanText).filter(Boolean)
+    : tags;
+  const finalTags = [...new Set([...(translatedTags.length ? translatedTags : tags), 'PC'])];
+  const releaseDate = normalizeReleaseDate(steamInfo.releaseDate);
+  const fallbackDescription = buildVietnameseGameSummary({
+    gameName: steamInfo.title,
+    tags: finalTags,
+    text: steamInfo.description,
+    developer: steamInfo.developer,
+    releaseDate,
+    price: steamInfo.price || 0
+  });
+  const verifiedImages = await getVerifiedImageUrls([
+    steamInfo.image,
+    ...(steamInfo.screenshots || [])
+  ], 8);
+
+  return {
+    ...steamInfo,
+    image: verifiedImages[0] || steamInfo.image || '',
+    screenshots: verifiedImages.length ? verifiedImages : (steamInfo.screenshots || []),
+    description: cleanText(translated.description || fallbackDescription),
+    systemRequirements: cleanText(translated.systemRequirements || steamInfo.systemRequirements || getDefaultSystemRequirements(finalTags)),
+    releaseDate,
+    tags: finalTags,
+    rating: 5.0,
+    downloads: Math.floor(Math.random() * 500) + 15,
+    is18Plus: hasAdultSignal(input, {
+      ...steamInfo,
+      tags: finalTags,
+      description: translated.description || steamInfo.description
+    }),
+    sources: [steamInfo.source].filter(Boolean)
+  };
+};
+
 const hasAdultSignal = (gameName, info) => {
   const text = [
     gameName,
@@ -700,12 +705,10 @@ function Admin() {
     setIsSearching(true);
 
     try {
-      const webData = await verifyGeminiGameImages(
-        await searchGeminiGameInfo(geminiApiKey.trim(), gameName)
-      );
+      const webData = await searchSteamThenTranslateGameInfo(geminiApiKey.trim(), gameName);
 
       if (!webData.description && !webData.image && webData.tags.length <= 1) {
-        throw new Error('Gemini chưa trả đủ dữ liệu rõ ràng. Bạn thử tên game đầy đủ hơn hoặc nhập thủ công.');
+        throw new Error('Steam chưa trả đủ dữ liệu rõ ràng. Bạn thử dán link Steam hoặc appId của game.');
       }
 
       setNewGame(prev => ({
@@ -729,7 +732,7 @@ function Admin() {
         is18Pc: true,
         is18Android: webData.is18Plus
       }));
-      alert('Thành công! Gemini đã tìm thấy thông tin game.');
+      alert('Thành công! Đã lấy dữ liệu Steam và dịch bằng Gemini.');
     } catch (error) {
       alert('Lỗi Gemini: ' + error.message);
     } finally {
@@ -980,7 +983,7 @@ function Admin() {
             {editingGameId ? 'Chỉnh sửa Game' : 'Thêm Game Mới'}
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
-            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>Tìm thông tin game bằng Gemini</label>
+            <label style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 600 }}>Lấy dữ liệu Steam và dịch bằng Gemini</label>
             <input
               type="password"
               className="input-field"
@@ -990,12 +993,12 @@ function Admin() {
               style={{ fontSize: '0.85rem' }}
             />
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input type="text" className="input-field" placeholder="Nhập tên game cần tìm..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1 }} />
+              <input type="text" className="input-field" placeholder="Nhập tên game trên Steam, link Steam hoặc appId..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1 }} />
               <button type="button" onClick={handleSearchAI} className="btn" style={{ background: 'var(--color-accent)', color: 'white', padding: '0 1.5rem' }} disabled={isSearching}>
                 {isSearching ? 'Đang tìm...' : 'Gemini'}
               </button>
             </div>
-            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Key được lưu trong trình duyệt admin. Gemini sẽ tự chọn model khả dụng và trả dữ liệu JSON tiếng Việt.</span>
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Ưu tiên tuyệt đối nguồn Steam: ảnh, screenshot, mô tả và cấu hình lấy từ Steam; Gemini chỉ dịch/tóm tắt sang tiếng Việt.</span>
           </div>
 
           <form onSubmit={handleAddGame} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
