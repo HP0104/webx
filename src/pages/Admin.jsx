@@ -114,12 +114,27 @@ const hasGameNameMatch = (gameName, text) => {
   return tokens.every(token => haystack.includes(token));
 };
 
+const shouldUseCorsProxy = (url = '') => /store\.steampowered\.com\/api\//i.test(url);
+const getCorsProxyUrl = (url = '') => `https://corsproxy.io/?${encodeURIComponent(url)}`;
+
 const getJson = async (url) => {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Không đọc được nguồn (${response.status})`);
+  let directError = null;
+
+  try {
+    const response = await fetch(url);
+    if (response.ok) return response.json();
+    directError = new Error(`Không đọc được nguồn (${response.status})`);
+  } catch (error) {
+    directError = error;
   }
-  return response.json();
+
+  if (shouldUseCorsProxy(url)) {
+    const response = await fetch(getCorsProxyUrl(url));
+    if (response.ok) return response.json();
+    throw new Error(`Không đọc được nguồn Steam qua proxy (${response.status})`);
+  }
+
+  throw directError || new Error('Không đọc được nguồn.');
 };
 
 const getOptionalJson = async (url) => {
@@ -139,8 +154,26 @@ const getSteamPriceValue = (priceData) => {
 };
 
 const getSteamAppIdFromUrl = (url = '') => {
-  const match = String(url).match(/store\.steampowered\.com\/app\/(\d+)/i);
+  const match = String(url).match(/(?:store\.steampowered\.com|steamcommunity\.com)\/(?:agecheck\/)?app\/(\d+)/i) ||
+    String(url).match(/steam:\/\/(?:store|run)\/(\d{3,})/i) ||
+    String(url).match(/\bapp[/: ]+(\d{3,})\b/i) ||
+    String(url).match(/\bsteam(?:\s+)?id[/: ]+(\d{3,})\b/i);
   return match?.[1] || '';
+};
+
+const getSteamAppDetails = async (appId) => {
+  const urls = [
+    `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english&cc=us`,
+    `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english&cc=us&filters=basic,genres,categories,release_date,developers,price_overview,pc_requirements,screenshots`
+  ];
+
+  for (const url of urls) {
+    const data = await getOptionalJson(url);
+    const app = data?.[appId];
+    if (app?.success !== false && app?.data) return app.data;
+  }
+
+  return null;
 };
 
 const getSteamAssetUrls = (appId) => {
@@ -352,10 +385,7 @@ const getSteamInfo = async (gameName) => {
     source: `https://store.steampowered.com/app/${app.id}`
   };
 
-  const detailData = await getOptionalJson(
-    `https://store.steampowered.com/api/appdetails?appids=${app.id}&l=english&cc=us`
-  );
-  const details = detailData?.[app.id]?.data;
+  const details = await getSteamAppDetails(app.id);
   if (!details) return searchFallback;
   if (!hasGameNameMatch(gameName, `${details?.name || ''} ${app.name || ''}`)) return searchFallback;
 
@@ -391,10 +421,7 @@ const getSteamInfoByAppId = async (appId, gameName) => {
   if (!appId) return null;
 
   const steamAssets = getSteamAssetUrls(appId);
-  const detailData = await getOptionalJson(
-    `https://store.steampowered.com/api/appdetails?appids=${appId}&l=english&cc=us`
-  );
-  const details = detailData?.[appId]?.data;
+  const details = await getSteamAppDetails(appId);
   const shouldCheckName = gameName && !getSteamAppIdFromUrl(gameName) && !/^\d+$/.test(gameName.trim());
   if (!details || (shouldCheckName && !hasGameNameMatch(gameName, details.name || ''))) return null;
 

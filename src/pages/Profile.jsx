@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { User, Wallet, Gamepad2, Download, Save, Mail, Lock, ShieldCheck } from 'lucide-react';
+import { User, Wallet, Gamepad2, Download, Save, Mail, Lock, ShieldCheck, ShoppingCart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { updatePassword, updateEmail } from 'firebase/auth';
 import { auth } from '../firebase';
+import { getGamePath } from '../utils/gameRoutes';
+import { formatOwnershipDate, getGameOwnership } from '../utils/ownership';
 
 function Profile() {
   const { user, balance, ownedGames, games, updateUserInfo } = useAppContext();
@@ -17,9 +19,13 @@ function Profile() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   
-  const myGames = games.filter(game =>
-    ownedGames.some(ownedId => ownedId.toString() === game.id.toString())
-  );
+  const myGames = games
+    .map(game => ({
+      game,
+      ownership: getGameOwnership(ownedGames, game.id)
+    }))
+    .filter(item => item.ownership.record);
+  const activeGamesCount = myGames.filter(item => item.ownership.isActive).length;
 
   const handleAvatarChange = (e) => {
     const file = e.target.files[0];
@@ -137,7 +143,7 @@ function Profile() {
           {!isEditing ? (
             <>
               <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-light)', marginBottom: '2rem' }}>
-                <Gamepad2 /> Thư viện Game ({myGames.length})
+                <Gamepad2 /> Thư viện Game ({activeGamesCount})
               </h2>
 
               {myGames.length === 0 ? (
@@ -150,25 +156,45 @@ function Profile() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {myGames.map(game => (
+                  {myGames.map(({ game, ownership }) => {
+                    const expiresAtText = formatOwnershipDate(ownership.record?.expiresAt);
+                    const isActive = ownership.isActive;
+
+                    return (
                     <div key={game.id} style={{ display: 'flex', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
                       <img src={game.image} alt={game.title} style={{ width: '140px', height: '90px', objectFit: 'cover' }} />
                       <div style={{ padding: '1rem', flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <h3 style={{ color: 'var(--color-text-light)', fontSize: '1rem', marginBottom: '0.3rem' }}>{game.title}</h3>
-                          <span style={{ color: 'var(--color-success)', fontSize: '0.75rem', fontWeight: '600' }}>SẴN SÀNG</span>
+                          <span style={{ color: isActive ? 'var(--color-success)' : '#ff7875', fontSize: '0.75rem', fontWeight: '600' }}>
+                            {isActive ? 'SẴN SÀNG' : 'HẾT HẠN'}
+                          </span>
+                          {expiresAtText && (
+                            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginTop: '0.35rem' }}>
+                              {isActive ? 'Hạn sở hữu đến' : 'Đã hết hạn'}: {expiresAtText}
+                            </div>
+                          )}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.45rem' }}>
-                          <a href={game.downloadUrl || '#'} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
-                            <Download size={16} /> Tải game
-                          </a>
-                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', textAlign: 'right' }}>
-                            Mật khẩu giải nén: <strong style={{ color: 'var(--color-text-light)' }}>web18p.xyz</strong>
-                          </span>
+                          {isActive ? (
+                            <>
+                              <a href={game.downloadUrl || '#'} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                                <Download size={16} /> Tải game
+                              </a>
+                              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', textAlign: 'right' }}>
+                                Mật khẩu giải nén: <strong style={{ color: 'var(--color-text-light)' }}>web18p.xyz</strong>
+                              </span>
+                            </>
+                          ) : (
+                            <Link to={getGamePath(game)} className="btn btn-success" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                              <ShoppingCart size={16} /> Mua lại
+                            </Link>
+                          )}
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>

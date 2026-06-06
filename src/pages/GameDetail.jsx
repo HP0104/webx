@@ -5,6 +5,7 @@ import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { doc, updateDoc, increment } from 'firebase/firestore';
 import { findGameByRouteParam, getGamePath } from '../utils/gameRoutes';
+import { formatOwnershipDate, getGameOwnership } from '../utils/ownership';
 
 function GameDetail() {
   const { gameSlug } = useParams();
@@ -38,14 +39,18 @@ function GameDetail() {
     return <div style={{ color: 'white', textAlign: 'center', marginTop: '4rem' }}>Không tìm thấy game!</div>;
   }
 
-  const isOwned = ownedGames.some(ownedId => ownedId.toString() === game.id.toString());
+  const ownership = getGameOwnership(ownedGames, game.id);
+  const isOwned = ownership.isActive;
+  const expiresAtText = formatOwnershipDate(ownership.record?.expiresAt);
 
   const handleBuy = async () => {
     if (!user) return alert('Vui lòng đăng nhập để mua game!');
     const result = await buyGame(game);
 
-    if (result?.ok) {
-      alert('Mua game thành công! Game đã được thêm vào thư viện của bạn.');
+    if (result?.ok && result?.reason === 'already_owned') {
+      alert('Bạn vẫn còn quyền sở hữu game này.');
+    } else if (result?.ok) {
+      alert(`Mua game thành công! Bạn có thể tải game trong 2 tháng${result.ownership?.expiresAt ? `, đến ngày ${formatOwnershipDate(result.ownership.expiresAt)}` : ''}.`);
     } else if (result?.reason === 'save_failed') {
       alert('Mua game thất bại do không lưu được vào tài khoản. Vui lòng thử lại.');
     } else {
@@ -235,18 +240,30 @@ function GameDetail() {
                 <a href={game.downloadUrl || '#'} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ display: 'flex', width: '100%', justifyContent: 'center', padding: '1rem', borderRadius: '8px' }}>
                   <Download size={20} /> Tải xuống ngay
                 </a>
+                {expiresAtText && (
+                  <div style={{ marginTop: '0.75rem', color: 'var(--color-success)', fontSize: '0.85rem', textAlign: 'center', lineHeight: 1.5, fontWeight: 600 }}>
+                    Hạn sở hữu đến: {expiresAtText}
+                  </div>
+                )}
                 <div style={{ marginTop: '0.85rem', color: 'var(--color-text-light)', fontSize: '0.9rem', textAlign: 'center', lineHeight: 1.5 }}>
                   Mật khẩu giải nén là: <strong>web18p.xyz</strong>
                 </div>
               </>
             ) : (
-              <button onClick={handleBuy} className="btn btn-success" style={{ width: '100%', justifyContent: 'center', padding: '1rem', borderRadius: '8px' }}>
-                <ShoppingCart size={20} /> Mua ngay
-              </button>
+              <>
+                {ownership.isExpired && expiresAtText && (
+                  <div style={{ marginBottom: '1rem', padding: '0.85rem', borderRadius: '8px', border: '1px solid rgba(255, 77, 79, 0.35)', color: '#ff7875', backgroundColor: 'rgba(255, 77, 79, 0.08)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                    Quyền sở hữu đã hết hạn ngày {expiresAtText}. Vui lòng mua lại để tải game.
+                  </div>
+                )}
+                <button onClick={handleBuy} className="btn btn-success" style={{ width: '100%', justifyContent: 'center', padding: '1rem', borderRadius: '8px' }}>
+                  <ShoppingCart size={20} /> {ownership.isExpired ? 'Mua lại ngay' : 'Mua ngay'}
+                </button>
+              </>
             )}
 
             <div style={{ marginTop: '1.5rem', fontSize: '0.8rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>
-              🛡️ Thanh toán bảo mật qua Ví điện tử
+              Thanh toán bảo mật qua Ví điện tử
             </div>
           </div>
         </div>

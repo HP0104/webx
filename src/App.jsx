@@ -19,6 +19,7 @@ import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { findGameByRouteParam, getGamePath } from './utils/gameRoutes';
+import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './utils/ownership';
 
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
@@ -96,7 +97,7 @@ function PageTitle({ games }) {
     setMeta('meta[name="twitter:title"]', 'content', `${pageTitle} | WEB18P`);
     setMeta('meta[name="twitter:description"]', 'content', description);
     setMeta('link[rel="canonical"]', 'href', canonicalUrl);
-  }, [games, location.pathname, location.search]);
+  }, [games, location]);
 
   return null;
 }
@@ -108,8 +109,8 @@ function App() {
   
   // App state
   const [games, setGames] = useState(INITIAL_GAMES);
-  const [users, setUsers] = useState(MOCK_USERS);
-  const [revenue, setRevenue] = useState(0);
+  const [users] = useState(MOCK_USERS);
+  const [revenue] = useState(0);
 
   // Sync games from Firestore in Real-time & Clean up test games
   React.useEffect(() => {
@@ -195,8 +196,19 @@ function App() {
           role: userData.role,
           photoURL: userData.photoURL 
         });
+        const normalizedOwnedGames = normalizeOwnedGames(userData.ownedGames || []);
         setBalance(userData.balance || 0);
-        setOwnedGames(userData.ownedGames || []);
+        setOwnedGames(normalizedOwnedGames);
+
+        if (JSON.stringify(normalizedOwnedGames) !== JSON.stringify(userData.ownedGames || [])) {
+          try {
+            await setDoc(doc(db, 'users', firebaseUser.uid), {
+              ownedGames: normalizedOwnedGames
+            }, { merge: true });
+          } catch (fsError) {
+            console.warn("Firestore ownership migration warn:", fsError.message);
+          }
+        }
       } else {
         setUser(null);
         setBalance(0);
@@ -217,14 +229,18 @@ function App() {
     if (!user) return { ok: false, reason: 'not_logged_in' };
 
     const gameId = game.id.toString();
-    const alreadyOwned = ownedGames.some(ownedId => ownedId.toString() === gameId);
-    if (alreadyOwned) return { ok: true, reason: 'already_owned' };
+    const currentOwnership = getGameOwnership(ownedGames, gameId);
+    if (currentOwnership.isActive) return { ok: true, reason: 'already_owned' };
 
     const gamePrice = Number(game.price) || 0;
     if (balance < gamePrice) return { ok: false, reason: 'insufficient_balance' };
 
     const nextBalance = balance - gamePrice;
-    const nextOwnedGames = [...new Set([...ownedGames.map(id => id.toString()), gameId])];
+    const ownershipRecord = createOwnershipRecord(gameId);
+    const nextOwnedGames = [
+      ...normalizeOwnedGames(ownedGames).filter(ownership => ownership.id !== gameId),
+      ownershipRecord
+    ];
 
     // Cập nhật giao diện trước để cảm giác mua game mượt hơn.
     setBalance(nextBalance);
@@ -235,7 +251,7 @@ function App() {
         balance: nextBalance,
         ownedGames: nextOwnedGames
       }, { merge: true });
-      return { ok: true };
+      return { ok: true, ownership: ownershipRecord };
     } catch (error) {
       console.warn("Firestore error buying game, reverting local state:", error.message);
       setBalance(balance);
@@ -252,7 +268,7 @@ function App() {
       
       // Cập nhật state cục bộ
       if (newData.balance !== undefined) setBalance(newData.balance);
-      if (newData.ownedGames !== undefined) setOwnedGames(newData.ownedGames);
+      if (newData.ownedGames !== undefined) setOwnedGames(normalizeOwnedGames(newData.ownedGames));
       
       setUser(prev => ({ ...prev, ...newData }));
       return true;
