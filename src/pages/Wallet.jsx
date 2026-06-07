@@ -4,6 +4,24 @@ import { useAppContext } from '../App';
 import { walletService } from '../services/walletService';
 import { PAYMENT_CONFIG } from '../config/payment';
 
+// Multi-proxy fallback for CORS-restricted APIs
+const fetchWithCorsProxy = async (url, options = {}) => {
+  const proxies = [
+    (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+  ];
+  for (const proxyFn of proxies) {
+    try {
+      const response = await fetch(proxyFn(url), options);
+      if (response.ok) return response;
+    } catch {
+      continue;
+    }
+  }
+  throw new Error('Tất cả proxy đều thất bại. Vui lòng thử lại sau.');
+};
+
 function Wallet() {
   const { balance, updateUserInfo, user } = useAppContext();
   const [amount, setAmount] = useState('50000');
@@ -50,7 +68,7 @@ function Wallet() {
 
         try {
           // Gọi API kiểm tra lịch sử 20 giao dịch gần nhất qua CORS proxy đa năng (chạy được cả ở Local & Production)
-          const response = await fetch('https://corsproxy.io/?https://my.sepay.vn/userapi/transactions/list?limit=20', {
+          const response = await fetchWithCorsProxy('https://my.sepay.vn/userapi/transactions/list?limit=20', {
             headers: {
               'Authorization': `Bearer ${apiToken}`,
               'Content-Type': 'application/json'
@@ -126,7 +144,7 @@ function Wallet() {
 
     try {
       // Gọi API kiểm tra lịch sử 20 giao dịch gần nhất qua CORS proxy đa năng (chạy được cả ở Local & Production)
-      const response = await fetch('https://corsproxy.io/?https://my.sepay.vn/userapi/transactions/list?limit=20', {
+      const response = await fetchWithCorsProxy('https://my.sepay.vn/userapi/transactions/list?limit=20', {
         headers: {
           'Authorization': `Bearer ${apiToken}`,
           'Content-Type': 'application/json'

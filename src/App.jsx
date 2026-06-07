@@ -13,6 +13,7 @@ import Admin from './pages/Admin';
 import Category from './pages/Category';
 import Blog from './pages/Blog';
 import Report from './pages/Report';
+import GameSearch from './pages/GameSearch';
 import { INITIAL_GAMES } from './data/games';
 import { MOCK_USERS } from './data/users';
 import { auth, db } from './firebase';
@@ -81,6 +82,9 @@ function PageTitle({ games }) {
       pageTitle = 'Hồ Sơ';
     } else if (pathname === '/admin') {
       pageTitle = 'Quản Trị';
+    } else if (pathname === '/ai-search') {
+      pageTitle = 'Tìm Kiếm Game Bằng AI';
+      description = 'Tìm kiếm game từ cơ sở dữ liệu RAWG và tự động viết bài đánh giá bằng AI trên WEB18P.';
     }
 
     document.title = `${pageTitle} | WEB18P`;
@@ -361,6 +365,7 @@ function App() {
                 <Route path="/admin" element={user?.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
                 <Route path="/blog" element={<Blog />} />
                 <Route path="/report" element={<Report />} />
+                <Route path="/ai-search" element={<GameSearch />} />
               </Routes>
             </main>
 

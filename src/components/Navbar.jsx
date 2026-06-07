@@ -75,6 +75,7 @@ function Navbar() {
       ]
     },
     { name: 'Blog', path: '/blog' },
+    { name: '🤖 AI Search', path: '/ai-search' },
     { name: 'Báo Lỗi', path: '/report' }
   ];
 
