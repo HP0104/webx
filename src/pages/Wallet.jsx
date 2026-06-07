@@ -95,21 +95,25 @@ function Wallet() {
     setShowQR(true);
   };
 
+  // Kiểm tra SePay token có hợp lệ không
+  const isSePayTokenValid = (() => {
+    const token = PAYMENT_CONFIG.sepay.apiToken;
+    return token && token.length > 10 && !token.includes('nhap_api_token');
+  })();
+
   // 2. Tích hợp bộ API Polling tự động quét giao dịch SePay thời gian thực (Real-time)
+  // Chỉ chạy khi chọn cổng SePay VÀ token đã cấu hình đúng
   useEffect(() => {
     let intervalId;
     let initialTimeout;
 
-    if (showQR && txCode && amount) {
+    // Chỉ polling khi: hiện QR + chọn SePay + token hợp lệ
+    if (showQR && txCode && amount && selectedGateway === 'sepay' && isSePayTokenValid) {
       const checkPayment = async () => {
         const apiToken = PAYMENT_CONFIG.sepay.apiToken;
-        // Kiểm tra xem người dùng đã cấu hình Token thật hay chưa
-        if (!apiToken || apiToken.includes('nhap_api_token_sepay')) {
-          return; // Nếu chưa cấu hình thì dùng chế độ giả lập local
-        }
 
         try {
-          // Gọi API kiểm tra lịch sử 20 giao dịch gần nhất qua CORS proxy đa năng (chạy được cả ở Local & Production)
+          // Gọi API kiểm tra lịch sử 20 giao dịch gần nhất qua CORS proxy đa năng
           const response = await fetchWithCorsProxy('https://my.sepay.vn/userapi/transactions/list?limit=20', {
             headers: {
               'Authorization': `Bearer ${apiToken}`,
@@ -122,7 +126,7 @@ function Wallet() {
             // Tìm giao dịch khớp số tiền nạp và nội dung chuyển khoản động
             const matchedTx = data.transactions.find(tx => {
               const matchesAmount = Number(tx.amount_in) === Number(amount);
-              const matchesContent = tx.transaction_content.includes(txCode) || tx.body.includes(txCode);
+              const matchesContent = (tx.transaction_content || '').includes(txCode) || (tx.body || '').includes(txCode);
               return matchesAmount && matchesContent;
             });
 
@@ -162,7 +166,7 @@ function Wallet() {
         }
       };
 
-      // Chạy check lần đầu sau 3 giây, sau đó lặp lại mỗi 10 giây (giảm spam lỗi CORS)
+      // Chạy check lần đầu sau 3 giây, sau đó lặp lại mỗi 10 giây
       initialTimeout = setTimeout(checkPayment, 3000);
       intervalId = setInterval(checkPayment, 10000);
     }
@@ -171,22 +175,30 @@ function Wallet() {
       if (initialTimeout) clearTimeout(initialTimeout);
       if (intervalId) clearInterval(intervalId);
     };
-  }, [showQR, txCode, amount, selectedGateway, balance, user, updateUserInfo]);
+  }, [showQR, txCode, amount, selectedGateway, isSePayTokenValid, balance, user, updateUserInfo]);
 
   // 2.5 Kiểm tra giao dịch thủ công khi người dùng bấm nút "Tôi đã chuyển khoản"
   const handleManualCheckPayment = async () => {
     if (!txCode || !amount || !user) return;
     setIsProcessing(true);
 
+    // Nếu chọn cổng PayOS → không có API kiểm tra từ frontend
+    if (selectedGateway === 'payos') {
+      alert(`Bạn đang dùng cổng PayOS. Hệ thống sẽ tự động cộng tiền khi nhận được webhook từ PayOS.\n\nNếu sau 2-3 phút tiền chưa vào, vui lòng chuyển sang cổng SePay hoặc liên hệ Admin qua mục Báo Lỗi.`);
+      setIsProcessing(false);
+      return;
+    }
+
+    // Cổng SePay — kiểm tra qua API
     const apiToken = PAYMENT_CONFIG.sepay.apiToken;
-    if (!apiToken || apiToken.includes('nhap_api_token_sepay')) {
+    if (!isSePayTokenValid) {
       alert("Hệ thống đang chạy chế độ thử nghiệm Admin. Vui lòng bấm nút 'Giả lập nạp tiền (Chỉ Admin thấy)' ở dưới!");
       setIsProcessing(false);
       return;
     }
 
     try {
-      // Gọi API kiểm tra lịch sử 20 giao dịch gần nhất qua CORS proxy đa năng (chạy được cả ở Local & Production)
+      // Gọi API kiểm tra lịch sử 20 giao dịch gần nhất qua CORS proxy
       const response = await fetchWithCorsProxy('https://my.sepay.vn/userapi/transactions/list?limit=20', {
         headers: {
           'Authorization': `Bearer ${apiToken}`,
@@ -199,7 +211,7 @@ function Wallet() {
         // Tìm giao dịch khớp số tiền nạp và nội dung chuyển khoản động
         const matchedTx = data.transactions.find(tx => {
           const matchesAmount = Number(tx.amount_in) === Number(amount);
-          const matchesContent = tx.transaction_content.includes(txCode) || tx.body.includes(txCode);
+          const matchesContent = (tx.transaction_content || '').includes(txCode) || (tx.body || '').includes(txCode);
           return matchesAmount && matchesContent;
         });
 
@@ -278,8 +290,8 @@ function Wallet() {
     }
   };
 
-  // Kiểm tra xem SePay đã cấu hình token thực chưa
-  const isSePayConfigured = PAYMENT_CONFIG.sepay.apiToken && !PAYMENT_CONFIG.sepay.apiToken.includes('nhap_api_token');
+  // Sử dụng isSePayTokenValid đã khai báo ở trên
+  const isSePayConfigured = isSePayTokenValid;
 
   return (
     <div style={{ maxWidth: '850px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', paddingBottom: '3rem' }}>
