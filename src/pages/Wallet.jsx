@@ -16,9 +16,11 @@ const fetchWithCorsProxy = async (url, options = {}) => {
     // Direct fetch failed, try proxies
   }
 
-  // 2. Dùng các CORS proxy
+  // 2. Dùng các CORS proxy hỗ trợ truyền headers
   const proxies = [
-    { getUrl: (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`, forwardHeaders: true },
+    { getUrl: (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`, forwardHeaders: true },
+    { getUrl: (u) => `https://proxy.corsfix.com/?${u}`, forwardHeaders: true },
+    { getUrl: (u) => `https://api.cors.lol/?url=${encodeURIComponent(u)}`, forwardHeaders: true },
     { getUrl: (u) => `https://thingproxy.freeboard.io/fetch/${u}`, forwardHeaders: true },
     { getUrl: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, forwardHeaders: false },
     { getUrl: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`, forwardHeaders: false }
@@ -69,6 +71,7 @@ function Wallet() {
   const [txCode, setTxCode] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [qrUrl, setQrUrl] = useState('');
+  const [payosCheckoutUrl, setPayosCheckoutUrl] = useState('');
   const [payosOrderCode, setPayosOrderCode] = useState(null); // Lưu orderCode PayOS để kiểm tra sau
 
   // Kiểm tra token hợp lệ
@@ -89,10 +92,12 @@ function Wallet() {
     const code = `WEBX${Math.floor(100000 + Math.random() * 900000)}`;
     setTxCode(code);
     setPayosOrderCode(null);
+    setPayosCheckoutUrl('');
 
     if (selectedGateway === 'sepay') {
-      const { bankId, accountNumber, accountName } = PAYMENT_CONFIG.sepay;
-      const generatedQrUrl = `https://img.vietqr.io/image/${bankId}-${accountNumber}-compact2.png?amount=${amount}&addInfo=${code}&accountName=${encodeURIComponent(accountName)}`;
+      const { bankId, accountNumber } = PAYMENT_CONFIG.sepay;
+      const bankName = bankId === 'MB' ? 'MBBank' : bankId;
+      const generatedQrUrl = `https://qr.sepay.vn/img?bank=${bankName}&acc=${accountNumber}&template=compact&amount=${amount}&des=${code}`;
       setQrUrl(generatedQrUrl);
       setShowQR(true);
     } else {
@@ -125,8 +130,13 @@ function Wallet() {
           const result = await response.json();
 
           if (result.code === '00' && result.data) {
-            // Dùng QR từ PayOS nếu có, fallback sang VietQR
-            setQrUrl(result.data.qrCode || `https://img.vietqr.io/image/${PAYMENT_CONFIG.payos.bankId}-${PAYMENT_CONFIG.payos.accountNumber}-compact2.png?amount=${amount}&addInfo=${code}&accountName=${encodeURIComponent(PAYMENT_CONFIG.payos.accountName)}`);
+            // Chuyển đổi mã QR raw dạng text của PayOS thành ảnh QR qua qrserver.com
+            const qrCodeUrl = result.data.qrCode 
+              ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(result.data.qrCode)}`
+              : `https://qr.sepay.vn/img?bank=${PAYMENT_CONFIG.payos.bankId === 'MB' ? 'MBBank' : PAYMENT_CONFIG.payos.bankId}&acc=${PAYMENT_CONFIG.payos.accountNumber}&template=compact&amount=${amount}&des=${code}`;
+            
+            setQrUrl(qrCodeUrl);
+            setPayosCheckoutUrl(result.data.checkoutUrl || '');
             setPayosOrderCode(orderCode);
             setShowQR(true);
             return;
@@ -136,9 +146,10 @@ function Wallet() {
         }
       }
 
-      // Fallback: dùng VietQR nếu PayOS API fail
-      const { bankId, accountNumber, accountName } = PAYMENT_CONFIG.payos;
-      const generatedQrUrl = `https://img.vietqr.io/image/${bankId}-${accountNumber}-compact2.png?amount=${amount}&addInfo=${code}&accountName=${encodeURIComponent(accountName)}`;
+      // Fallback: dùng SePay QR cho tài khoản PayOS nếu PayOS API fail
+      const { bankId, accountNumber } = PAYMENT_CONFIG.payos;
+      const bankName = bankId === 'MB' ? 'MBBank' : bankId;
+      const generatedQrUrl = `https://qr.sepay.vn/img?bank=${bankName}&acc=${accountNumber}&template=compact&amount=${amount}&des=${code}`;
       setQrUrl(generatedQrUrl);
       setShowQR(true);
     }
@@ -403,6 +414,28 @@ function Wallet() {
                 style={{ width: '220px', height: '220px', objectFit: 'contain' }}
               />
             </div>
+
+            {selectedGateway === 'payos' && payosCheckoutUrl && (
+              <a 
+                href={payosCheckoutUrl} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="btn btn-outline"
+                style={{ 
+                  width: '100%', 
+                  justifyContent: 'center', 
+                  fontSize: '0.9rem', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.4rem',
+                  borderColor: 'var(--color-accent)',
+                  color: 'var(--color-accent)',
+                  boxShadow: '0 0 10px rgba(102, 192, 244, 0.1)'
+                }}
+              >
+                🚀 Mở trang thanh toán PayOS
+              </a>
+            )}
             
             {/* Box thông tin chuyển khoản bắt buộc */}
             <div style={{ backgroundColor: 'var(--color-bg-main)', width: '100%', padding: '1rem', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
@@ -450,24 +483,25 @@ function Wallet() {
             {/* HƯỚNG DẪN THANH TOÁN CHI TIẾT */}
             <div style={{ 
               width: '100%', 
-              backgroundColor: 'rgba(46, 204, 113, 0.04)', 
-              border: '1px solid rgba(46, 204, 113, 0.15)', 
+              backgroundColor: 'rgba(82, 196, 26, 0.03)', 
+              border: '1px dashed rgba(82, 196, 26, 0.2)', 
               borderRadius: '8px', 
-              padding: '0.9rem 1rem', 
-              textAlign: 'left' 
+              padding: '1rem', 
+              textAlign: 'left',
+              boxShadow: 'inset 0 0 15px rgba(82, 196, 26, 0.02)'
             }}>
-              <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.82rem', color: 'var(--color-success)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <p style={{ margin: '0 0 0.6rem 0', fontSize: '0.85rem', color: 'var(--color-success)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <Info size={14} /> Hướng dẫn thanh toán:
               </p>
-              <ol style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.78rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.4rem', lineHeight: '1.5' }}>
+              <ol style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.8rem', color: 'var(--color-text-muted)', display: 'flex', flexDirection: 'column', gap: '0.5rem', lineHeight: '1.5' }}>
                 <li>Mở ứng dụng <strong>Ngân hàng</strong> hoặc <strong>Ví điện tử</strong> trên điện thoại.</li>
                 <li>Chọn <strong>Quét mã QR</strong> và quét mã ở trên (số tiền và nội dung sẽ được tự động điền).</li>
-                <li>Kiểm tra nội dung chuyển khoản phải là <strong style={{ color: 'var(--color-accent)' }}>{txCode}</strong> — <span style={{ color: '#e74c3c' }}>không được sửa đổi!</span></li>
+                <li>Kiểm tra nội dung chuyển khoản phải là <strong style={{ color: 'var(--color-accent)' }}>{txCode}</strong> — <span style={{ color: '#ff4d4f' }}>không được tự ý sửa đổi!</span></li>
                 <li>Xác nhận chuyển khoản trên app Ngân hàng và <strong>đợi giao dịch thành công</strong>.</li>
-                <li>Quay lại đây và bấm nút <strong style={{ color: '#2ecc71' }}>"Tôi đã chuyển khoản"</strong> để hệ thống kiểm tra và cộng tiền.</li>
+                <li>Quay lại đây và bấm nút <strong style={{ color: 'var(--color-success)' }}>"Tôi đã chuyển khoản"</strong> để hệ thống kiểm tra và tự động cộng tiền.</li>
               </ol>
-              <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.73rem', color: 'var(--color-text-muted)', fontStyle: 'italic', lineHeight: '1.4' }}>
-                ⏱️ Sau khi chuyển khoản, vui lòng đợi <strong>10-30 giây</strong> để ngân hàng xử lý trước khi bấm kiểm tra. Mỗi lần bấm sẽ gọi kiểm tra 1 lần qua cổng <strong>{selectedGateway === 'sepay' ? 'SePay' : 'PayOS'}</strong>.
+              <p style={{ margin: '0.6rem 0 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic', lineHeight: '1.4' }}>
+                ⏱️ Sau khi chuyển khoản, vui lòng đợi <strong>10-30 giây</strong> để ngân hàng xử lý trước khi bấm kiểm tra. Mỗi lần bấm nút sẽ gọi kiểm tra 1 lần trực tiếp qua cổng <strong>{selectedGateway === 'sepay' ? 'SePay' : 'PayOS'}</strong>.
               </p>
             </div>
 
