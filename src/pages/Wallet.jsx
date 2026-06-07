@@ -5,21 +5,62 @@ import { walletService } from '../services/walletService';
 import { PAYMENT_CONFIG } from '../config/payment';
 
 // Multi-proxy fallback for CORS-restricted APIs
+// Lưu ý: Hầu hết CORS proxy KHÔNG forward custom headers (Authorization).
+// Với SePay API, cần dùng proxy hỗ trợ headers hoặc thêm header vào URL.
 const fetchWithCorsProxy = async (url, options = {}) => {
+  const { headers = {}, ...restOptions } = options;
+
+  // 1. Thử gọi trực tiếp trước (có thể hoạt động nếu server cho phép CORS)
+  try {
+    const directResponse = await fetch(url, { ...options, signal: AbortSignal.timeout(8000) });
+    if (directResponse.ok) return directResponse;
+  } catch {
+    // Direct fetch failed, try proxies
+  }
+
+  // 2. Dùng các CORS proxy — chỉ gửi headers nếu proxy hỗ trợ
   const proxies = [
-    (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+    {
+      // corsproxy.io hỗ trợ forward headers tốt nhất
+      getUrl: (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+      forwardHeaders: true
+    },
+    {
+      // thingproxy hỗ trợ forward headers
+      getUrl: (u) => `https://thingproxy.freeboard.io/fetch/${u}`,
+      forwardHeaders: true
+    },
+    {
+      // allorigins — KHÔNG forward headers, chỉ dùng cho URL không cần auth
+      getUrl: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      forwardHeaders: false
+    },
+    {
+      // codetabs — KHÔNG forward headers
+      getUrl: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+      forwardHeaders: false
+    }
   ];
-  for (const proxyFn of proxies) {
+
+  const hasAuthHeader = !!headers['Authorization'];
+
+  for (const proxy of proxies) {
+    // Nếu request cần Authorization mà proxy không hỗ trợ forward headers → bỏ qua
+    if (hasAuthHeader && !proxy.forwardHeaders) continue;
+
     try {
-      const response = await fetch(proxyFn(url), options);
+      const fetchOptions = {
+        ...restOptions,
+        signal: AbortSignal.timeout(10000),
+        headers: proxy.forwardHeaders ? headers : {}
+      };
+      const response = await fetch(proxy.getUrl(url), fetchOptions);
       if (response.ok) return response;
     } catch {
       continue;
     }
   }
-  throw new Error('Tất cả proxy đều thất bại. Vui lòng thử lại sau.');
+  throw new Error('Tất cả proxy đều thất bại. Vui lòng thử lại sau. Hãy kiểm tra kết nối mạng hoặc liên hệ Admin.');
 };
 
 function Wallet() {
@@ -57,6 +98,7 @@ function Wallet() {
   // 2. Tích hợp bộ API Polling tự động quét giao dịch SePay thời gian thực (Real-time)
   useEffect(() => {
     let intervalId;
+    let initialTimeout;
 
     if (showQR && txCode && amount) {
       const checkPayment = async () => {
@@ -120,12 +162,13 @@ function Wallet() {
         }
       };
 
-      // Chạy check ngay lập tức và lập lại mỗi 4 giây
-      checkPayment();
-      intervalId = setInterval(checkPayment, 4000);
+      // Chạy check lần đầu sau 3 giây, sau đó lặp lại mỗi 10 giây (giảm spam lỗi CORS)
+      initialTimeout = setTimeout(checkPayment, 3000);
+      intervalId = setInterval(checkPayment, 10000);
     }
 
     return () => {
+      if (initialTimeout) clearTimeout(initialTimeout);
       if (intervalId) clearInterval(intervalId);
     };
   }, [showQR, txCode, amount, selectedGateway, balance, user, updateUserInfo]);

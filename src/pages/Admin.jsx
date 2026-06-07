@@ -118,8 +118,9 @@ const hasGameNameMatch = (gameName, text) => {
 const shouldUseCorsProxy = (url = '') => /store\.steampowered\.com\/api\//i.test(url);
 
 const CORS_PROXIES = [
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
+  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
 ];
 
@@ -127,7 +128,7 @@ const getJson = async (url) => {
   let directError = null;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (response.ok) return response.json();
     directError = new Error(`Không đọc được nguồn (${response.status})`);
   } catch (error) {
@@ -137,7 +138,7 @@ const getJson = async (url) => {
   if (shouldUseCorsProxy(url)) {
     for (const proxyFn of CORS_PROXIES) {
       try {
-        const response = await fetch(proxyFn(url));
+        const response = await fetch(proxyFn(url), { signal: AbortSignal.timeout(10000) });
         if (response.ok) return response.json();
       } catch {
         continue;
