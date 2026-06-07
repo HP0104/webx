@@ -575,54 +575,202 @@ ${JSON.stringify({
   throw lastError || new Error('Không thể dịch dữ liệu Steam bằng Gemini.');
 };
 
+const generateCommunityGameInfoWithGemini = async (apiKey, gameName, existingInfo) => {
+  const models = await getAvailableGeminiModels(apiKey);
+  if (!models.length) {
+    throw new Error('API key này không có model Gemini nào hỗ trợ generateContent.');
+  }
+
+  const prompt = `Bạn là một chuyên gia về cơ sở dữ liệu game, đặc biệt là game indie, game trên itch.io, F95Zone, Patreon và các cộng đồng game lớn khác.
+Hãy tìm kiếm trong tri thức của bạn hoặc thực hiện tìm kiếm thông tin về game có tên "${gameName}".
+Nếu đây là game 18+ (Adult game, Visual Novel, RPG Maker,...), hãy tìm thông tin tương ứng trên F95Zone, itch.io, Patreon hoặc các trang lớn.
+
+Hãy dịch tất cả thông tin mô tả và yêu cầu hệ thống sang tiếng Việt và trả về định dạng JSON hợp lệ có cấu trúc chính xác như sau:
+{
+  "title": "Tên chuẩn của game",
+  "developer": "Tên nhà phát triển game",
+  "releaseDate": "Ngày phát hành của game (Định dạng YYYY-MM-DD)",
+  "price": 0, // Giá game bằng USD (nếu là game miễn phí/Patreon/F95 thì để 0)
+  "description": "Mô tả chi tiết bằng tiếng Việt (3-5 câu), tóm tắt cốt truyện và lối chơi hấp dẫn.",
+  "systemRequirements": "Cấu hình PC tối thiểu và đề nghị bằng tiếng Việt (đầy đủ CPU, GPU, RAM, ổ cứng trống)",
+  "tags": ["PC", "18+", "Visual Novel", "RPG"], // Mảng các thể loại/nhãn tiếng Việt hoặc tiếng Anh phổ biến
+  "image": "Đề xuất link ảnh bìa/header của game này (link ảnh online thực tế từ F95Zone/itch.io/RAWG/Patreon nếu biết, nếu không hãy để trống)",
+  "screenshots": [] // Mảng các link ảnh chụp màn hình thực tế (nếu biết, nếu không hãy để mảng rỗng)
+}
+
+Thông tin bổ sung có sẵn (nếu có):
+${JSON.stringify({
+    title: existingInfo.title,
+    releaseDate: existingInfo.releaseDate,
+    image: existingInfo.image,
+    screenshots: existingInfo.screenshots,
+    tags: existingInfo.tags
+  }, null, 2)}
+`;
+
+  let lastError = null;
+  for (const model of models) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            response_mime_type: 'application/json'
+          }
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.error) {
+        throw new Error(getGeminiErrorMessage(data, `Gemini trả về lỗi ${response.status}.`));
+      }
+      return extractJsonObject(getGeminiText(data));
+    } catch (error) {
+      console.warn(`Fallback generation failed with model ${model}:`, error.message);
+      lastError = error;
+    }
+  }
+  throw lastError || new Error('Không thể sinh thông tin game từ nguồn cộng đồng bằng Gemini.');
+};
+
 const searchSteamThenTranslateGameInfo = async (apiKey, input) => {
-  const steamInfo = await getSteamGameInfoFromInput(input);
+  let steamInfo = null;
+  let isFromSteam = true;
+
+  const query = cleanText(input);
+  const appId = getSteamAppIdFromUrl(query) || (/^\d+$/.test(query) ? query : '');
+
+  // 1. Thử tìm trên Steam trước
+  try {
+    steamInfo = appId
+      ? await getSteamInfoByAppId(appId, '')
+      : await getSteamInfo(query);
+  } catch (err) {
+    console.warn('Steam search failed, will try community fallbacks:', err.message);
+  }
+
+  // 2. Nếu không có trên Steam, thử tìm trên RAWG Database (hỗ trợ rất nhiều game F95/itch.io/indie)
+  if (!steamInfo) {
+    isFromSteam = false;
+    console.log('Trying RAWG database fallback for:', query);
+    try {
+      const rawgResults = await searchGames(query, 5);
+      if (rawgResults && rawgResults.length > 0) {
+        const rawgGame = rawgResults[0];
+        const screenshots = (rawgGame.short_screenshots || []).map(s => s.image).filter(Boolean);
+        const tags = (rawgGame.genres || []).map(g => g.name);
+        
+        steamInfo = {
+          appId: `rawg-${rawgGame.id}`,
+          title: rawgGame.name,
+          image: rawgGame.background_image || '',
+          description: '',
+          developer: '',
+          releaseDate: rawgGame.released || '',
+          price: 0,
+          tags: [...tags, 'PC'],
+          systemRequirements: '',
+          screenshots: screenshots,
+          source: `https://rawg.io/games/${rawgGame.slug}`
+        };
+      }
+    } catch (rawgError) {
+      console.warn('RAWG database search failed:', rawgError.message);
+    }
+  }
+
+  // 3. Nếu vẫn không tìm thấy ở đâu, dựng khung thông tin ảo để Gemini tự điền bằng dữ liệu cộng đồng
+  if (!steamInfo) {
+    isFromSteam = false;
+    steamInfo = {
+      appId: `community-${Date.now()}`,
+      title: input,
+      image: '',
+      description: '',
+      developer: '',
+      releaseDate: '',
+      price: 0,
+      tags: ['PC', '18+', 'F95Zone'],
+      systemRequirements: '',
+      screenshots: [],
+      source: 'https://f95zone.to'
+    };
+  }
+
   const tags = [...new Set([...(steamInfo.tags || []), 'PC'])];
   let translated = {};
 
   try {
-    translated = await translateSteamGameInfoWithGemini(apiKey, {
-      ...steamInfo,
-      tags
-    });
+    if (isFromSteam) {
+      translated = await translateSteamGameInfoWithGemini(apiKey, {
+        ...steamInfo,
+        tags
+      });
+    } else {
+      // Gọi prompt chuyên cho cộng đồng F95/itch.io để Gemini tìm kiếm & sinh dữ liệu
+      translated = await generateCommunityGameInfoWithGemini(apiKey, input, {
+        ...steamInfo,
+        tags
+      });
+    }
   } catch (error) {
-    console.warn('Gemini Steam translation warning:', error.message);
+    console.warn('Gemini game info translation/generation failed:', error.message);
   }
 
+  // Tổng hợp dữ liệu
   const translatedTags = Array.isArray(translated.tags)
     ? translated.tags.map(cleanText).filter(Boolean)
     : tags;
   const finalTags = [...new Set([...(translatedTags.length ? translatedTags : tags), 'PC'])];
-  const releaseDate = normalizeReleaseDate(steamInfo.releaseDate);
+  
+  // Xác định ngày phát hành
+  const releaseDate = normalizeReleaseDate(translated.releaseDate || steamInfo.releaseDate);
+  
+  // Tạo mô tả dự phòng nếu Gemini không trả về
   const fallbackDescription = buildVietnameseGameSummary({
-    gameName: steamInfo.title,
+    gameName: translated.title || steamInfo.title,
     tags: finalTags,
-    text: steamInfo.description,
-    developer: steamInfo.developer,
+    text: translated.description || steamInfo.description,
+    developer: translated.developer || steamInfo.developer,
     releaseDate,
-    price: steamInfo.price || 0
+    price: translated.price || steamInfo.price || 0
   });
-  const verifiedImages = await getVerifiedImageUrls([
+
+  // Gom các URL ảnh để kiểm tra tính khả dụng (tránh link die)
+  const allImages = [
+    translated.image,
     steamInfo.image,
+    ...(translated.screenshots || []),
     ...(steamInfo.screenshots || [])
-  ], 8);
+  ].filter(Boolean);
+
+  const verifiedImages = await getVerifiedImageUrls(allImages, 8);
+
+  // Gán nguồn game
+  const finalSource = translated.source || steamInfo.source || `https://f95zone.to/search?q=${encodeURIComponent(input)}`;
 
   return {
     ...steamInfo,
+    title: translated.title || steamInfo.title,
+    developer: translated.developer || steamInfo.developer || 'N/A',
     image: verifiedImages[0] || steamInfo.image || '',
-    screenshots: verifiedImages.length ? verifiedImages : (steamInfo.screenshots || []),
+    screenshots: verifiedImages.length > 1 ? verifiedImages.slice(1) : (steamInfo.screenshots || []),
     description: cleanText(translated.description || fallbackDescription),
     systemRequirements: cleanText(translated.systemRequirements || steamInfo.systemRequirements || getDefaultSystemRequirements(finalTags)),
     releaseDate,
     tags: finalTags,
+    price: translated.price || steamInfo.price || 0,
     rating: 5.0,
     downloads: Math.floor(Math.random() * 500) + 15,
     is18Plus: hasAdultSignal(input, {
-      ...steamInfo,
-      tags: finalTags,
-      description: translated.description || steamInfo.description
-    }),
-    sources: [steamInfo.source].filter(Boolean)
+      title: translated.title || steamInfo.title,
+      description: translated.description || steamInfo.description,
+      developer: translated.developer || steamInfo.developer,
+      tags: finalTags
+    }) || !isFromSteam,
+    sources: [finalSource].filter(Boolean)
   };
 };
 
