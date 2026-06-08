@@ -112,7 +112,8 @@ function App() {
   const [ownedGames, setOwnedGames] = useState([]);
   
   // App state
-  const [games, setGames] = useState(INITIAL_GAMES);
+  const [games, setGames] = useState([]);
+  const [loadingGames, setLoadingGames] = useState(true);
   const [users] = useState(MOCK_USERS);
   const [revenue] = useState(0);
 
@@ -149,6 +150,7 @@ function App() {
             ]
           });
         }
+        setLoadingGames(false);
       } else {
         const gamesList = [];
         querySnapshot.forEach((doc) => {
@@ -159,9 +161,11 @@ function App() {
           });
         });
         setGames(gamesList);
+        setLoadingGames(false);
       }
     }, (error) => {
       console.warn("Firestore games sub error:", error.message);
+      setLoadingGames(false);
     });
     return () => unsubscribe();
   }, []);
@@ -344,7 +348,7 @@ function App() {
   return (
     <AppContext.Provider value={{ 
       user, balance, ownedGames, logout, buyGame, updateUserInfo,
-      games, users, revenue, addGameToStore, deleteGameFromStore, updateGameInStore
+      games, loadingGames, users, revenue, addGameToStore, deleteGameFromStore, updateGameInStore
     }}>
       <Router>
         <PageTitle games={games} />

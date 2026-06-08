@@ -5,7 +5,7 @@ import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
 
 function Home() {
-  const { games } = useAppContext();
+  const { games, loadingGames } = useAppContext();
   const [currentPage, setCurrentPage] = useState(1);
   const GAMES_PER_PAGE = 8;
 
@@ -56,7 +56,40 @@ function Home() {
         <div className="section-line" style={{ flex: 1, height: '1px', background: 'var(--color-border)' }}></div>
       </div>
 
-      {paginatedNewGames.length === 0 ? (
+      {loadingGames ? (
+        <>
+          <style>{`
+            @keyframes skeleton-pulse {
+              0% { opacity: 0.35; }
+              50% { opacity: 0.7; }
+              100% { opacity: 0.35; }
+            }
+            .skeleton-item {
+              animation: skeleton-pulse 1.5s infinite ease-in-out;
+            }
+          `}</style>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
+            gap: '2.5rem 1.5rem',
+            marginBottom: '3rem'
+          }}>
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="card skeleton-item" style={{ height: '320px', padding: 0, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+                <div style={{ width: '100%', height: '150px', background: 'rgba(255,255,255,0.03)' }} />
+                <div style={{ padding: '1rem 0.5rem' }}>
+                  <div style={{ width: '70%', height: '18px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', marginBottom: '0.6rem' }} />
+                  <div style={{ width: '40%', height: '12px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', marginBottom: '1rem' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2rem' }}>
+                    <div style={{ width: '60px', height: '16px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }} />
+                    <div style={{ width: '40px', height: '16px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : paginatedNewGames.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '3rem 1rem', marginBottom: '4rem' }}>
           <Gamepad2 size={48} style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }} />
           <h3 style={{ color: 'var(--color-text-light)', margin: 0 }}>Chưa có game nào</h3>
@@ -206,7 +239,27 @@ function Home() {
         <div className="section-line" style={{ flex: 1, height: '1px', background: 'var(--color-border)' }}></div>
       </div>
 
-      {hotGames.length === 0 ? (
+      {loadingGames ? (
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
+          gap: '2.5rem 1.5rem'
+        }}>
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className="card skeleton-item" style={{ height: '320px', padding: 0, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+              <div style={{ width: '100%', height: '150px', background: 'rgba(255,255,255,0.03)' }} />
+              <div style={{ padding: '1rem 0.5rem' }}>
+                <div style={{ width: '70%', height: '18px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', marginBottom: '0.6rem' }} />
+                <div style={{ width: '40%', height: '12px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', marginBottom: '1rem' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2rem' }}>
+                  <div style={{ width: '60px', height: '16px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }} />
+                  <div style={{ width: '40px', height: '16px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : hotGames.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
           <TrendingUp size={48} style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }} />
           <h3 style={{ color: 'var(--color-text-light)', margin: 0 }}>Chưa có bảng xếp hạng</h3>
