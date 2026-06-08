@@ -2,11 +2,11 @@
 // Documentation: https://rawg.io/apidocs
 // This simple wrapper provides a function to search games by name.
 
-const API_KEY = "YOUR_RAWG_API_KEY"; // Replace with your actual API key if required
+const API_KEY = import.meta.env.VITE_RAWG_API_KEY || "YOUR_RAWG_API_KEY"; // Replace with your actual API key if required
 const BASE_URL = "https://api.rawg.io/api/games";
 
 // Gemini API configuration
-const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY"; // Replace with your actual Gemini API key
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "YOUR_GEMINI_API_KEY"; // Replace with your actual Gemini API key
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 /**
