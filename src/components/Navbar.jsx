@@ -67,15 +67,13 @@ function Navbar() {
     },
     { 
       name: 'Phim', 
-      path: '#',
-      isUnderDevelopment: true,
+      path: '/videos/all',
       dropdown: [
-        { name: 'VAM', path: '#', isUnderDevelopment: true },
-        { name: '3D', path: '#', isUnderDevelopment: true }
+        { name: 'VAM', path: '/videos/vam' },
+        { name: '3D', path: '/videos/3d' }
       ]
     },
     { name: 'Blog', path: '/blog' },
-    { name: '🤖 AI Search', path: '/ai-search' },
     { name: 'Báo Lỗi', path: '/report' }
   ];
 
