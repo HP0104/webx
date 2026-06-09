@@ -15,7 +15,6 @@ import Blog from './pages/Blog';
 import Report from './pages/Report';
 import GameSearch from './pages/GameSearch';
 import { INITIAL_GAMES } from './data/games';
-import { MOCK_USERS } from './data/users';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc } from 'firebase/firestore';
@@ -114,7 +113,6 @@ function App() {
   // App state
   const [games, setGames] = useState([]);
   const [loadingGames, setLoadingGames] = useState(true);
-  const [users] = useState(MOCK_USERS);
   const [revenue] = useState(0);
 
   // Sync games from Firestore in Real-time & Clean up test games
@@ -348,7 +346,7 @@ function App() {
   return (
     <AppContext.Provider value={{ 
       user, balance, ownedGames, logout, buyGame, updateUserInfo,
-      games, loadingGames, users, revenue, addGameToStore, deleteGameFromStore, updateGameInStore
+      games, loadingGames, revenue, addGameToStore, deleteGameFromStore, updateGameInStore
     }}>
       <Router>
         <PageTitle games={games} />

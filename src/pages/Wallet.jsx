@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Wallet as WalletIcon, QrCode, CheckCircle2, RefreshCw, AlertTriangle, Landmark, Info } from 'lucide-react';
 import { useAppContext } from '../App';
-import { walletService } from '../services/walletService';
 import { PAYMENT_CONFIG } from '../config/payment';
 
 // Multi-proxy fallback for CORS-restricted APIs
