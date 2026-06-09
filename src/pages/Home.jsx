@@ -7,7 +7,8 @@ import { getGamePath } from '../utils/gameRoutes';
 function Home() {
   const { games, loadingGames } = useAppContext();
   const [currentPage, setCurrentPage] = useState(1);
-  const GAMES_PER_PAGE = 8;
+  const GAMES_PER_PAGE = 12;
+  const [hotFilter, setHotFilter] = useState('day');
 
   // Sắp xếp Game mới cập nhật (updatedAt hoặc createdAt giảm dần)
   const sortedNewGames = [...games].sort((a, b) => {
@@ -16,10 +17,34 @@ function Home() {
     return dateB - dateA;
   });
 
-  // Sắp xếp Game Hot nhất theo lượt xem (views giảm dần)
-  const hotGames = [...games]
-    .sort((a, b) => (b.views || 0) - (a.views || 0))
-    .slice(0, 4); // Lấy top 4 game hot nhất
+  const getDaysSinceCreation = (game) => {
+    const createdDate = new Date(game.updatedAt || game.createdAt || game.releaseDate || 0);
+    const now = new Date();
+    const diffTime = Math.abs(now - createdDate);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  // Sắp xếp Game Hot nhất theo tốc độ tăng trưởng lượt xem (views velocity) hoặc tổng views
+  const hotGames = (() => {
+    let sorted = [...games];
+    if (hotFilter === 'day') {
+      sorted.sort((a, b) => {
+        const scoreA = (a.views || 0) / (getDaysSinceCreation(a) + 1);
+        const scoreB = (b.views || 0) / (getDaysSinceCreation(b) + 1);
+        return scoreB - scoreA;
+      });
+    } else if (hotFilter === 'week') {
+      sorted.sort((a, b) => {
+        const scoreA = (a.views || 0) / (Math.floor(getDaysSinceCreation(a) / 7) + 1);
+        const scoreB = (b.views || 0) / (Math.floor(getDaysSinceCreation(b) / 7) + 1);
+        return scoreB - scoreA;
+      });
+    } else {
+      sorted.sort((a, b) => (b.views || 0) - (a.views || 0));
+    }
+    return sorted.slice(0, 6); // Lấy top 6 game hot nhất
+  })();
 
   // Phân trang
   const totalPages = Math.ceil(sortedNewGames.length / GAMES_PER_PAGE);
@@ -233,10 +258,63 @@ function Home() {
       {/* ==========================================
           PHẦN 2: GAME HOT NHẤT (Sắp xếp theo số lượng views truy cập chi tiết)
           ========================================== */}
-      <div className="section-header" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '2rem', marginTop: '1rem' }}>
-        <TrendingUp size={24} color="#ff5353" />
-        <h2 className="section-title" style={{ margin: 0 }}>GAME HOT NHẤT</h2>
-        <div className="section-line" style={{ flex: 1, height: '1px', background: 'var(--color-border)' }}></div>
+      <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '2rem', marginTop: '2rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+          <TrendingUp size={24} color="#ff5353" />
+          <h2 className="section-title" style={{ margin: 0 }}>GAME HOT NHẤT</h2>
+        </div>
+        
+        {/* Hot tabs */}
+        <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+          <button 
+            onClick={() => setHotFilter('day')} 
+            className="btn" 
+            style={{ 
+              padding: '0.3rem 0.8rem', 
+              fontSize: '0.78rem', 
+              borderRadius: '6px',
+              background: hotFilter === 'day' ? 'var(--color-accent)' : 'transparent',
+              color: hotFilter === 'day' ? 'white' : 'var(--color-text-muted)',
+              fontWeight: 'bold',
+              transition: 'all 0.2s',
+              margin: 0
+            }}
+          >
+            Hôm nay
+          </button>
+          <button 
+            onClick={() => setHotFilter('week')} 
+            className="btn" 
+            style={{ 
+              padding: '0.3rem 0.8rem', 
+              fontSize: '0.78rem', 
+              borderRadius: '6px',
+              background: hotFilter === 'week' ? 'var(--color-accent)' : 'transparent',
+              color: hotFilter === 'week' ? 'white' : 'var(--color-text-muted)',
+              fontWeight: 'bold',
+              transition: 'all 0.2s',
+              margin: 0
+            }}
+          >
+            Tuần này
+          </button>
+          <button 
+            onClick={() => setHotFilter('month')} 
+            className="btn" 
+            style={{ 
+              padding: '0.3rem 0.8rem', 
+              fontSize: '0.78rem', 
+              borderRadius: '6px',
+              background: hotFilter === 'month' ? 'var(--color-accent)' : 'transparent',
+              color: hotFilter === 'month' ? 'white' : 'var(--color-text-muted)',
+              fontWeight: 'bold',
+              transition: 'all 0.2s',
+              margin: 0
+            }}
+          >
+            Tháng này
+          </button>
+        </div>
       </div>
 
       {loadingGames ? (
@@ -245,7 +323,7 @@ function Home() {
           gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
           gap: '2.5rem 1.5rem'
         }}>
-          {Array.from({ length: 4 }).map((_, idx) => (
+          {Array.from({ length: 6 }).map((_, idx) => (
             <div key={idx} className="card skeleton-item" style={{ height: '320px', padding: 0, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
               <div style={{ width: '100%', height: '150px', background: 'rgba(255,255,255,0.03)' }} />
               <div style={{ padding: '1rem 0.5rem' }}>
