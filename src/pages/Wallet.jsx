@@ -234,27 +234,43 @@ function Wallet() {
     setIsProcessing(true);
 
     try {
-      const { doc, getDoc } = await import('firebase/firestore');
-      const { db } = await import('../firebase');
-      
-      const paymentRef = doc(db, 'payments', txCode);
-      const paymentSnap = await getDoc(paymentRef);
-      
-      if (paymentSnap.exists()) {
-        const paymentData = paymentSnap.data();
-        if (paymentData.status === 'completed' || paymentData.status === 'success') {
-          // Lấy lại thông tin user để cập nhật state số dư mới
-          const userSnap = await getDoc(doc(db, 'users', user.id));
-          if (userSnap.exists()) {
-            await updateUserInfo({ balance: userSnap.data().balance });
-          }
-          setShowQR(false);
-          alert(`Nạp tiền thành công! Đã cộng ${Number(amount).toLocaleString('vi-VN')} VNĐ vào ví của bạn.`);
-          return;
-        }
+      // Gọi Cloudflare Worker để kiểm tra và cộng tiền ở Backend Worker
+      const workerUrl = 'https://web18p-deloy.takarvn.workers.dev/check-payment';
+      const requestBody = {
+        txCode,
+        userId: user.id || user.uid || '',
+        gateway: selectedGateway,
+        amount: Number(amount)
+      };
+
+      // Nếu là PayOS, gửi kèm theo payosOrderCode
+      if (selectedGateway === 'payos' && payosOrderCode) {
+        requestBody.payosOrderCode = Number(payosOrderCode);
       }
-      
-      alert(`Hệ thống chưa nhận được khoản thanh toán cho mã "${txCode}".\n\nVui lòng đợi 10-30 giây để ngân hàng xử lý và gửi thông báo, sau đó bấm lại nút kiểm tra!`);
+
+      const response = await fetch(workerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        // Cập nhật state số dư mới ở Frontend từ database Firestore
+        const { doc, getDoc } = await import('firebase/firestore');
+        const { db } = await import('../firebase');
+        const userSnap = await getDoc(doc(db, 'users', user.id || user.uid || ''));
+        if (userSnap.exists()) {
+          await updateUserInfo({ balance: userSnap.data().balance });
+        }
+        setShowQR(false);
+        alert(`Nạp tiền thành công! Đã cộng ${Number(amount).toLocaleString('vi-VN')} VNĐ vào ví của bạn.`);
+      } else {
+        alert(result.message || `Hệ thống chưa nhận được khoản thanh toán cho mã "${txCode}".\n\nVui lòng đợi 10-30 giây để ngân hàng xử lý và gửi thông báo, sau đó bấm lại nút kiểm tra!`);
+      }
     } catch (err) {
       console.warn('Lỗi kiểm tra giao dịch:', err.message);
       alert('Lỗi kiểm tra giao dịch: ' + err.message);
