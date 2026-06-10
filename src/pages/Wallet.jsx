@@ -1,7 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet as WalletIcon, QrCode, CheckCircle2, RefreshCw, AlertTriangle, Landmark, Info } from 'lucide-react';
+import { Wallet as WalletIcon, QrCode, CheckCircle2, RefreshCw, AlertTriangle, Landmark, Info, History } from 'lucide-react';
 import { useAppContext } from '../App';
 import { PAYMENT_CONFIG } from '../config/payment';
+
+// Helper to format ISO dates beautifully
+const formatDate = (isoString) => {
+  if (!isoString) return 'N/A';
+  try {
+    const date = new Date(isoString);
+    return date.toLocaleString('vi-VN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  } catch {
+    return isoString;
+  }
+};
 
 // Multi-proxy fallback for CORS-restricted APIs
 const fetchWithCorsProxy = async (url, options = {}) => {
@@ -72,6 +89,46 @@ function Wallet() {
   const [qrUrl, setQrUrl] = useState('');
   const [payosCheckoutUrl, setPayosCheckoutUrl] = useState('');
   const [payosOrderCode, setPayosOrderCode] = useState(null); // Lưu orderCode PayOS để kiểm tra sau
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  // Sync payment history from Firestore in Real-time
+  useEffect(() => {
+    if (!user) return;
+
+    let unsubscribe;
+    const fetchHistory = async () => {
+      try {
+        const { collection, query, where, onSnapshot } = await import('firebase/firestore');
+        const { db } = await import('../firebase');
+
+        const q = query(
+          collection(db, 'payments'),
+          where('userId', '==', user.id || user.uid || '')
+        );
+
+        unsubscribe = onSnapshot(q, (snapshot) => {
+          const history = [];
+          snapshot.forEach((doc) => {
+            history.push({ id: doc.id, ...doc.data() });
+          });
+          // Sort client-side to avoid Firebase composite index requirement
+          history.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          setPaymentHistory(history);
+          setLoadingHistory(false);
+        }, (err) => {
+          console.warn("Lỗi tải lịch sử nạp:", err.message);
+          setLoadingHistory(false);
+        });
+      } catch (err) {
+        console.warn("Lỗi cấu hình kết nối lịch sử:", err.message);
+        setLoadingHistory(false);
+      }
+    };
+
+    fetchHistory();
+    return () => { if (unsubscribe) unsubscribe(); };
+  }, [user]);
 
   // Kiểm tra token hợp lệ
   const isSePayTokenValid = (() => {
@@ -239,7 +296,8 @@ function Wallet() {
   const isGatewayConfigured = selectedGateway === 'sepay' ? isSePayTokenValid : isPayOSConfigured;
 
   return (
-    <div style={{ maxWidth: '850px', margin: '0 auto', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem', paddingBottom: '3rem' }}>
+    <div style={{ maxWidth: '850px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '3rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem' }}>
       
       {/* CỘT TRÁI: CHỌN MỆNH GIÁ & CỔNG NẠP */}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -464,6 +522,75 @@ function Wallet() {
             <QrCode size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
             <p style={{ margin: 0, fontSize: '0.9rem' }}>Vui lòng chọn mệnh giá và bấm tạo mã QR.</p>
             <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.75rem' }}>Mã QR sẽ tự động điền số tài khoản, số tiền và nội dung chuyển khoản động của bạn.</p>
+          </div>
+        )}
+      </div>
+    </div>
+
+      {/* PHẦN LỊCH SỬ NẠP TIỀN */}
+      <div className="card fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.8rem', margin: 0 }}>
+          <History size={18} color="var(--color-accent)" /> Lịch sử nạp tiền
+        </h3>
+        
+        {loadingHistory ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+            <RefreshCw className="spin-anim" size={24} style={{ margin: '0 auto 0.5rem' }} />
+            Đang tải lịch sử...
+          </div>
+        ) : paymentHistory.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+            Bạn chưa thực hiện giao dịch nạp tiền nào.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
+                  <th style={{ padding: '0.8rem 0.5rem' }}>Mã GD</th>
+                  <th style={{ padding: '0.8rem 0.5rem' }}>Cổng nạp</th>
+                  <th style={{ padding: '0.8rem 0.5rem' }}>Số tiền</th>
+                  <th style={{ padding: '0.8rem 0.5rem' }}>Thời gian</th>
+                  <th style={{ padding: '0.8rem 0.5rem', textAlign: 'right' }}>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentHistory.map((item) => {
+                  const isCompleted = item.status === 'completed' || item.status === 'success' || item.sepayTransactionId || item.payosStatus === 'PAID';
+                  const isPending = item.status === 'pending';
+                  
+                  return (
+                    <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                      <td style={{ padding: '0.8rem 0.5rem', fontFamily: 'monospace', fontWeight: 'bold', color: 'var(--color-text-light)' }}>
+                        {item.txCode || item.id}
+                      </td>
+                      <td style={{ padding: '0.8rem 0.5rem', textTransform: 'capitalize' }}>
+                        {item.gateway === 'sepay' ? 'SePay' : 'PayOS'}
+                      </td>
+                      <td style={{ padding: '0.8rem 0.5rem', fontWeight: 'bold', color: isCompleted ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
+                        +{Number(item.amount).toLocaleString('vi-VN')} đ
+                      </td>
+                      <td style={{ padding: '0.8rem 0.5rem', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                        {formatDate(item.createdAt)}
+                      </td>
+                      <td style={{ padding: '0.8rem 0.5rem', textAlign: 'right' }}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold',
+                          backgroundColor: isCompleted ? 'rgba(46, 204, 113, 0.15)' : isPending ? 'rgba(241, 196, 15, 0.15)' : 'rgba(231, 76, 60, 0.15)',
+                          color: isCompleted ? '#2ecc71' : isPending ? '#f1c40f' : '#e74c3c'
+                        }}>
+                          {isCompleted ? 'Thành công' : isPending ? 'Đang chờ' : 'Đã hủy'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
