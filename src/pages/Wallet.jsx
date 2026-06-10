@@ -93,6 +93,23 @@ function Wallet() {
     setPayosOrderCode(null);
     setPayosCheckoutUrl('');
 
+    // Tạo document nạp tiền ở trạng thái 'pending' trên Firestore trước
+    try {
+      const { doc, setDoc } = await import('firebase/firestore');
+      const { db } = await import('../firebase');
+      await setDoc(doc(db, 'payments', code), {
+        userId: user.id || user.uid || '',
+        userEmail: user.email || 'N/A',
+        amount: Number(amount),
+        txCode: code,
+        gateway: selectedGateway,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.warn('Không thể khởi tạo giao dịch trên Firestore:', err.message);
+    }
+
     if (selectedGateway === 'sepay') {
       const { bankId, accountNumber } = PAYMENT_CONFIG.sepay;
       const bankName = bankId === 'MB' ? 'MBBank' : bankId;
@@ -160,124 +177,33 @@ function Wallet() {
     setIsProcessing(true);
 
     try {
-      if (selectedGateway === 'sepay') {
-        await checkSePay();
-      } else {
-        await checkPayOS();
+      const { doc, getDoc } = await import('firebase/firestore');
+      const { db } = await import('../firebase');
+      
+      const paymentRef = doc(db, 'payments', txCode);
+      const paymentSnap = await getDoc(paymentRef);
+      
+      if (paymentSnap.exists()) {
+        const paymentData = paymentSnap.data();
+        if (paymentData.status === 'completed' || paymentData.status === 'success') {
+          // Lấy lại thông tin user để cập nhật state số dư mới
+          const userSnap = await getDoc(doc(db, 'users', user.id));
+          if (userSnap.exists()) {
+            await updateUserInfo({ balance: userSnap.data().balance });
+          }
+          setShowQR(false);
+          alert(`Nạp tiền thành công! Đã cộng ${Number(amount).toLocaleString('vi-VN')} VNĐ vào ví của bạn.`);
+          return;
+        }
       }
+      
+      alert(`Hệ thống chưa nhận được khoản thanh toán cho mã "${txCode}".\n\nVui lòng đợi 10-30 giây để ngân hàng xử lý và gửi thông báo, sau đó bấm lại nút kiểm tra!`);
     } catch (err) {
       console.warn('Lỗi kiểm tra giao dịch:', err.message);
       alert('Lỗi kiểm tra giao dịch: ' + err.message);
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  // Hàm xác nhận và cộng tiền chung cho cả 2 cổng
-  const confirmPayment = async (txId, extraData = {}) => {
-    const { doc, getDoc, setDoc } = await import('firebase/firestore');
-    const { db } = await import('../firebase');
-
-    const paymentDocRef = doc(db, 'payments', txId.toString());
-    const paymentDoc = await getDoc(paymentDocRef);
-
-    if (paymentDoc.exists()) {
-      alert('Giao dịch này đã được xử lý và cộng tiền từ trước!');
-      return;
-    }
-
-    await setDoc(paymentDocRef, {
-      userId: user.id || user.uid || '',
-      userEmail: user.email || 'N/A',
-      amount: Number(amount),
-      txCode: txCode,
-      gateway: selectedGateway,
-      createdAt: new Date().toISOString(),
-      ...extraData
-    });
-
-    const newBalance = (balance || 0) + Number(amount);
-    await updateUserInfo({ balance: newBalance });
-    setShowQR(false);
-    alert(`Nạp tiền thành công! Đã cộng ${Number(amount).toLocaleString('vi-VN')} VNĐ vào ví của bạn.`);
-  };
-
-  // Kiểm tra giao dịch qua SePay API
-  const checkSePay = async () => {
-    const apiToken = PAYMENT_CONFIG.sepay.apiToken;
-    if (!isSePayTokenValid) {
-      alert("Token SePay chưa được cấu hình. Vui lòng dùng nút 'Giả lập nạp tiền' ở dưới!");
-      return;
-    }
-
-    const response = await fetchWithCorsProxy('https://my.sepay.vn/userapi/transactions/list?limit=20', {
-      headers: {
-        'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    const data = await response.json();
-
-    if (!data?.transactions || !Array.isArray(data.transactions)) {
-      alert('Không thể kết nối cổng SePay. Vui lòng thử lại sau!');
-      return;
-    }
-
-    const matchedTx = data.transactions.find(tx => {
-      const matchesAmount = Number(tx.amount_in) === Number(amount);
-      const matchesContent = (tx.transaction_content || '').includes(txCode) || (tx.body || '').includes(txCode);
-      return matchesAmount && matchesContent;
-    });
-
-    if (matchedTx) {
-      await confirmPayment(matchedTx.id, {
-        sepayTransactionId: matchedTx.id,
-        bankBrand: matchedTx.bank_brand_name || 'N/A',
-        referenceNumber: matchedTx.reference_number || 'N/A'
-      });
-    } else {
-      alert(`Chưa tìm thấy giao dịch "${txCode}" với số tiền ${Number(amount).toLocaleString('vi-VN')}đ.\n\nVui lòng đợi 10-30 giây để ngân hàng cập nhật, sau đó bấm lại!`);
-    }
-  };
-
-  // Kiểm tra giao dịch qua PayOS API
-  const checkPayOS = async () => {
-    if (!isPayOSConfigured) {
-      alert("Cổng PayOS chưa được cấu hình. Vui lòng dùng nút 'Giả lập nạp tiền' ở dưới!");
-      return;
-    }
-
-    const { apiKey, clientId } = PAYMENT_CONFIG.payos;
-
-    // Nếu có orderCode từ PayOS → kiểm tra trạng thái đơn hàng
-    if (payosOrderCode) {
-      const response = await fetchWithCorsProxy(`https://api-merchant.payos.vn/v2/payment-requests/${payosOrderCode}`, {
-        headers: {
-          'x-client-id': clientId,
-          'x-api-key': apiKey
-        }
-      });
-      const result = await response.json();
-
-      if (result.code === '00' && result.data) {
-        if (result.data.status === 'PAID') {
-          await confirmPayment(`payos-${payosOrderCode}`, {
-            payosOrderCode: payosOrderCode,
-            payosStatus: 'PAID'
-          });
-          return;
-        } else if (result.data.status === 'CANCELLED' || result.data.status === 'EXPIRED') {
-          alert(`Đơn hàng PayOS đã ${result.data.status === 'CANCELLED' ? 'bị hủy' : 'hết hạn'}. Vui lòng tạo mã QR mới!`);
-          return;
-        } else {
-          alert(`Đơn hàng PayOS đang ở trạng thái: ${result.data.status}.\n\nVui lòng đợi 10-30 giây sau khi chuyển khoản, rồi bấm lại!`);
-          return;
-        }
-      }
-    }
-
-    // Fallback: Nếu không có orderCode (tạo đơn PayOS thất bại) → thông báo
-    alert(`Chưa thể kiểm tra giao dịch PayOS.\n\nVui lòng đợi 1-2 phút để hệ thống xử lý, hoặc chuyển sang cổng SePay để kiểm tra nhanh hơn.`);
   };
 
   // 3. Giả lập thanh toán dành cho môi trường phát triển (Test local)
@@ -505,7 +431,7 @@ function Wallet() {
             </div>
 
             {/* Trạng thái tích hợp của Developer */}
-            {!isGatewayConfigured && (
+            {!isGatewayConfigured && user?.role === 'admin' && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem', backgroundColor: 'rgba(255, 152, 0, 0.05)', border: '1px dashed #ff9800', padding: '0.7rem', borderRadius: '6px', textAlign: 'left', width: '100%' }}>
                 <AlertTriangle size={16} color="#ff9800" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <span style={{ color: '#ff9800', fontSize: '0.75rem', lineHeight: '1.4' }}>
