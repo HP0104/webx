@@ -152,7 +152,7 @@ function Admin() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
         {/* User manager */}
-        <UserManager users={users} />
+        <UserManager users={users} games={games} />
 
         {/* Game Form */}
         <GameForm
