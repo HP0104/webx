@@ -47,7 +47,7 @@ function ensureExoClickProvider({ forceReload = false } = {}) {
 
 function getExoClickZones(config) {
   if (Array.isArray(config?.zones)) {
-    return config.zones.filter(Boolean);
+    return config.zones.filter(Boolean).slice(0, 10);
   }
 
   return config?.zoneId ? [config.zoneId] : [];
