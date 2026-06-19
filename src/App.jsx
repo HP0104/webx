@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import Navbar from './components/Navbar';
 import NotificationBanner from './components/NotificationBanner';
 import ChatBox from './components/ChatBox';
+import AdBanner from './components/AdBanner';
 import Home from './pages/Home';
 import Auth from './pages/Auth';
 import Wallet from './pages/Wallet';
@@ -20,6 +21,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { findGameByRouteParam, getGamePath } from './utils/gameRoutes';
 import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './utils/ownership';
+import { ADS_CONFIG } from './config/ads';
 
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
@@ -356,6 +358,10 @@ function App() {
           
           <div className="app-layout">
             <main className="main-content">
+              <div className="container" style={{ paddingBottom: 0 }}>
+                <AdBanner config={ADS_CONFIG.slot1} />
+              </div>
+
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/category/:categoryType" element={<Category />} />

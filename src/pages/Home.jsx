@@ -73,9 +73,6 @@ function Home() {
 
   return (
     <div className="container" style={{ paddingBottom: '4rem' }}>
-      {/* Quảng cáo vị trí 1: Giữa phần Lưu ý và Game mới */}
-      <AdBanner config={ADS_CONFIG.slot1} />
-      
       {/* ==========================================
           PHẦN 1: GAME MỚI CẬP NHẬT (Sắp xếp theo thời gian cập nhật + Phân trang)
           ========================================== */}
