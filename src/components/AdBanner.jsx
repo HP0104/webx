@@ -45,9 +45,10 @@ function ExoClickAdBanner({ config }) {
     <div
       className="ad-banner-container"
       style={{
-        width: '100%',
+        width: config.containerWidth || '100%',
+        maxWidth: config.containerMaxWidth || '100%',
         minHeight: '250px',
-        marginBottom: '2.5rem',
+        margin: config.margin || '0 auto 2.5rem',
         borderRadius: '12px',
         overflow: 'hidden',
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',

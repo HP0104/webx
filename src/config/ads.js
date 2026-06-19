@@ -18,9 +18,15 @@ export const ADS_CONFIG = {
 
   // Vị trí 2: Ở giữa Game mới cập nhật và Game hot nhất
   slot2: {
-    imageUrl: '', // Link ảnh banner (ví dụ: 'https://example.com/banner2.png')
-    targetUrl: '', // Link liên kết khi người dùng click vào banner
-    altText: 'Quảng cáo vị trí 2',
+    provider: 'exoclick',
+    zoneId: '5954348',
+    className: 'eas6a97888e2',
+    width: '300px',
+    height: '250px',
+    containerWidth: 'fit-content',
+    containerMaxWidth: '100%',
+    margin: '2rem auto 3rem',
+    altText: 'Quảng cáo ExoClick vị trí 2',
   },
 
   // Vị trí 3: Ở cuối trang (trên cùng phần footer/dưới cùng Home)
