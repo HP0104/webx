@@ -8,9 +8,10 @@
 export const ADS_CONFIG = {
   // Vị trí 1: Ở giữa phần Lưu ý (Notification Banner) và Game mới cập nhật
   slot1: {
-    imageUrl: '', // Link ảnh banner (ví dụ: 'https://example.com/banner1.png')
-    targetUrl: '', // Link liên kết khi người dùng click vào banner
-    altText: 'Quảng cáo vị trí 1',
+    provider: 'exoclick',
+    zoneId: '5954338',
+    className: 'eas6a97888e2',
+    altText: 'Quảng cáo ExoClick vị trí 1',
   },
 
   // Vị trí 2: Ở giữa Game mới cập nhật và Game hot nhất
