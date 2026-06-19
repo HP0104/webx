@@ -144,7 +144,8 @@ function ExoClickAdBanner({ config }) {
       style={{
         width: config.containerWidth || '100%',
         maxWidth: config.containerMaxWidth || '100%',
-        minHeight: config.height || '250px',
+        height: 'auto',
+        maxHeight: config.height ? `calc(${config.height} + 2.5rem)` : '282px',
         margin: config.margin || '0 auto 2.5rem',
         borderRadius: '12px',
         overflow: 'hidden',
@@ -177,13 +178,19 @@ function ExoClickAdBanner({ config }) {
       </span>
 
       <div
+        className="ad-banner-scroll-container"
         style={{
           width: '100%',
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'center',
-          gap: config.gap || '1rem'
+          justifyContent: zones.length === 1 ? 'center' : 'flex-start',
+          gap: config.gap || '1rem',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          paddingBottom: '0.5rem',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(255, 255, 255, 0.1) transparent'
         }}
       >
         {zones.map((zoneId) => (

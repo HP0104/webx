@@ -557,6 +557,25 @@ a {
 ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
 
+/* Ad Banner Styles */
+.ad-banner-container[data-ad-status="no-fill"] {
+  display: none !important;
+}
+
+.ad-banner-scroll-container::-webkit-scrollbar {
+  height: 4px;
+}
+.ad-banner-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ad-banner-scroll-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+.ad-banner-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+
 .fade-in {
   animation: fadeIn 0.5s ease forwards;
 }
