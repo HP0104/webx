@@ -1,18 +1,26 @@
-import React, { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const EXOCLICK_PROVIDER_SRC = 'https://a.magsrv.com/ad-provider.js';
 const EXOCLICK_SCRIPT_ID = 'exoclick-ad-provider';
+const EXOCLICK_FILL_CHECK_DELAY = 4500;
 
 function serveExoClickAd() {
   window.AdProvider = window.AdProvider || [];
   window.AdProvider.push({ serve: {} });
 }
 
-function ensureExoClickProvider() {
+function ensureExoClickProvider({ forceReload = false } = {}) {
   const existingScript = document.getElementById(EXOCLICK_SCRIPT_ID);
 
-  if (existingScript) {
-    return;
+  if (existingScript?.dataset.loaded === 'true' && typeof window.AdProvider !== 'undefined' && !forceReload) {
+    return Promise.resolve(existingScript);
+  }
+
+  if (existingScript && (forceReload || existingScript.dataset.loaded === 'true')) {
+    existingScript.remove();
+    window.__exoClickProviderPromise = null;
+  } else if (existingScript && window.__exoClickProviderPromise) {
+    return window.__exoClickProviderPromise;
   }
 
   const script = document.createElement('script');
@@ -20,14 +28,21 @@ function ensureExoClickProvider() {
   script.async = true;
   script.type = 'application/javascript';
   script.src = EXOCLICK_PROVIDER_SRC;
-  script.addEventListener('load', () => {
-    script.dataset.loaded = 'true';
-  });
-  script.addEventListener('error', () => {
-    script.dataset.error = 'true';
+
+  window.__exoClickProviderPromise = new Promise((resolve, reject) => {
+    script.addEventListener('load', () => {
+      script.dataset.loaded = 'true';
+      resolve(script);
+    });
+    script.addEventListener('error', () => {
+      script.dataset.error = 'true';
+      window.__exoClickProviderPromise = null;
+      reject(new Error('ExoClick provider failed to load'));
+    });
   });
 
   document.head.appendChild(script);
+  return window.__exoClickProviderPromise;
 }
 
 function getExoClickZones(config) {
@@ -39,26 +54,97 @@ function getExoClickZones(config) {
 }
 
 function ExoClickAdBanner({ config }) {
+  const containerRef = useRef(null);
+  const retryRef = useRef(false);
+  const [hasNoFill, setHasNoFill] = useState(false);
   const zones = getExoClickZones(config);
   const zoneKey = zones.join(',');
 
   useEffect(() => {
     if (!zoneKey) return undefined;
 
-    ensureExoClickProvider();
-    serveExoClickAd();
-    return undefined;
-  }, [zoneKey]);
+    let cancelled = false;
+    let fillCheckTimer;
+
+    const getEmptySlots = () => {
+      const container = containerRef.current;
+      if (!container) return [];
+
+      return [...container.querySelectorAll('ins')].filter((slot) => {
+        const hasRenderedAd = slot.querySelector('iframe, img, a, div');
+        return !hasRenderedAd;
+      });
+    };
+
+    const resetSlots = () => {
+      getEmptySlots().forEach((slot) => {
+        slot.removeAttribute('data-processed');
+        slot.innerHTML = '';
+      });
+    };
+
+    const checkAndRetryNoFill = async () => {
+      if (cancelled) return;
+
+      const emptySlots = getEmptySlots();
+      const processedEmptySlots = emptySlots.filter((slot) => slot.dataset.processed === 'true');
+
+      if (!processedEmptySlots.length) {
+        setHasNoFill(false);
+        return;
+      }
+
+      if (retryRef.current) {
+        setHasNoFill(true);
+        return;
+      }
+
+      retryRef.current = true;
+
+      try {
+        await ensureExoClickProvider({ forceReload: typeof window.AdProvider === 'undefined' });
+        if (cancelled) return;
+        resetSlots();
+        serveExoClickAd();
+        fillCheckTimer = window.setTimeout(checkAndRetryNoFill, EXOCLICK_FILL_CHECK_DELAY);
+      } catch (error) {
+        console.warn('ExoClick retry failed:', error.message);
+        setHasNoFill(true);
+      }
+    };
+
+    retryRef.current = false;
+
+    ensureExoClickProvider()
+      .then(() => {
+        if (cancelled) return;
+        resetSlots();
+        serveExoClickAd();
+        fillCheckTimer = window.setTimeout(checkAndRetryNoFill, EXOCLICK_FILL_CHECK_DELAY);
+      })
+      .catch((error) => {
+        console.warn('ExoClick provider failed:', error.message);
+        setHasNoFill(true);
+      });
+
+    return () => {
+      cancelled = true;
+      if (fillCheckTimer) window.clearTimeout(fillCheckTimer);
+    };
+  }, [zoneKey, config.className]);
 
   if (!zones.length) return null;
 
   return (
     <div
+      ref={containerRef}
       className="ad-banner-container"
+      data-ad-provider="exoclick"
+      data-ad-status={hasNoFill ? 'no-fill' : 'loading'}
       style={{
         width: config.containerWidth || '100%',
         maxWidth: config.containerMaxWidth || '100%',
-        minHeight: '250px',
+        minHeight: config.height || '250px',
         margin: config.margin || '0 auto 2.5rem',
         borderRadius: '12px',
         overflow: 'hidden',
@@ -94,9 +180,9 @@ function ExoClickAdBanner({ config }) {
         style={{
           width: '100%',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          flexWrap: 'wrap',
           gap: config.gap || '1rem'
         }}
       >
@@ -104,13 +190,13 @@ function ExoClickAdBanner({ config }) {
           <div
             key={zoneId}
             style={{
-              width: config.width || '300px',
+              width: `min(100%, ${config.width || '300px'})`,
               height: config.height || '250px',
-              maxWidth: '100%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              flexShrink: 0
+              flexShrink: 0,
+              overflow: 'hidden'
             }}
           >
             <ins
@@ -120,7 +206,8 @@ function ExoClickAdBanner({ config }) {
                 display: 'block',
                 width: config.width || '300px',
                 height: config.height || '250px',
-                maxWidth: '100%'
+                maxWidth: '100%',
+                flex: '0 0 auto'
               }}
             />
           </div>
