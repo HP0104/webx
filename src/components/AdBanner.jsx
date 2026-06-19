@@ -8,22 +8,11 @@ function serveExoClickAd() {
   window.AdProvider.push({ serve: {} });
 }
 
-function ensureExoClickProvider(onReady) {
+function ensureExoClickProvider() {
   const existingScript = document.getElementById(EXOCLICK_SCRIPT_ID);
 
   if (existingScript) {
-    if (existingScript.dataset.loaded === 'true') {
-      onReady();
-      return () => {};
-    }
-
-    const handleLoad = () => {
-      existingScript.dataset.loaded = 'true';
-      onReady();
-    };
-
-    existingScript.addEventListener('load', handleLoad);
-    return () => existingScript.removeEventListener('load', handleLoad);
+    return;
   }
 
   const script = document.createElement('script');
@@ -31,22 +20,23 @@ function ensureExoClickProvider(onReady) {
   script.async = true;
   script.type = 'application/javascript';
   script.src = EXOCLICK_PROVIDER_SRC;
-  const handleLoad = () => {
+  script.addEventListener('load', () => {
     script.dataset.loaded = 'true';
-    onReady();
-  };
-
-  script.addEventListener('load', handleLoad);
+  });
+  script.addEventListener('error', () => {
+    script.dataset.error = 'true';
+  });
 
   document.head.appendChild(script);
-  return () => script.removeEventListener('load', handleLoad);
 }
 
 function ExoClickAdBanner({ config }) {
   useEffect(() => {
     if (!config?.zoneId) return undefined;
 
-    return ensureExoClickProvider(serveExoClickAd);
+    ensureExoClickProvider();
+    serveExoClickAd();
+    return undefined;
   }, [config?.zoneId]);
 
   if (!config?.zoneId) return null;
