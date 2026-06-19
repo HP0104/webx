@@ -81,6 +81,12 @@ function ExoClickAdBanner({ config }) {
       <ins
         className={config.className || 'eas6a97888e2'}
         data-zoneid={config.zoneId}
+        style={{
+          display: 'block',
+          width: config.width || '300px',
+          height: config.height || '250px',
+          maxWidth: '100%'
+        }}
       />
     </div>
   );

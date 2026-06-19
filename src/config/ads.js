@@ -11,6 +11,8 @@ export const ADS_CONFIG = {
     provider: 'exoclick',
     zoneId: '5954338',
     className: 'eas6a97888e2',
+    width: '300px',
+    height: '250px',
     altText: 'Quảng cáo ExoClick vị trí 1',
   },
 
