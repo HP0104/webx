@@ -30,16 +30,27 @@ function ensureExoClickProvider() {
   document.head.appendChild(script);
 }
 
+function getExoClickZones(config) {
+  if (Array.isArray(config?.zones)) {
+    return config.zones.filter(Boolean);
+  }
+
+  return config?.zoneId ? [config.zoneId] : [];
+}
+
 function ExoClickAdBanner({ config }) {
+  const zones = getExoClickZones(config);
+  const zoneKey = zones.join(',');
+
   useEffect(() => {
-    if (!config?.zoneId) return undefined;
+    if (!zoneKey) return undefined;
 
     ensureExoClickProvider();
     serveExoClickAd();
     return undefined;
-  }, [config?.zoneId]);
+  }, [zoneKey]);
 
-  if (!config?.zoneId) return null;
+  if (!zones.length) return null;
 
   return (
     <div
@@ -79,16 +90,42 @@ function ExoClickAdBanner({ config }) {
         Tài trợ
       </span>
 
-      <ins
-        className={config.className || 'eas6a97888e2'}
-        data-zoneid={config.zoneId}
+      <div
         style={{
-          display: 'block',
-          width: config.width || '300px',
-          height: config.height || '250px',
-          maxWidth: '100%'
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+          gap: config.gap || '1rem'
         }}
-      />
+      >
+        {zones.map((zoneId) => (
+          <div
+            key={zoneId}
+            style={{
+              width: config.width || '300px',
+              height: config.height || '250px',
+              maxWidth: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}
+          >
+            <ins
+              className={config.className || 'eas6a97888e2'}
+              data-zoneid={zoneId}
+              style={{
+                display: 'block',
+                width: config.width || '300px',
+                height: config.height || '250px',
+                maxWidth: '100%'
+              }}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

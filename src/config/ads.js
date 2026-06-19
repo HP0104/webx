@@ -9,10 +9,11 @@ export const ADS_CONFIG = {
   // Vị trí 1: Ở giữa phần Lưu ý (Notification Banner) và Game mới cập nhật
   slot1: {
     provider: 'exoclick',
-    zoneId: '5954338',
+    zones: ['5954338', '5954350', '5954402'],
     className: 'eas6a97888e2',
     width: '300px',
     height: '250px',
+    gap: '1.25rem',
     altText: 'Quảng cáo ExoClick vị trí 1',
   },
 
