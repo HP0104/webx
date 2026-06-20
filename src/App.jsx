@@ -107,6 +107,13 @@ function PageTitle({ games }) {
   return null;
 }
 
+function RouteAdBanner() {
+  const location = useLocation();
+  const routeKey = `${location.pathname}${location.search}`;
+
+  return <AdBanner key={routeKey} config={ADS_CONFIG.slot1} />;
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(0);
@@ -359,7 +366,7 @@ function App() {
           <div className="app-layout">
             <main className="main-content">
               <div className="container" style={{ paddingBottom: 0 }}>
-                <AdBanner config={ADS_CONFIG.slot1} />
+                <RouteAdBanner />
               </div>
 
               <Routes>

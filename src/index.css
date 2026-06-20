@@ -558,10 +558,6 @@ a {
 ::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
 
 /* Ad Banner Styles */
-.ad-banner-container[data-ad-status="no-fill"] {
-  display: none !important;
-}
-
 .ad-banner-scroll-container::-webkit-scrollbar {
   height: 4px;
 }
