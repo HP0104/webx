@@ -16,6 +16,7 @@ import Blog from './pages/Blog';
 import Report from './pages/Report';
 import GameSearch from './pages/GameSearch';
 import Videos from './pages/Videos';
+import VideoDetail from './pages/VideoDetail';
 import { INITIAL_GAMES } from './data/games';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -454,6 +455,7 @@ function App() {
                 <Route path="/report" element={<Report />} />
                 <Route path="/ai-search" element={<GameSearch />} />
                 <Route path="/videos/:category" element={<Videos />} />
+                <Route path="/video/:videoId" element={<VideoDetail />} />
               </Routes>
 
               <div className="container" style={{ paddingTop: 0, marginTop: '2rem' }}>
