@@ -26,10 +26,19 @@ function VideoForm({
       return;
     }
 
+    // Extract the video ID (e.g. drV0m0gADjCkqVB) from the URL
+    const match = url.match(/streamtape\.com\/[ve]\/([a-zA-Z0-9]+)/);
+    const videoId = match ? match[1] : null;
+    
+    if (!videoId) {
+      if (!silent) alert('Đường dẫn Streamtape không hợp lệ! Không tìm thấy Video ID.');
+      return;
+    }
+
     setIsFetchingThumbnail(true);
     
-    // Normalize URL to /v/ format to make sure we hit the main page with og:image metadata
-    const videoPageUrl = url.replace('streamtape.com/e/', 'streamtape.com/v/');
+    // Force the videoPageUrl to be the clean HTML page, NOT the binary video stream.
+    const videoPageUrl = `https://streamtape.com/v/${videoId}`;
     
     // List of CORS Proxies to try sequentially
     const proxies = [
