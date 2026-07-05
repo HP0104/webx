@@ -16,11 +16,12 @@ function getStreamtapeVideoId(url) {
 
 /**
  * Get Streamtape thumbnail from video URL.
+ * Uses the direct /tn/ URL pattern — no CORS proxy needed.
  */
 export function getStreamtapeThumbnail(url) {
   const videoId = getStreamtapeVideoId(url);
   if (!videoId) return null;
-  return `https://thumb.tapecontent.net/${videoId}.jpg`;
+  return `https://streamtape.com/tn/${videoId}`;
 }
 
 /**

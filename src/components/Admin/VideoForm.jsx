@@ -37,92 +37,23 @@ function VideoForm({
 
     setIsFetchingThumbnail(true);
     
-    // Force the videoPageUrl to be the clean HTML page, NOT the binary video stream.
-    const videoPageUrl = `https://streamtape.com/v/${videoId}`;
-    
-    // List of CORS Proxies to try sequentially
-    const proxies = [
-      {
-        url: (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-        parse: (res) => res.text()
-      },
-      {
-        url: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-        parse: (res) => res.text()
-      },
-      {
-        url: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-        parse: async (res) => {
-          const json = await res.json();
-          return json.contents || '';
-        }
-      }
-    ];
-
-    let html = '';
-    let success = false;
-    
-    for (const proxy of proxies) {
-      try {
-        const proxyUrl = proxy.url(videoPageUrl);
-        const response = await fetch(proxyUrl);
-        if (response.ok) {
-          html = await proxy.parse(response);
-          if (html && html.trim().length > 0) {
-            success = true;
-            break;
-          }
-        }
-      } catch (err) {
-        console.warn('CORS Proxy failed:', err);
-      }
-    }
-
-    if (!success) {
-      setIsFetchingThumbnail(false);
-      if (!silent) alert('Lỗi lấy ảnh bìa: Không thể kết nối với các máy chủ proxy CORS. Bạn vui lòng nhập link ảnh thủ công.');
-      return;
-    }
+    // Use Streamtape's direct thumbnail URL pattern — no CORS proxy needed!
+    const thumbUrl = `https://streamtape.com/tn/${videoId}`;
 
     try {
-      // 1. Match og:image tag with quote-agnostic and order-agnostic regex
-      const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || 
-                           html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      // Verify the thumbnail exists by loading it as an image
+      const isValid = await new Promise((resolve) => {
+        const img = new window.Image();
+        img.onload = () => resolve(true);
+        img.onerror = () => resolve(false);
+        img.src = thumbUrl;
+      });
 
-      if (ogImageMatch && ogImageMatch[1]) {
-        let thumbUrl = ogImageMatch[1];
-        if (thumbUrl.startsWith('//')) {
-          thumbUrl = 'https:' + thumbUrl;
-        }
+      if (isValid) {
         setVideoData(prev => ({ ...prev, thumbnail: thumbUrl }));
         if (!silent) alert('Tự động lấy ảnh bìa thành công!');
-        return;
-      }
-
-      // 2. Fallback to matching any thumb.tapecontent.net URL in the body html
-      const tapecontentMatch = html.match(/(?:https?:)?\/\/thumb\.tapecontent\.net\/[a-zA-Z0-9_\-\.\/]+/i);
-      if (tapecontentMatch && tapecontentMatch[0]) {
-        let thumbUrl = tapecontentMatch[0];
-        if (thumbUrl.startsWith('//')) {
-          thumbUrl = 'https:' + thumbUrl;
-        }
-        setVideoData(prev => ({ ...prev, thumbnail: thumbUrl }));
-        if (!silent) alert('Tự động lấy ảnh bìa thành công!');
-        return;
-      }
-
-      // 3. Fallback to poster="..." tag in video element
-      const posterMatch = html.match(/poster=["']([^"']+)["']/i) || 
-                          html.match(/poster\s*:\s*['"]([^'"]+)['"]/i);
-      if (posterMatch && posterMatch[1]) {
-        let thumbUrl = posterMatch[1];
-        if (thumbUrl.startsWith('//')) {
-          thumbUrl = 'https:' + thumbUrl;
-        }
-        setVideoData(prev => ({ ...prev, thumbnail: thumbUrl }));
-        if (!silent) alert('Tự động lấy ảnh bìa từ video poster thành công!');
       } else {
-        if (!silent) alert('Không tìm thấy ảnh bìa trên trang Streamtape. Bạn vui lòng nhập thủ công.');
+        if (!silent) alert('Không tìm thấy ảnh bìa trên Streamtape. Bạn vui lòng nhập link ảnh thủ công.');
       }
     } catch (err) {
       console.error(err);
