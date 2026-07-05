@@ -27,20 +27,58 @@ function VideoForm({
     }
 
     setIsFetchingThumbnail(true);
+    
+    // Normalize URL to /v/ format to make sure we hit the main page with og:image metadata
+    const videoPageUrl = url.replace('streamtape.com/e/', 'streamtape.com/v/');
+    
+    // List of CORS Proxies to try sequentially
+    const proxies = [
+      {
+        url: (u) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+        parse: (res) => res.text()
+      },
+      {
+        url: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+        parse: (res) => res.text()
+      },
+      {
+        url: (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+        parse: async (res) => {
+          const json = await res.json();
+          return json.contents || '';
+        }
+      }
+    ];
+
+    let html = '';
+    let success = false;
+    
+    for (const proxy of proxies) {
+      try {
+        const proxyUrl = proxy.url(videoPageUrl);
+        const response = await fetch(proxyUrl);
+        if (response.ok) {
+          html = await proxy.parse(response);
+          if (html && html.trim().length > 0) {
+            success = true;
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn('CORS Proxy failed:', err);
+      }
+    }
+
+    if (!success) {
+      setIsFetchingThumbnail(false);
+      if (!silent) alert('Lỗi lấy ảnh bìa: Không thể kết nối với các máy chủ proxy CORS. Bạn vui lòng nhập link ảnh thủ công.');
+      return;
+    }
+
     try {
-      // Normalize URL to /v/ format to make sure we hit the main page with og:image metadata
-      const videoPageUrl = url.replace('streamtape.com/e/', 'streamtape.com/v/');
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(videoPageUrl)}`;
-
-      const response = await fetch(proxyUrl);
-      if (!response.ok) throw new Error('Không thể kết nối đến proxy CORS');
-
-      const resData = await response.json();
-      const html = resData.contents;
-
-      // Match og:image tag
-      const ogImageMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i) || 
-                           html.match(/<meta\s+content="([^"]+)"\s+property="og:image"/i);
+      // 1. Match og:image tag with quote-agnostic and order-agnostic regex
+      const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || 
+                           html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
 
       if (ogImageMatch && ogImageMatch[1]) {
         let thumbUrl = ogImageMatch[1];
@@ -49,20 +87,33 @@ function VideoForm({
         }
         setVideoData(prev => ({ ...prev, thumbnail: thumbUrl }));
         if (!silent) alert('Tự động lấy ảnh bìa thành công!');
-      } else {
-        // Fallback to poster="..." tag in page
-        const posterMatch = html.match(/poster="([^"]+)"/i) || 
-                            html.match(/poster\s*:\s*['"]([^'"]+)['"]/i);
-        if (posterMatch && posterMatch[1]) {
-          let thumbUrl = posterMatch[1];
-          if (thumbUrl.startsWith('//')) {
-            thumbUrl = 'https:' + thumbUrl;
-          }
-          setVideoData(prev => ({ ...prev, thumbnail: thumbUrl }));
-          if (!silent) alert('Tự động lấy ảnh bìa từ video poster thành công!');
-        } else {
-          if (!silent) alert('Không tìm thấy ảnh bìa trên trang Streamtape. Bạn vui lòng nhập thủ công.');
+        return;
+      }
+
+      // 2. Fallback to matching any thumb.tapecontent.net URL in the body html
+      const tapecontentMatch = html.match(/(?:https?:)?\/\/thumb\.tapecontent\.net\/[a-zA-Z0-9_\-\.\/]+/i);
+      if (tapecontentMatch && tapecontentMatch[0]) {
+        let thumbUrl = tapecontentMatch[0];
+        if (thumbUrl.startsWith('//')) {
+          thumbUrl = 'https:' + thumbUrl;
         }
+        setVideoData(prev => ({ ...prev, thumbnail: thumbUrl }));
+        if (!silent) alert('Tự động lấy ảnh bìa thành công!');
+        return;
+      }
+
+      // 3. Fallback to poster="..." tag in video element
+      const posterMatch = html.match(/poster=["']([^"']+)["']/i) || 
+                          html.match(/poster\s*:\s*['"]([^'"]+)['"]/i);
+      if (posterMatch && posterMatch[1]) {
+        let thumbUrl = posterMatch[1];
+        if (thumbUrl.startsWith('//')) {
+          thumbUrl = 'https:' + thumbUrl;
+        }
+        setVideoData(prev => ({ ...prev, thumbnail: thumbUrl }));
+        if (!silent) alert('Tự động lấy ảnh bìa từ video poster thành công!');
+      } else {
+        if (!silent) alert('Không tìm thấy ảnh bìa trên trang Streamtape. Bạn vui lòng nhập thủ công.');
       }
     } catch (err) {
       console.error(err);
