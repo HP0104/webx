@@ -4,32 +4,37 @@ import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight } from 'lucide-react';
 
 /**
- * Extract Streamtape video ID from URL.
- * e.g. https://streamtape.com/v/drV0m0gADjCkqVB/remote_control.mp4 → drV0m0gADjCkqVB
- * e.g. https://streamtape.com/e/drV0m0gADjCkqVB → drV0m0gADjCkqVB
+ * Extract VOE.sx video ID from URL.
+ * e.g. https://voe.sx/0fzybafk1vih → 0fzybafk1vih
+ * e.g. https://voe.sx/e/0fzybafk1vih → 0fzybafk1vih
  */
-function getStreamtapeVideoId(url) {
+function getVoeVideoId(url) {
   if (!url) return null;
-  const match = url.match(/streamtape\.com\/[ve]\/([a-zA-Z0-9]+)/);
-  return match ? match[1] : null;
+  const match = url.match(/voe\.sx\/(?:e\/)?([a-zA-Z0-9]+)/);
+  if (match && !['cache', 'embed', 'api'].includes(match[1])) {
+    return match[1];
+  }
+  return null;
 }
 
 /**
- * Get Streamtape thumbnail from video URL.
- * Uses the direct /tn/ URL pattern — no CORS proxy needed.
+ * Get VOE.sx thumbnail from video URL.
+ * Pattern: https://voe.sx/cache/{VIDEO_ID}_storyboard_L1.jpg
  */
-export function getStreamtapeThumbnail(url) {
-  const videoId = getStreamtapeVideoId(url);
+export function getVideoThumbnail(url) {
+  const videoId = getVoeVideoId(url);
   if (!videoId) return null;
-  return `https://streamtape.com/tn/${videoId}`;
+  return `https://voe.sx/cache/${videoId}_storyboard_L1.jpg`;
 }
 
 /**
- * Convert a Streamtape /v/ link to an embeddable /e/ link.
+ * Convert a VOE.sx URL to an embeddable /e/ link.
  */
 function toEmbedUrl(url) {
   if (!url) return '';
-  return url.replace('streamtape.com/v/', 'streamtape.com/e/');
+  const videoId = getVoeVideoId(url);
+  if (videoId) return `https://voe.sx/e/${videoId}`;
+  return url;
 }
 
 function VideoDetail() {
@@ -52,8 +57,10 @@ function VideoDetail() {
     );
   }
 
-  const embedUrl = toEmbedUrl(video.streamtapeUrl);
-  const thumbnail = video.thumbnail || getStreamtapeThumbnail(video.streamtapeUrl);
+  // Support both new field name (videoUrl) and legacy (streamtapeUrl)
+  const rawUrl = video.videoUrl || video.streamtapeUrl;
+  const embedUrl = toEmbedUrl(rawUrl);
+  const thumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
 
   return (
     <div className="container video-detail-page">

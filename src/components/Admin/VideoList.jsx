@@ -106,9 +106,9 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
                 >
                   <Trash2 size={12} /> Xóa
                 </button>
-                {video.streamtapeUrl && (
+                {(video.videoUrl || video.streamtapeUrl) && (
                   <a
-                    href={video.streamtapeUrl}
+                    href={video.videoUrl || video.streamtapeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="btn btn-outline"

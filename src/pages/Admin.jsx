@@ -49,7 +49,7 @@ function Admin() {
   // Video management state
   const INITIAL_VIDEO_STATE = {
     title: '',
-    streamtapeUrl: '',
+    videoUrl: '',
     thumbnail: '',
     category: 'vam',
     description: '',
@@ -173,7 +173,7 @@ function Admin() {
     setEditingVideoId(video.id);
     setVideoData({
       title: video.title || '',
-      streamtapeUrl: video.streamtapeUrl || '',
+      videoUrl: video.videoUrl || video.streamtapeUrl || '',
       thumbnail: video.thumbnail || '',
       category: video.category || 'vam',
       description: video.description || '',

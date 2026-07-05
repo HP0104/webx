@@ -2,7 +2,7 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film } from 'lucide-react';
-import { getStreamtapeThumbnail } from './VideoDetail';
+import { getVideoThumbnail } from './VideoDetail';
 
 const CATEGORY_LABELS = {
   all: 'Tất Cả Phim',
@@ -67,7 +67,8 @@ function Videos() {
       ) : (
         <div className="videos-grid">
           {sortedVideos.map(video => {
-            const thumbnail = video.thumbnail || getStreamtapeThumbnail(video.streamtapeUrl) || 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail';
+            const rawUrl = video.videoUrl || video.streamtapeUrl;
+            const thumbnail = video.thumbnail || getVideoThumbnail(rawUrl) || 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail';
             return (
               <Link
                 key={video.id}
