@@ -8,6 +8,8 @@ import UserManager from '../components/Admin/UserManager';
 import GameForm from '../components/Admin/GameForm';
 import GameList from '../components/Admin/GameList';
 import RawgAiSearch from '../components/Admin/RawgAiSearch';
+import VideoForm from '../components/Admin/VideoForm';
+import VideoList from '../components/Admin/VideoList';
 
 const GEMINI_API_KEY_STORAGE_KEY = 'web18p_gemini_api_key';
 
@@ -37,12 +39,25 @@ const INITIAL_FORM_STATE = {
 };
 
 function Admin() {
-  const { games, addGameToStore, deleteGameFromStore, updateGameInStore, revenue } = useAppContext();
+  const { games, addGameToStore, deleteGameFromStore, updateGameInStore, revenue, videos, addVideoToStore, deleteVideoFromStore, updateVideoInStore } = useAppContext();
   const [users, setUsers] = useState([]);
   const [editingGameId, setEditingGameId] = useState(null);
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY) || '');
   
   const [newGame, setNewGame] = useState(INITIAL_FORM_STATE);
+
+  // Video management state
+  const INITIAL_VIDEO_STATE = {
+    title: '',
+    streamtapeUrl: '',
+    thumbnail: '',
+    category: 'vam',
+    description: '',
+    tags: '',
+    views: 0
+  };
+  const [videoData, setVideoData] = useState(INITIAL_VIDEO_STATE);
+  const [editingVideoId, setEditingVideoId] = useState(null);
 
   useEffect(() => {
     if (geminiApiKey.trim()) {
@@ -141,6 +156,39 @@ function Admin() {
     alert('Đã điền dữ liệu RAWG + AI vào form!');
   };
 
+  // Video handlers
+  const handleSaveVideo = (data) => {
+    if (editingVideoId) {
+      updateVideoInStore(editingVideoId, data);
+      alert('Cập nhật phim thành công!');
+      setEditingVideoId(null);
+    } else {
+      addVideoToStore(data);
+      alert('Thêm phim thành công!');
+    }
+    setVideoData(INITIAL_VIDEO_STATE);
+  };
+
+  const handleEditVideo = (video) => {
+    setEditingVideoId(video.id);
+    setVideoData({
+      title: video.title || '',
+      streamtapeUrl: video.streamtapeUrl || '',
+      thumbnail: video.thumbnail || '',
+      category: video.category || 'vam',
+      description: video.description || '',
+      tags: Array.isArray(video.tags) ? video.tags.join(', ') : (video.tags || ''),
+      views: video.views || 0
+    });
+    const formEl = document.getElementById('admin-video-form');
+    if (formEl) window.scrollTo({ top: formEl.offsetTop - 80, behavior: 'smooth' });
+  };
+
+  const handleCancelVideoEdit = () => {
+    setEditingVideoId(null);
+    setVideoData(INITIAL_VIDEO_STATE);
+  };
+
   return (
     <div className="admin-page" style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <h1 style={{ color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>
@@ -178,6 +226,27 @@ function Admin() {
         geminiApiKey={geminiApiKey}
         onApplyToForm={handleApplyRawgToForm}
       />
+
+      {/* Video Management Section */}
+      <div style={{ borderTop: '2px solid var(--color-accent)', paddingTop: '2rem', marginTop: '1rem' }}>
+        <h2 style={{ color: 'var(--color-accent)', marginBottom: '1.5rem', fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          🎬 Quản Lý Phim
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+          <VideoForm
+            videoData={videoData}
+            setVideoData={setVideoData}
+            editingVideoId={editingVideoId}
+            onSaveVideo={handleSaveVideo}
+            onCancelEdit={handleCancelVideoEdit}
+          />
+          <VideoList
+            videos={videos || []}
+            onEditClick={handleEditVideo}
+            onDeleteClick={deleteVideoFromStore}
+          />
+        </div>
+      </div>
     </div>
   );
 }

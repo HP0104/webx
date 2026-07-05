@@ -15,6 +15,7 @@ import Category from './pages/Category';
 import Blog from './pages/Blog';
 import Report from './pages/Report';
 import GameSearch from './pages/GameSearch';
+import Videos from './pages/Videos';
 import { INITIAL_GAMES } from './data/games';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -86,6 +87,11 @@ function PageTitle({ games }) {
     } else if (pathname === '/ai-search') {
       pageTitle = 'Tìm Kiếm Game Bằng AI';
       description = 'Tìm kiếm game từ cơ sở dữ liệu RAWG và tự động viết bài đánh giá bằng AI trên WEB18P.';
+    } else if (pathname.startsWith('/videos')) {
+      const videoCat = pathname.split('/').filter(Boolean)[1] || 'all';
+      const catNames = { all: 'Tất Cả Phim', vam: 'Phim VAM', '3d': 'Phim 3D' };
+      pageTitle = catNames[videoCat] || 'Phim';
+      description = `${pageTitle} trên WEB18P.`;
     }
 
     document.title = `${pageTitle} | WEB18P`;
@@ -130,6 +136,10 @@ function App() {
   const [games, setGames] = useState([]);
   const [loadingGames, setLoadingGames] = useState(true);
   const [revenue] = useState(0);
+
+  // Video state
+  const [videos, setVideos] = useState([]);
+  const [loadingVideos, setLoadingVideos] = useState(true);
 
   // Sync games from Firestore in Real-time & Clean up test games
   React.useEffect(() => {
@@ -180,6 +190,23 @@ function App() {
     }, (error) => {
       console.warn("Firestore games sub error:", error.message);
       setLoadingGames(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Sync videos from Firestore in Real-time
+  React.useEffect(() => {
+    const q = query(collection(db, 'videos'));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const videosList = [];
+      querySnapshot.forEach((docSnap) => {
+        videosList.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      setVideos(videosList);
+      setLoadingVideos(false);
+    }, (error) => {
+      console.warn('Firestore videos sub error:', error.message);
+      setLoadingVideos(false);
     });
     return () => unsubscribe();
   }, []);
@@ -359,10 +386,48 @@ function App() {
     }
   };
 
+  // ---- Video CRUD ----
+  const addVideoToStore = async (newVideo) => {
+    const videoId = Date.now().toString();
+    const videoData = { ...newVideo, id: videoId };
+    setVideos(prev => [...prev, videoData]);
+    try {
+      await setDoc(doc(db, 'videos', videoId), videoData);
+      return true;
+    } catch (error) {
+      console.warn('Firestore error adding video:', error);
+      return true;
+    }
+  };
+
+  const deleteVideoFromStore = async (videoId) => {
+    setVideos(prev => prev.filter(v => v.id.toString() !== videoId.toString()));
+    try {
+      await deleteDoc(doc(db, 'videos', videoId.toString()));
+      return true;
+    } catch (error) {
+      console.warn('Firestore error deleting video:', error);
+      return true;
+    }
+  };
+
+  const updateVideoInStore = async (videoId, updatedData) => {
+    const videoData = { ...updatedData, id: videoId };
+    setVideos(prev => prev.map(v => v.id.toString() === videoId.toString() ? videoData : v));
+    try {
+      await updateDoc(doc(db, 'videos', videoId.toString()), videoData);
+      return true;
+    } catch (error) {
+      console.warn('Firestore error updating video:', error);
+      return true;
+    }
+  };
+
   return (
     <AppContext.Provider value={{ 
       user, balance, ownedGames, logout, buyGame, updateUserInfo,
-      games, loadingGames, revenue, addGameToStore, deleteGameFromStore, updateGameInStore
+      games, loadingGames, revenue, addGameToStore, deleteGameFromStore, updateGameInStore,
+      videos, loadingVideos, addVideoToStore, deleteVideoFromStore, updateVideoInStore
     }}>
       <Router>
         <PageTitle games={games} />
@@ -388,6 +453,7 @@ function App() {
                 <Route path="/blog" element={<Blog />} />
                 <Route path="/report" element={<Report />} />
                 <Route path="/ai-search" element={<GameSearch />} />
+                <Route path="/videos/:category" element={<Videos />} />
               </Routes>
 
               <div className="container" style={{ paddingTop: 0, marginTop: '2rem' }}>
