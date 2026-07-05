@@ -3,8 +3,6 @@ import { Gamepad2, TrendingUp, Clock, Star, Eye, ChevronLeft, ChevronRight } fro
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
-import { ADS_CONFIG } from '../config/ads';
-import AdBanner from '../components/AdBanner';
 
 function Home() {
   const { games, loadingGames } = useAppContext();
@@ -256,9 +254,6 @@ function Home() {
         </>
       )}
 
-      {/* Quảng cáo vị trí 2: Giữa Game mới và Game hot */}
-      <AdBanner config={ADS_CONFIG.slot2} />
-
       {/* ==========================================
           PHẦN 2: GAME HOT NHẤT (Sắp xếp theo số lượng views truy cập chi tiết)
           ========================================== */}
@@ -428,9 +423,6 @@ function Home() {
           ))}
         </div>
       )}
-
-      {/* Quảng cáo vị trí 3: Cuối trang */}
-      <AdBanner config={ADS_CONFIG.slot3} />
 
     </div>
   );

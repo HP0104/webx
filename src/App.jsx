@@ -114,6 +114,14 @@ function RouteAdBanner() {
   return <AdBanner key={routeKey} config={ADS_CONFIG.slot1} />;
 }
 
+function RouteAdBannerBottom() {
+  const location = useLocation();
+  const routeKey = `${location.pathname}${location.search}-bottom`;
+
+  return <AdBanner key={routeKey} config={ADS_CONFIG.slot2} />;
+}
+
+
 function App() {
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(0);
@@ -382,6 +390,10 @@ function App() {
                 <Route path="/report" element={<Report />} />
                 <Route path="/ai-search" element={<GameSearch />} />
               </Routes>
+
+              <div className="container" style={{ paddingTop: 0, marginTop: '2rem' }}>
+                <RouteAdBannerBottom />
+              </div>
             </main>
 
             <aside className="sidebar">
