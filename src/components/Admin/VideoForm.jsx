@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Film, Eye, X, ExternalLink } from 'lucide-react';
+import { Film, Eye, X, ExternalLink, Image } from 'lucide-react';
 
 /**
  * Convert a Streamtape /v/ link to an embeddable /e/ link.
@@ -17,6 +17,60 @@ function VideoForm({
   onCancelEdit
 }) {
   const [showPreview, setShowPreview] = useState(false);
+  const [isFetchingThumbnail, setIsFetchingThumbnail] = useState(false);
+
+  const handleFetchThumbnail = async (optionalUrl, silent = false) => {
+    const url = (typeof optionalUrl === 'string' ? optionalUrl : videoData.streamtapeUrl).trim();
+    if (!url) {
+      if (!silent) alert('Vui lòng nhập link Streamtape trước!');
+      return;
+    }
+
+    setIsFetchingThumbnail(true);
+    try {
+      // Normalize URL to /v/ format to make sure we hit the main page with og:image metadata
+      const videoPageUrl = url.replace('streamtape.com/e/', 'streamtape.com/v/');
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(videoPageUrl)}`;
+
+      const response = await fetch(proxyUrl);
+      if (!response.ok) throw new Error('Không thể kết nối đến proxy CORS');
+
+      const resData = await response.json();
+      const html = resData.contents;
+
+      // Match og:image tag
+      const ogImageMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i) || 
+                           html.match(/<meta\s+content="([^"]+)"\s+property="og:image"/i);
+
+      if (ogImageMatch && ogImageMatch[1]) {
+        let thumbUrl = ogImageMatch[1];
+        if (thumbUrl.startsWith('//')) {
+          thumbUrl = 'https:' + thumbUrl;
+        }
+        setVideoData(prev => ({ ...prev, thumbnail: thumbUrl }));
+        if (!silent) alert('Tự động lấy ảnh bìa thành công!');
+      } else {
+        // Fallback to poster="..." tag in page
+        const posterMatch = html.match(/poster="([^"]+)"/i) || 
+                            html.match(/poster\s*:\s*['"]([^'"]+)['"]/i);
+        if (posterMatch && posterMatch[1]) {
+          let thumbUrl = posterMatch[1];
+          if (thumbUrl.startsWith('//')) {
+            thumbUrl = 'https:' + thumbUrl;
+          }
+          setVideoData(prev => ({ ...prev, thumbnail: thumbUrl }));
+          if (!silent) alert('Tự động lấy ảnh bìa từ video poster thành công!');
+        } else {
+          if (!silent) alert('Không tìm thấy ảnh bìa trên trang Streamtape. Bạn vui lòng nhập thủ công.');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      if (!silent) alert('Lỗi lấy ảnh bìa: ' + err.message);
+    } finally {
+      setIsFetchingThumbnail(false);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -70,9 +124,29 @@ function VideoForm({
               placeholder="Link Streamtape (ví dụ: https://streamtape.com/v/xxxx/name.mp4)"
               value={videoData.streamtapeUrl}
               onChange={e => setVideoData({ ...videoData, streamtapeUrl: e.target.value })}
+              onBlur={(e) => handleFetchThumbnail(e.target.value, true)}
               style={{ flex: 1, margin: 0 }}
               required
             />
+            <button
+              type="button"
+              onClick={() => handleFetchThumbnail(videoData.streamtapeUrl, false)}
+              className="btn"
+              style={{
+                background: 'var(--color-success)',
+                color: 'white',
+                border: 'none',
+                padding: '0 1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                whiteSpace: 'nowrap'
+              }}
+              disabled={isFetchingThumbnail || !videoData.streamtapeUrl.trim()}
+            >
+              <Image size={16} />
+              {isFetchingThumbnail ? 'Đang lấy...' : 'Lấy ảnh bìa'}
+            </button>
             <button
               type="button"
               onClick={() => setShowPreview(!showPreview)}
