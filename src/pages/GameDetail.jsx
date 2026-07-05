@@ -59,15 +59,15 @@ function GameDetail() {
   };
 
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '4rem' }}>
+    <div className="game-detail-page" style={{ maxWidth: '1000px', margin: '0 auto', paddingBottom: '4rem' }}>
       <button onClick={() => navigate(-1)} className="btn" style={{ background: 'transparent', color: 'var(--color-text-muted)', marginBottom: '1.5rem', padding: '0' }}>
         <ArrowLeft size={20} /> Quay lại
       </button>
       
       <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-        <img src={game.image} alt={game.title} style={{ width: '100%', height: '400px', objectFit: 'cover' }} />
+        <img className="detail-hero-image" src={game.image} alt={game.title} style={{ width: '100%', height: '400px', objectFit: 'cover' }} />
         
-        <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
+        <div className="detail-body-grid" style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
           <div>
             <h1 style={{ color: 'var(--color-text-light)', fontSize: '2.5rem', marginBottom: '1rem' }}>{game.title}</h1>
             
@@ -83,7 +83,7 @@ function GameDetail() {
               {game.description}
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '2rem' }}>
+            <div className="detail-info-list" style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '2rem' }}>
               <span>Nhà phát triển:</span>
               <span style={{ color: 'var(--color-accent)' }}>{game.developer}</span>
               
@@ -114,7 +114,7 @@ function GameDetail() {
               <h3 style={{ color: 'var(--color-text-light)', marginBottom: '1.5rem', fontSize: '1.2rem', fontWeight: '600', borderLeft: '4px solid var(--color-accent)', paddingLeft: '1rem' }}>
                 Ảnh Minh Họa
               </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+              <div className="detail-screenshot-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
                 {game.screenshots && (Array.isArray(game.screenshots) ? game.screenshots : game.screenshots.split(',')).map((src, i) => (
                   <div key={i} style={{ borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)', transition: 'transform 0.3s ease' }} onMouseOver={e => e.currentTarget.style.transform = 'scale(1.02)'} onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}>
                     <img src={src.trim()} alt={`screenshot-${i}`} style={{ width: '100%', aspectRatio: '16/9', objectFit: 'cover', cursor: 'pointer' }} onClick={() => window.open(src.trim(), '_blank')} />
@@ -229,7 +229,7 @@ function GameDetail() {
 
           </div>
 
-          <div style={{ position: 'sticky', top: '100px', backgroundColor: 'var(--color-bg-secondary)', padding: '1.5rem', borderRadius: '12px', height: 'fit-content', border: '1px solid var(--color-border)' }}>
+          <div className="detail-buy-panel" style={{ position: 'sticky', top: '100px', backgroundColor: 'var(--color-bg-secondary)', padding: '1.5rem', borderRadius: '12px', height: 'fit-content', border: '1px solid var(--color-border)' }}>
             <h2 style={{ color: 'var(--color-text-light)', marginBottom: '1.5rem', fontSize: '1.2rem' }}>Mua {game.title}</h2>
             <div style={{ fontSize: '1.8rem', color: 'var(--color-success)', fontWeight: 'bold', marginBottom: '1.5rem' }}>
               {game.price === 0 ? 'Miễn phí' : `${game.price.toLocaleString('vi-VN')} VNĐ`}

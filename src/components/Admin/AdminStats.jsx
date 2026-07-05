@@ -2,7 +2,7 @@ import React from 'react';
 
 function AdminStats({ usersCount, revenue, gamesCount }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
+    <div className="admin-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
       <div className="card" style={{ borderLeft: '4px solid var(--color-accent)' }}>
         <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>Tổng Tài khoản</div>
         <div style={{ fontSize: '1.5rem', color: 'var(--color-text-light)', fontWeight: 'bold' }}>{usersCount}</div>

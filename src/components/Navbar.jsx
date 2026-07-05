@@ -20,7 +20,11 @@ function Navbar() {
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    navigate(`/games?search=${encodeURIComponent(navSearch.trim())}`);
+    const keyword = navSearch.trim();
+    if (!keyword) return;
+    navigate(`/games?search=${encodeURIComponent(keyword)}`);
+    setShowSuggestions(false);
+    setIsMenuOpen(false);
   };
 
   const handleLinkClick = (e, link) => {
@@ -143,6 +147,7 @@ function Navbar() {
       <form onSubmit={handleSearchSubmit} className="nav-search-form" style={{ position: 'relative', display: 'flex', alignItems: 'center', margin: '0 1rem' }}>
         <input 
           type="text" 
+          className="nav-search-input"
           placeholder="Tìm game..." 
           value={navSearch} 
           onChange={e => {
@@ -177,13 +182,13 @@ function Navbar() {
             }
           }}
         />
-        <button type="submit" style={{ position: 'absolute', right: '12px', background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}>
+        <button type="submit" className="nav-search-button" style={{ position: 'absolute', right: '12px', background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}>
           <Search size={16} />
         </button>
 
         {/* Live Search Suggestions Dropdown Overlay */}
         {showSuggestions && navSearch.trim() && (
-          <div style={{
+          <div className="nav-search-suggestions" style={{
             position: 'absolute',
             top: 'calc(100% + 8px)',
             right: 0,
@@ -218,6 +223,7 @@ function Navbar() {
               return matches.map(game => (
                 <Link
                   key={game.id}
+                  className="nav-search-suggestion"
                   to={getGamePath(game)}
                   onClick={() => {
                     setNavSearch('');

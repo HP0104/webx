@@ -121,7 +121,6 @@ function RouteAdBannerBottom() {
   return <AdBanner key={routeKey} config={ADS_CONFIG.slot2} />;
 }
 
-
 function App() {
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(0);

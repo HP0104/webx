@@ -103,13 +103,13 @@ function Report() {
   const selectedReporter = uniqueReporters.find(r => r.id === selectedUserId);
 
   return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', gap: '1.5rem' }}>
+    <div className="report-page" style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', gap: '1.5rem' }}>
       <div style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
         <Bug size={24} color="var(--color-accent)" />
         <h1 style={{ color: 'var(--color-text-light)', fontSize: '1.6rem', margin: 0 }}>HỆ THỐNG BÁO LỖI & HỖ TRỢ TRỰC TUYẾN</h1>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '300px 1fr' : '1fr', flex: 1, backgroundColor: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden', height: '100%' }}>
+      <div className="report-grid" style={{ display: 'grid', gridTemplateColumns: isAdmin ? '300px 1fr' : '1fr', flex: 1, backgroundColor: 'var(--color-card-bg)', border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden', height: '100%' }}>
         
         {/* Admin Left Panel: Reporters List */}
         {isAdmin && (
@@ -281,7 +281,7 @@ function Report() {
                   </div>
                 )}
 
-                <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+                <form className="report-input-form" onSubmit={handleSendMessage} style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
                   {/* Nút đính kèm ảnh bằng Icon */}
                   <label 
                     style={{ 

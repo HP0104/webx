@@ -144,6 +144,7 @@ function ExoClickAdBanner({ config }) {
       style={{
         width: config.containerWidth || '100%',
         maxWidth: config.containerMaxWidth || '100%',
+        minWidth: 0,
         height: 'auto',
         maxHeight: config.height ? `calc(${config.height} + 2.5rem)` : '282px',
         margin: config.margin || '0 auto 2.5rem',
@@ -181,6 +182,8 @@ function ExoClickAdBanner({ config }) {
         className="ad-banner-scroll-container"
         style={{
           width: '100%',
+          minWidth: 0,
+          maxWidth: '100%',
           display: 'flex',
           flexDirection: 'row',
           alignItems: 'center',
@@ -198,6 +201,8 @@ function ExoClickAdBanner({ config }) {
             key={zoneId}
             style={{
               width: `min(100%, ${config.width || '300px'})`,
+              maxWidth: '100%',
+              minWidth: 0,
               height: config.height || '250px',
               display: 'flex',
               alignItems: 'center',

@@ -92,7 +92,7 @@ function Home() {
               animation: skeleton-pulse 1.5s infinite ease-in-out;
             }
           `}</style>
-          <div style={{ 
+          <div className="responsive-game-grid" style={{ 
             display: 'grid', 
             gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
             gap: '2.5rem 1.5rem',
@@ -121,7 +121,7 @@ function Home() {
         </div>
       ) : (
         <>
-          <div style={{ 
+          <div className="responsive-game-grid" style={{ 
             display: 'grid', 
             gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
             gap: '2.5rem 1.5rem',
@@ -182,7 +182,7 @@ function Home() {
 
           {/* Điều hướng Phân trang (Pagination) */}
           {totalPages > 1 && (
-            <div style={{ 
+            <div className="pagination-row" style={{ 
               display: 'flex', 
               justifyContent: 'center', 
               alignItems: 'center', 
@@ -264,7 +264,7 @@ function Home() {
         </div>
         
         {/* Hot tabs */}
-        <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+        <div className="hot-filter-tabs" style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
           <button 
             onClick={() => setHotFilter('day')} 
             className="btn" 
@@ -317,7 +317,7 @@ function Home() {
       </div>
 
       {loadingGames ? (
-        <div style={{ 
+        <div className="responsive-game-grid" style={{ 
           display: 'grid', 
           gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
           gap: '2.5rem 1.5rem'
@@ -343,7 +343,7 @@ function Home() {
           <p style={{ color: 'var(--color-text-muted)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>Hãy bấm xem chi tiết các game để tạo bảng xếp hạng xu hướng!</p>
         </div>
       ) : (
-        <div style={{ 
+        <div className="responsive-game-grid" style={{ 
           display: 'grid', 
           gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
           gap: '2.5rem 1.5rem'

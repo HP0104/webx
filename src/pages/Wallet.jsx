@@ -312,8 +312,8 @@ function Wallet() {
   const isGatewayConfigured = selectedGateway === 'sepay' ? isSePayTokenValid : isPayOSConfigured;
 
   return (
-    <div style={{ maxWidth: '850px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '3rem' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem' }}>
+    <div className="wallet-page" style={{ maxWidth: '850px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '3rem' }}>
+      <div className="wallet-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem' }}>
       
       {/* CỘT TRÁI: CHỌN MỆNH GIÁ & CỔNG NẠP */}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -559,7 +559,7 @@ function Wallet() {
             Bạn chưa thực hiện giao dịch nạp tiền nào.
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <div className="responsive-table-wrap" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.9rem' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>

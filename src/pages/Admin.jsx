@@ -142,7 +142,7 @@ function Admin() {
   };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+    <div className="admin-page" style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <h1 style={{ color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>
         Bảng điều khiển Quản trị
       </h1>
@@ -150,7 +150,7 @@ function Admin() {
       {/* Admin stats */}
       <AdminStats usersCount={users.length} revenue={revenue} gamesCount={games.length} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+      <div className="admin-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
         {/* User manager */}
         <UserManager users={users} games={games} />
 

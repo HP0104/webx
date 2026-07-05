@@ -81,7 +81,7 @@ function Profile() {
   };
 
   return (
-    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+    <div className="fade-in profile-page" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <div className="section-header">
         <h2 className="section-title">Hồ sơ Tài khoản</h2>
         <div className="section-line"></div>
@@ -99,7 +99,7 @@ function Profile() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem' }}>
+      <div className="profile-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
@@ -161,9 +161,9 @@ function Profile() {
                     const isActive = ownership.isActive;
 
                     return (
-                    <div key={game.id} style={{ display: 'flex', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
+                    <div key={game.id} className="profile-library-item" style={{ display: 'flex', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
                       <img src={game.image} alt={game.title} style={{ width: '140px', height: '90px', objectFit: 'cover' }} />
-                      <div style={{ padding: '1rem', flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="profile-library-body" style={{ padding: '1rem', flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <h3 style={{ color: 'var(--color-text-light)', fontSize: '1rem', marginBottom: '0.3rem' }}>{game.title}</h3>
                           <span style={{ color: isActive ? 'var(--color-success)' : '#ff7875', fontSize: '0.75rem', fontWeight: '600' }}>

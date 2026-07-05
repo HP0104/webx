@@ -10,7 +10,7 @@ function GameList({ games, onEditClick, onDeleteClick }) {
   return (
     <div className="card">
       <h2 style={{ color: 'var(--color-text-light)', marginBottom: '1.5rem', fontSize: '1.2rem' }}>Kho Game</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+      <div className="admin-game-list-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
         {games.map(game => (
           <div key={game.id} style={{ display: 'flex', gap: '1rem', padding: '1rem', backgroundColor: 'var(--color-bg-main)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
             <img src={game.image} alt={game.title} style={{ width: '80px', height: '50px', objectFit: 'cover', borderRadius: '4px' }} />
