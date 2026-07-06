@@ -209,6 +209,10 @@ export function AdBlockWall() {
     setChecking(true);
     resetAdBlockCache();
     const result = await isAdBlockActive();
+    if (!result) {
+      window.location.reload();
+      return;
+    }
     setBlocked(result);
     setChecking(false);
     setRechecking(false);
