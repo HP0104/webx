@@ -351,53 +351,6 @@ function ExoClickAdBanner({ config }) {
   // Khi bị chặn, AdBlockWall đã xử lý overlay → ẩn slot này
   if (adState === 'blocked') return null;
 
-  // Khi ExoClick không có quảng cáo trả về (No-Fill / Localhost / Chưa duyệt domain)
-  if (adState === 'no-fill') {
-    return (
-      <div
-        style={{
-          width: config.containerWidth || '100%',
-          maxWidth: config.containerMaxWidth || '100%',
-          minWidth: 0,
-          height: config.height || '90px',
-          margin: config.margin || '0 auto 2.5rem',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          background: 'linear-gradient(135deg, rgba(255, 183, 77, 0.08), rgba(255, 152, 0, 0.03))',
-          border: '1px solid rgba(255, 183, 77, 0.2)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '1rem',
-          position: 'relative'
-        }}
-      >
-        <span style={{
-          position: 'absolute',
-          top: '8px',
-          right: '8px',
-          background: 'rgba(255, 183, 77, 0.2)',
-          color: '#ffb74d',
-          fontSize: '0.65rem',
-          padding: '2px 6px',
-          borderRadius: '4px',
-          fontWeight: 'bold',
-          letterSpacing: '0.5px'
-        }}>
-          Tài trợ
-        </span>
-        <div style={{ textAlign: 'center' }}>
-          <p style={{ margin: '0 0 4px', color: '#fff', fontSize: '0.95rem', fontWeight: 600 }}>
-            🚀 Trải nghiệm xem Video Mượt mà cùng VOE.sx
-          </p>
-          <span style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '0.8rem' }}>
-            Tốc độ cao • Không giật lag • Tương thích mọi thiết bị
-          </span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
       ref={containerRef}
