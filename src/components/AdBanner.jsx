@@ -5,12 +5,81 @@ const EXOCLICK_SCRIPT_ID = 'exoclick-ad-provider';
 const EXOCLICK_FILL_CHECK_DELAY = 4500;
 const ADBLOCK_DETECT_DELAY = 3000;
 
-// ─── Ad Blocker Detection ───────────────────────────────────────────
+// ─── Ad Blocker Detection (Multi-signal) ────────────────────────────
+// Sử dụng 3 phương pháp kết hợp để phát hiện mọi loại ad blocker,
+// bao gồm cả ad blocker tích hợp trong trình duyệt (Cốc Cốc, Brave, Opera...)
 
-function detectAdBlocker() {
+/**
+ * Phương pháp 1: Bait Div
+ * Tạo element giả có class/id/kích thước giống quảng cáo.
+ * Ad blocker thường inject CSS rules để ẩn các element này.
+ */
+function detectByBaitDiv() {
+  return new Promise((resolve) => {
+    const bait = document.createElement('div');
+    bait.className = 'ad-banner adsbox ad-placeholder ads pub_300x250 textAd';
+    bait.setAttribute('data-ad-slot', 'test');
+    Object.assign(bait.style, {
+      width: '300px',
+      height: '250px',
+      position: 'absolute',
+      left: '-9999px',
+      top: '-9999px',
+      pointerEvents: 'none',
+      opacity: '0.01',
+      overflow: 'hidden',
+    });
+    bait.innerHTML = '&nbsp;';
+    document.body.appendChild(bait);
+
+    // Cho CSS rules có thời gian apply
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const rect = bait.getBoundingClientRect();
+        const style = window.getComputedStyle(bait);
+        const isHidden =
+          rect.height === 0 ||
+          rect.width === 0 ||
+          style.display === 'none' ||
+          style.visibility === 'hidden' ||
+          style.opacity === '0';
+        bait.remove();
+        resolve(isHidden);
+      }, 200);
+    });
+  });
+}
+
+/**
+ * Phương pháp 2: Fetch Test
+ * Thử fetch URL của ad script. Ad blocker chặn ở network level sẽ fail.
+ */
+function detectByFetch() {
+  return new Promise((resolve) => {
+    // Thêm cache-buster để tránh cache
+    const testUrl = `${EXOCLICK_PROVIDER_SRC}?_t=${Date.now()}`;
+    fetch(testUrl, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' })
+      .then(() => {
+        // mode: 'no-cors' luôn trả opaque response, nhưng nếu bị chặn hoàn toàn thì sẽ reject
+        resolve(false);
+      })
+      .catch(() => {
+        resolve(true);
+      });
+
+    // Timeout
+    setTimeout(() => resolve(true), ADBLOCK_DETECT_DELAY);
+  });
+}
+
+/**
+ * Phương pháp 3: Script Load Test
+ * Tạo script tag và kiểm tra xem có load được không.
+ */
+function detectByScript() {
   return new Promise((resolve) => {
     const testScript = document.createElement('script');
-    testScript.src = EXOCLICK_PROVIDER_SRC;
+    testScript.src = `${EXOCLICK_PROVIDER_SRC}?_t=${Date.now()}`;
     testScript.async = true;
     testScript.style.display = 'none';
 
@@ -25,17 +94,27 @@ function detectAdBlocker() {
     testScript.onerror = () => done(true);
     testScript.onload = () => {
       setTimeout(() => {
-        if (typeof window.AdProvider === 'undefined') {
-          done(true);
-        } else {
-          done(false);
-        }
+        done(typeof window.AdProvider === 'undefined');
       }, 500);
     };
 
     document.head.appendChild(testScript);
     setTimeout(() => done(true), ADBLOCK_DETECT_DELAY);
   });
+}
+
+/**
+ * Kết hợp tất cả signals — nếu BẤT KỲ phương pháp nào phát hiện → blocked
+ */
+async function detectAdBlocker() {
+  const results = await Promise.all([
+    detectByBaitDiv(),
+    detectByFetch(),
+    detectByScript(),
+  ]);
+
+  // Nếu ít nhất 1 method detect → ad blocker đang bật
+  return results.some(blocked => blocked === true);
 }
 
 let _adBlockDetected = null;
@@ -47,6 +126,24 @@ async function isAdBlockActive() {
 
 function resetAdBlockCache() {
   _adBlockDetected = null;
+}
+
+/**
+ * Delayed check: kiểm tra xem ExoClick ad slots có thực sự render content không.
+ * Gọi sau khi ExoClick đã có thời gian load (5-6 giây).
+ * Nếu tất cả slots đều trống → ad blocker đang chặn silently.
+ */
+export function checkAdSlotsEmpty() {
+  const slots = document.querySelectorAll('ins[data-zoneid]');
+  if (slots.length === 0) return false; // Không có slot nào → không cần check
+  
+  let allEmpty = true;
+  slots.forEach((slot) => {
+    const hasContent = slot.querySelector('iframe, img, a, div');
+    if (hasContent) allEmpty = false;
+  });
+  
+  return allEmpty;
 }
 
 // ─── ExoClick Helpers ───────────────────────────────────────────────
@@ -120,6 +217,20 @@ export function AdBlockWall() {
   useEffect(() => {
     checkAdBlock();
   }, [checkAdBlock]);
+
+  // Delayed check: sau 6 giây, kiểm tra xem ad slots có thực sự render không.
+  // Bắt trường hợp Cốc Cốc/Brave chặn silent (script load nhưng ad không hiện).
+  useEffect(() => {
+    if (blocked) return; // Đã hiện wall rồi, không cần check thêm
+
+    const timer = setTimeout(() => {
+      if (checkAdSlotsEmpty()) {
+        setBlocked(true);
+      }
+    }, 6000);
+
+    return () => clearTimeout(timer);
+  }, [blocked, checking]);
 
   // Không bị chặn hoặc đang kiểm tra lần đầu → không hiện gì
   if (!blocked || (checking && !rechecking)) return null;
