@@ -5,81 +5,17 @@ const EXOCLICK_SCRIPT_ID = 'exoclick-ad-provider';
 const EXOCLICK_FILL_CHECK_DELAY = 4500;
 const ADBLOCK_DETECT_DELAY = 3000;
 
-// ─── Ad Blocker Detection (Multi-signal) ────────────────────────────
-// Sử dụng 3 phương pháp kết hợp để phát hiện mọi loại ad blocker,
-// bao gồm cả ad blocker tích hợp trong trình duyệt (Cốc Cốc, Brave, Opera...)
+// ─── Ad Blocker Detection ───────────────────────────────────────────
 
-/**
- * Phương pháp 1: Bait Div
- * Tạo element giả có class/id/kích thước giống quảng cáo.
- * Ad blocker thường inject CSS rules để ẩn các element này.
- */
-function detectByBaitDiv() {
+function detectAdBlocker() {
   return new Promise((resolve) => {
-    const bait = document.createElement('div');
-    bait.className = 'ad-banner adsbox ad-placeholder ads pub_300x250 textAd';
-    bait.setAttribute('data-ad-slot', 'test');
-    Object.assign(bait.style, {
-      width: '300px',
-      height: '250px',
-      position: 'absolute',
-      left: '-9999px',
-      top: '-9999px',
-      pointerEvents: 'none',
-      opacity: '0.01',
-      overflow: 'hidden',
-    });
-    bait.innerHTML = '&nbsp;';
-    document.body.appendChild(bait);
+    if (typeof window.AdProvider !== 'undefined') {
+      resolve(false);
+      return;
+    }
 
-    // Cho CSS rules có thời gian apply
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        const rect = bait.getBoundingClientRect();
-        const style = window.getComputedStyle(bait);
-        const isHidden =
-          rect.height === 0 ||
-          rect.width === 0 ||
-          style.display === 'none' ||
-          style.visibility === 'hidden' ||
-          style.opacity === '0';
-        bait.remove();
-        resolve(isHidden);
-      }, 200);
-    });
-  });
-}
-
-/**
- * Phương pháp 2: Fetch Test
- * Thử fetch URL của ad script. Ad blocker chặn ở network level sẽ fail.
- */
-function detectByFetch() {
-  return new Promise((resolve) => {
-    // Thêm cache-buster để tránh cache
-    const testUrl = `${EXOCLICK_PROVIDER_SRC}?_t=${Date.now()}`;
-    fetch(testUrl, { method: 'HEAD', mode: 'no-cors', cache: 'no-store' })
-      .then(() => {
-        // mode: 'no-cors' luôn trả opaque response, nhưng nếu bị chặn hoàn toàn thì sẽ reject
-        resolve(false);
-      })
-      .catch(() => {
-        resolve(true);
-      });
-
-    // Timeout
-    setTimeout(() => resolve(true), ADBLOCK_DETECT_DELAY);
-  });
-}
-
-/**
- * Phương pháp 3: Script Load Test
- * Tạo script tag và kiểm tra xem có load được không.
- */
-function detectByScript() {
-  return new Promise((resolve) => {
     const testScript = document.createElement('script');
-    testScript.src = `${EXOCLICK_PROVIDER_SRC}?_t=${Date.now()}`;
+    testScript.src = EXOCLICK_PROVIDER_SRC;
     testScript.async = true;
     testScript.style.display = 'none';
 
@@ -101,20 +37,6 @@ function detectByScript() {
     document.head.appendChild(testScript);
     setTimeout(() => done(true), ADBLOCK_DETECT_DELAY);
   });
-}
-
-/**
- * Kết hợp tất cả signals — nếu BẤT KỲ phương pháp nào phát hiện → blocked
- */
-async function detectAdBlocker() {
-  const results = await Promise.all([
-    detectByBaitDiv(),
-    detectByFetch(),
-    detectByScript(),
-  ]);
-
-  // Nếu ít nhất 1 method detect → ad blocker đang bật
-  return results.some(blocked => blocked === true);
 }
 
 let _adBlockDetected = null;
@@ -139,8 +61,9 @@ export function checkAdSlotsEmpty() {
   
   let allEmpty = true;
   slots.forEach((slot) => {
-    const hasContent = slot.querySelector('iframe, img, a, div');
-    if (hasContent) allEmpty = false;
+    if (slot.innerHTML.trim() !== '' || slot.children.length > 0) {
+      allEmpty = false;
+    }
   });
   
   return allEmpty;
@@ -203,23 +126,17 @@ function getExoClickZones(config) {
 export function AdBlockWall() {
   const [blocked, setBlocked] = useState(false);
   const [checking, setChecking] = useState(true);
-  const [rechecking, setRechecking] = useState(false);
 
-  const checkAdBlock = useCallback(async (isUserAction = false) => {
+  const checkAdBlock = useCallback(async () => {
     setChecking(true);
     resetAdBlockCache();
     const result = await isAdBlockActive();
-    if (isUserAction && !result) {
-      window.location.reload();
-      return;
-    }
     setBlocked(result);
     setChecking(false);
-    setRechecking(false);
   }, []);
 
   useEffect(() => {
-    checkAdBlock(false);
+    checkAdBlock();
   }, [checkAdBlock]);
 
   // Delayed check: sau 6 giây, kiểm tra xem ad slots có thực sự render không.
@@ -237,7 +154,7 @@ export function AdBlockWall() {
   }, [blocked, checking]);
 
   // Không bị chặn hoặc đang kiểm tra lần đầu → không hiện gì
-  if (!blocked || (checking && !rechecking)) return null;
+  if (!blocked || checking) return null;
 
   return (
     <div style={{
@@ -348,47 +265,31 @@ export function AdBlockWall() {
         {/* Nút kiểm tra lại */}
         <button
           onClick={() => {
-            setRechecking(true);
-            checkAdBlock(true);
+            window.location.reload();
           }}
-          disabled={rechecking}
           style={{
             width: '100%',
             padding: '0.85rem 1.5rem',
             borderRadius: '12px',
             border: 'none',
-            background: rechecking
-              ? 'rgba(255, 183, 77, 0.1)'
-              : 'linear-gradient(135deg, #ffb74d, #ff9800)',
-            color: rechecking ? 'rgba(255, 183, 77, 0.5)' : '#1a1a2e',
+            background: 'linear-gradient(135deg, #ffb74d, #ff9800)',
+            color: '#1a1a2e',
             fontSize: '0.95rem',
             fontWeight: 700,
-            cursor: rechecking ? 'not-allowed' : 'pointer',
+            cursor: 'pointer',
             transition: 'all 0.3s ease',
             transform: 'scale(1)',
             letterSpacing: '0.3px',
           }}
           onMouseEnter={(e) => {
-            if (!rechecking) e.currentTarget.style.transform = 'scale(1.02)';
+            e.currentTarget.style.transform = 'scale(1.02)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'scale(1)';
           }}
         >
-          {rechecking ? '⏳ Đang kiểm tra...' : '✅ Tôi đã tắt Ad Blocker'}
+          ✅ Tôi đã tắt Ad Blocker (Tải lại trang)
         </button>
-
-        {/* Cảnh báo nhỏ */}
-        {rechecking === false && blocked && (
-          <p style={{
-            color: 'rgba(255, 100, 100, 0.6)',
-            fontSize: '0.72rem',
-            marginTop: '0.8rem',
-            marginBottom: 0,
-          }}>
-            Vẫn phát hiện Ad Blocker. Hãy chắc chắn đã tắt và thử lại.
-          </p>
-        )}
       </div>
 
       {/* CSS animation */}
