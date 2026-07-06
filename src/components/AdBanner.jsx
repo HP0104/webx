@@ -288,8 +288,7 @@ function ExoClickAdBanner({ config }) {
       const container = containerRef.current;
       if (!container) return [];
       return [...container.querySelectorAll('ins')].filter((slot) => {
-        const hasRenderedAd = slot.querySelector('iframe, img, a, div');
-        return !hasRenderedAd;
+        return slot.innerHTML.trim() === '' && slot.children.length === 0;
       });
     };
 
@@ -353,6 +352,34 @@ function ExoClickAdBanner({ config }) {
 
   // Khi bị chặn, AdBlockWall đã xử lý overlay → ẩn slot này
   if (adState === 'blocked') return null;
+
+  // Khi ExoClick không có quảng cáo trả về (No-Fill / Localhost / Chưa duyệt domain)
+  if (adState === 'no-fill') {
+    return (
+      <div
+        style={{
+          width: config.containerWidth || '100%',
+          maxWidth: config.containerMaxWidth || '100%',
+          minWidth: 0,
+          height: config.height || '90px',
+          margin: config.margin || '0 auto 2.5rem',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          border: '1px dashed rgba(255, 255, 255, 0.15)',
+          background: 'rgba(255, 255, 255, 0.02)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'rgba(255, 255, 255, 0.4)',
+          fontSize: '0.85rem',
+          fontWeight: 500,
+          letterSpacing: '0.5px'
+        }}
+      >
+        🌟 Không gian quảng cáo tài trợ (ExoClick)
+      </div>
+    );
+  }
 
   return (
     <div
