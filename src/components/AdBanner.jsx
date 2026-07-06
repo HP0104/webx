@@ -7,36 +7,35 @@ const ADBLOCK_DETECT_DELAY = 3000;
 
 // ─── Ad Blocker Detection ───────────────────────────────────────────
 
-function detectAdBlocker() {
+function checkScriptLoad(src) {
   return new Promise((resolve) => {
-    if (typeof window.AdProvider !== 'undefined') {
-      resolve(false);
-      return;
-    }
-
-    const testScript = document.createElement('script');
-    testScript.src = EXOCLICK_PROVIDER_SRC;
-    testScript.async = true;
-    testScript.style.display = 'none';
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.style.display = 'none';
 
     let resolved = false;
     const done = (blocked) => {
       if (resolved) return;
       resolved = true;
-      testScript.remove();
+      script.remove();
       resolve(blocked);
     };
 
-    testScript.onerror = () => done(true);
-    testScript.onload = () => {
-      setTimeout(() => {
-        done(typeof window.AdProvider === 'undefined');
-      }, 500);
-    };
+    script.onerror = () => done(true);
+    script.onload = () => done(false);
 
-    document.head.appendChild(testScript);
+    document.head.appendChild(script);
     setTimeout(() => done(true), ADBLOCK_DETECT_DELAY);
   });
+}
+
+async function detectAdBlocker() {
+  const [exoBlocked, googleBlocked] = await Promise.all([
+    checkScriptLoad(EXOCLICK_PROVIDER_SRC),
+    checkScriptLoad('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js')
+  ]);
+  return exoBlocked || googleBlocked;
 }
 
 let _adBlockDetected = null;
@@ -48,25 +47,6 @@ async function isAdBlockActive() {
 
 function resetAdBlockCache() {
   _adBlockDetected = null;
-}
-
-/**
- * Delayed check: kiểm tra xem ExoClick ad slots có thực sự render content không.
- * Gọi sau khi ExoClick đã có thời gian load (5-6 giây).
- * Nếu tất cả slots đều trống → ad blocker đang chặn silently.
- */
-export function checkAdSlotsEmpty() {
-  const slots = document.querySelectorAll('ins[data-zoneid]');
-  if (slots.length === 0) return false; // Không có slot nào → không cần check
-  
-  let allEmpty = true;
-  slots.forEach((slot) => {
-    if (slot.innerHTML.trim() !== '' || slot.children.length > 0) {
-      allEmpty = false;
-    }
-  });
-  
-  return allEmpty;
 }
 
 // ─── ExoClick Helpers ───────────────────────────────────────────────
@@ -138,20 +118,6 @@ export function AdBlockWall() {
   useEffect(() => {
     checkAdBlock();
   }, [checkAdBlock]);
-
-  // Delayed check: sau 6 giây, kiểm tra xem ad slots có thực sự render không.
-  // Bắt trường hợp Cốc Cốc/Brave chặn silent (script load nhưng ad không hiện).
-  useEffect(() => {
-    if (blocked) return; // Đã hiện wall rồi, không cần check thêm
-
-    const timer = setTimeout(() => {
-      if (checkAdSlotsEmpty()) {
-        setBlocked(true);
-      }
-    }, 6000);
-
-    return () => clearTimeout(timer);
-  }, [blocked, checking]);
 
   // Không bị chặn hoặc đang kiểm tra lần đầu → không hiện gì
   if (!blocked || checking) return null;
