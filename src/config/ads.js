@@ -4,15 +4,9 @@
  * Hệ thống 3 lớp chống Ad Blocker:
  * 
  * Lớp 1: ExoClick hiển thị bình thường (cho user không dùng ad blocker)
- * Lớp 2: Phát hiện ad blocker → hiện banner nhờ user tắt
- * Lớp 3: User không tắt → hiển thị quảng cáo tự host (fallback)
- * 
- * Cấu hình fallback:
- * - fallback.imageUrl: Link ảnh banner tự host (trên domain của bạn hoặc link trực tiếp)
- * - fallback.targetUrl: Link liên kết khi click (link affiliate, trang tài trợ, v.v.)
- * - fallback.altText: Mô tả ảnh
- * 
- * Nếu bỏ trống fallback.imageUrl, khi bị ad blocker sẽ chỉ hiện banner nhờ tắt (Lớp 2).
+ * Lớp 2: Phát hiện ad blocker → hiện banner nhỏ trong slot nhờ user tắt
+ * Lớp 3: Overlay toàn trang chặn truy cập cho đến khi user tắt ad blocker
+ *         (AdBlockWall component trong App.jsx)
  */
 
 export const ADS_CONFIG = {
@@ -25,12 +19,6 @@ export const ADS_CONFIG = {
     height: '90px',
     gap: '0.75rem',
     altText: 'Quảng cáo ExoClick vị trí 1',
-    // Fallback khi bị ad blocker (Lớp 3) — thay bằng link thật của bạn
-    fallback: {
-      imageUrl: '', // Ví dụ: 'https://web18p.xyz/banners/sponsor1.png'
-      targetUrl: '', // Ví dụ: 'https://t.me/web18p' hoặc link affiliate
-      altText: 'Tài trợ vị trí 1',
-    },
   },
 
   // Vị trí 2: Ở giữa Game mới cập nhật và Game hot nhất
@@ -45,12 +33,6 @@ export const ADS_CONFIG = {
     containerMaxWidth: '100%',
     margin: '2rem auto 3rem',
     altText: 'Quảng cáo ExoClick vị trí 2',
-    // Fallback khi bị ad blocker (Lớp 3) — thay bằng link thật của bạn
-    fallback: {
-      imageUrl: '', // Ví dụ: 'https://web18p.xyz/banners/sponsor2.png'
-      targetUrl: '', // Ví dụ: link affiliate
-      altText: 'Tài trợ vị trí 2',
-    },
   },
 
   // Vị trí 3: Ở cuối trang (trên cùng phần footer/dưới cùng Home)

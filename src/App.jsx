@@ -4,7 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import Navbar from './components/Navbar';
 import NotificationBanner from './components/NotificationBanner';
 import ChatBox from './components/ChatBox';
-import AdBanner from './components/AdBanner';
+import AdBanner, { AdBlockWall } from './components/AdBanner';
 import Home from './pages/Home';
 import Auth from './pages/Auth';
 import Wallet from './pages/Wallet';
@@ -433,6 +433,7 @@ function App() {
       <Router>
         <PageTitle games={games} />
         <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+          <AdBlockWall />
           <Navbar />
           <NotificationBanner />
           
