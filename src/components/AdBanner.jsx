@@ -205,11 +205,11 @@ export function AdBlockWall() {
   const [checking, setChecking] = useState(true);
   const [rechecking, setRechecking] = useState(false);
 
-  const checkAdBlock = useCallback(async () => {
+  const checkAdBlock = useCallback(async (isUserAction = false) => {
     setChecking(true);
     resetAdBlockCache();
     const result = await isAdBlockActive();
-    if (!result) {
+    if (isUserAction && !result) {
       window.location.reload();
       return;
     }
@@ -219,7 +219,7 @@ export function AdBlockWall() {
   }, []);
 
   useEffect(() => {
-    checkAdBlock();
+    checkAdBlock(false);
   }, [checkAdBlock]);
 
   // Delayed check: sau 6 giây, kiểm tra xem ad slots có thực sự render không.
@@ -349,7 +349,7 @@ export function AdBlockWall() {
         <button
           onClick={() => {
             setRechecking(true);
-            checkAdBlock();
+            checkAdBlock(true);
           }}
           disabled={rechecking}
           style={{
