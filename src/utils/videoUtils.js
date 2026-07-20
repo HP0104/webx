@@ -24,7 +24,7 @@ export function parseVideoUrl(input) {
   }
 
   // 1. VOE variants (voe.sx, voecdn, etc.)
-  const voeMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(voe\.sx|voecdn\.com|voe-sx\.com|launchreed\.com)\/(?:e\/)?([a-zA-Z0-9]+)/i);
+  const voeMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(voe\.sx|voecdn\.com|voe-sx\.com|launchreed\.com|caseyimpactstation\.com)\/(?:e\/)?([a-zA-Z0-9]+)/i);
   if (voeMatch && !['cache', 'embed', 'api'].includes(voeMatch[2])) {
     const domain = voeMatch[1];
     const id = voeMatch[2];
@@ -33,13 +33,13 @@ export function parseVideoUrl(input) {
       domain,
       id,
       rawUrl: url,
-      embedUrl: `https://${domain}/e/${id}`
+      embedUrl: `https://${domain}/${id}`
     };
   }
 
-  // 2. Doodstream / Doobstream / ds2play / dood variants
-  // e.g. doodstream.com, doobstream.com, dood.re, dood.to, dood.so, dood.la, ds2play.com, d0000d.com
-  const doodMatch = url.match(/(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]*(?:dood|doob|ds2play|d0000d|d000d)[a-zA-Z0-9.-]*)\/(?:d|e)\/([a-zA-Z0-9]+)/i);
+  // 2. Doodstream / Doobstream / ds2play / dood / playmogo variants
+  // e.g. doodstream.com, doobstream.com, dood.re, dood.to, dood.so, dood.la, ds2play.com, d0000d.com, playmogo.com
+  const doodMatch = url.match(/(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]*(?:dood|doob|ds2play|d0000d|d000d|playmogo|mogo)[a-zA-Z0-9.-]*)\/(?:d|e)\/([a-zA-Z0-9]+)/i);
   if (doodMatch) {
     const domain = doodMatch[1];
     const id = doodMatch[2];
@@ -214,8 +214,8 @@ export function extractVideoInfoFromPaste(pastedText) {
   let thumbnail = null;
 
   // Check VOE HTML + Thumbnail code: <a href="https://voe.sx/ID"><img src="https://voe.sx/cache/ID_storyboard_L1.jpg"/></a>
-  const voeHrefMatch = pastedText.match(/href=["']([^"']*voe\.sx[^"']*)["']/i);
-  const voeImgMatch = pastedText.match(/src=["']([^"']*voe\.sx\/cache\/[^"']*)["']/i);
+  const voeHrefMatch = pastedText.match(/href=["']([^"']*(?:voe\.sx|voecdn\.com|caseyimpactstation\.com|launchreed\.com)[^"']*)["']/i);
+  const voeImgMatch = pastedText.match(/src=["']([^"']*(?:voe\.sx|voecdn\.com|caseyimpactstation\.com|launchreed\.com)\/cache\/[^"']*)["']/i);
   if (voeHrefMatch && voeImgMatch) {
     return { videoUrl: voeHrefMatch[1], thumbnail: voeImgMatch[1] };
   }
