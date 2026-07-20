@@ -8,7 +8,6 @@ import AdminStats from '../components/Admin/AdminStats';
 import UserManager from '../components/Admin/UserManager';
 import GameForm from '../components/Admin/GameForm';
 import GameList from '../components/Admin/GameList';
-import RawgAiSearch from '../components/Admin/RawgAiSearch';
 import VideoForm from '../components/Admin/VideoForm';
 import VideoList from '../components/Admin/VideoList';
 
@@ -127,37 +126,6 @@ function Admin() {
       alert('Thêm game thành công!');
     }
     setNewGame(INITIAL_FORM_STATE);
-  };
-
-  const handleApplyRawgToForm = (game, aiData) => {
-    setActiveTab('games');
-    const sysReq = aiData?.system_requirements
-      ? `Tối thiểu: ${aiData.system_requirements.minimum || 'N/A'}\nĐề nghị: ${aiData.system_requirements.recommended || 'N/A'}`
-      : '';
-    const genres = game.genres?.map(g => g.name).join(', ') || '';
-    setNewGame(prev => ({
-      ...prev,
-      title: game.name || prev.title,
-      image: game.background_image || prev.image,
-      tags: genres || prev.tags,
-      description: aiData?.summary || prev.description,
-      developer: game.developers?.map(d => d.name).join(', ') || prev.developer,
-      releaseDate: game.released || prev.releaseDate,
-      systemRequirements: sysReq || prev.systemRequirements,
-      screenshots: game.short_screenshots?.map(s => s.image).filter(Boolean) || prev.screenshots,
-      rating: game.rating || prev.rating,
-      downloads: Math.floor(Math.random() * 500) + 15,
-      isNew: true,
-      isPopular: true,
-      isTopRated: (game.rating || 0) >= 4.0,
-    }));
-    
-    // Scroll smoothly to game form
-    const formElement = document.getElementById('admin-game-form');
-    if (formElement) {
-      window.scrollTo({ top: formElement.offsetTop - 80, behavior: 'smooth' });
-    }
-    alert('Đã điền dữ liệu RAWG + AI vào form!');
   };
 
   // Video handlers
@@ -282,24 +250,18 @@ function Admin() {
         </div>
       )}
 
-      {/* Tab 2: Game Management (Add Game, AI Search & Game List) */}
+      {/* Tab 2: Game Management (Add Game & Game List) */}
       {activeTab === 'games' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', animation: 'fadeIn 0.3s ease' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '2rem' }}>
-            <GameForm
-              newGame={newGame}
-              setNewGame={setNewGame}
-              editingGameId={editingGameId}
-              geminiApiKey={geminiApiKey}
-              setGeminiApiKey={setGeminiApiKey}
-              onSaveGame={handleSaveGame}
-              onCancelEdit={handleCancelEdit}
-            />
-            <RawgAiSearch
-              geminiApiKey={geminiApiKey}
-              onApplyToForm={handleApplyRawgToForm}
-            />
-          </div>
+          <GameForm
+            newGame={newGame}
+            setNewGame={setNewGame}
+            editingGameId={editingGameId}
+            geminiApiKey={geminiApiKey}
+            setGeminiApiKey={setGeminiApiKey}
+            onSaveGame={handleSaveGame}
+            onCancelEdit={handleCancelEdit}
+          />
           <GameList
             games={games}
             onEditClick={handleEditClick}
