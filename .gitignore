@@ -26,3 +26,8 @@ node_modules
 .env
 .env.local
 .env.*.local
+
+# Secrets & Test scripts
+KEY/
+check_*.js
+check_*.mjs

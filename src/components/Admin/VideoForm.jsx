@@ -1,39 +1,6 @@
 import React, { useState } from 'react';
 import { Film, Eye, X, ExternalLink, Image } from 'lucide-react';
-
-/**
- * Extract VOE.sx video ID from various URL formats.
- * e.g. https://voe.sx/0fzybafk1vih → 0fzybafk1vih
- * e.g. https://voe.sx/e/0fzybafk1vih → 0fzybafk1vih
- */
-function getVoeVideoId(url) {
-  if (!url) return null;
-  // Match voe.sx/e/ID or voe.sx/ID (but not voe.sx/cache/ or other paths)
-  const match = url.match(/voe\.sx\/(?:e\/)?([a-zA-Z0-9]+)/);
-  if (match && !['cache', 'embed', 'api'].includes(match[1])) {
-    return match[1];
-  }
-  return null;
-}
-
-/**
- * Convert a VOE.sx URL to an embeddable /e/ link.
- */
-function toEmbedUrl(url) {
-  if (!url) return '';
-  const videoId = getVoeVideoId(url);
-  if (videoId) return `https://voe.sx/e/${videoId}`;
-  return url; // fallback: return as-is
-}
-
-/**
- * Get VOE.sx thumbnail from video URL.
- * Pattern: https://voe.sx/cache/{VIDEO_ID}_storyboard_L1.jpg
- */
-function getVoeThumbnail(videoId) {
-  if (!videoId) return null;
-  return `https://voe.sx/cache/${videoId}_storyboard_L1.jpg`;
-}
+import { toEmbedUrl, getVideoThumbnail, extractVideoInfoFromPaste, parseVideoUrl, getVideoProviderName } from '../../utils/videoUtils';
 
 function VideoForm({
   videoData,
@@ -46,49 +13,43 @@ function VideoForm({
   const [isFetchingThumbnail, setIsFetchingThumbnail] = useState(false);
 
   /**
-   * Smart paste handler: if user pastes VOE's "HTML + Thumbnail" export code,
+   * Smart paste handler: if user pastes VOE or Doodstream embed code / HTML,
    * auto-extract the video URL and thumbnail URL.
-   * e.g. <a href="https://voe.sx/0fzybafk1vih"><img src="https://voe.sx/cache/0fzybafk1vih_storyboard_L1.jpg" alt="Preview remote_control.mp4"/></a>
    */
   const handlePaste = (e) => {
     const pasted = e.clipboardData.getData('text');
+    const { videoUrl, thumbnail } = extractVideoInfoFromPaste(pasted);
     
-    // Check if pasted content is VOE HTML+Thumbnail embed code
-    const hrefMatch = pasted.match(/href=["']([^"']*voe\.sx[^"']*)["']/i);
-    const imgMatch = pasted.match(/src=["']([^"']*voe\.sx\/cache\/[^"']*)["']/i);
-    
-    if (hrefMatch && imgMatch) {
+    if (videoUrl && videoUrl !== videoData.videoUrl) {
       e.preventDefault();
-      const videoUrl = hrefMatch[1];
-      const thumbUrl = imgMatch[1];
       setVideoData(prev => ({
         ...prev,
         videoUrl: videoUrl,
-        thumbnail: thumbUrl
+        thumbnail: thumbnail || prev.thumbnail
       }));
-      return;
     }
-    
-    // If it's just a normal VOE URL, let it through normally
   };
 
   const handleFetchThumbnail = async (optionalUrl, silent = false) => {
     const url = (typeof optionalUrl === 'string' ? optionalUrl : videoData.videoUrl).trim();
     if (!url) {
-      if (!silent) alert('Vui lòng nhập link VOE.sx trước!');
+      if (!silent) alert('Vui lòng nhập link video trước!');
       return;
     }
 
-    const videoId = getVoeVideoId(url);
-    
-    if (!videoId) {
-      if (!silent) alert('Đường dẫn VOE.sx không hợp lệ! Không tìm thấy Video ID.');
+    const parsed = parseVideoUrl(url);
+    if (parsed.provider === 'unknown' && !silent) {
+      alert('Chưa hỗ trợ tự động lấy ảnh bìa từ link này. Bạn vui lòng nhập link ảnh thủ công hoặc dùng VOE / YouTube.');
+      return;
+    }
+
+    const thumbUrl = getVideoThumbnail(url);
+    if (!thumbUrl) {
+      if (!silent) alert('Sever này (' + getVideoProviderName(url) + ') không hỗ trợ tự động lấy ảnh bìa. Vui lòng dán link ảnh bìa thủ công.');
       return;
     }
 
     setIsFetchingThumbnail(true);
-    
-    const thumbUrl = getVoeThumbnail(videoId);
 
     try {
       // Verify the thumbnail exists by loading it as an image
@@ -103,7 +64,7 @@ function VideoForm({
         setVideoData(prev => ({ ...prev, thumbnail: thumbUrl }));
         if (!silent) alert('Tự động lấy ảnh bìa thành công!');
       } else {
-        if (!silent) alert('Không tìm thấy ảnh bìa trên VOE.sx. Bạn vui lòng nhập link ảnh thủ công.');
+        if (!silent) alert('Không tìm thấy ảnh bìa tự động trên sever. Bạn vui lòng nhập link ảnh thủ công.');
       }
     } catch (err) {
       console.error(err);
@@ -162,7 +123,7 @@ function VideoForm({
             <input
               type="text"
               className="input-field"
-              placeholder="Link VOE.sx (hoặc paste code HTML+Thumbnail từ VOE)"
+              placeholder="Link Video (Filemoon, Doodstream, VOE, YouTube... hoặc paste code HTML/iframe)"
               value={videoData.videoUrl}
               onChange={e => setVideoData({ ...videoData, videoUrl: e.target.value })}
               onPaste={handlePaste}

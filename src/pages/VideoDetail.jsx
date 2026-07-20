@@ -1,40 +1,14 @@
 import React from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
-import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight } from 'lucide-react';
+import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getVideoProviderName } from '../utils/videoUtils';
 
 /**
- * Extract VOE.sx video ID from URL.
- * e.g. https://voe.sx/0fzybafk1vih → 0fzybafk1vih
- * e.g. https://voe.sx/e/0fzybafk1vih → 0fzybafk1vih
- */
-function getVoeVideoId(url) {
-  if (!url) return null;
-  const match = url.match(/voe\.sx\/(?:e\/)?([a-zA-Z0-9]+)/);
-  if (match && !['cache', 'embed', 'api'].includes(match[1])) {
-    return match[1];
-  }
-  return null;
-}
-
-/**
- * Get VOE.sx thumbnail from video URL.
- * Pattern: https://voe.sx/cache/{VIDEO_ID}_storyboard_L1.jpg
+ * Get thumbnail from video URL (exported for backwards compatibility with Videos.jsx).
  */
 export function getVideoThumbnail(url) {
-  const videoId = getVoeVideoId(url);
-  if (!videoId) return null;
-  return `https://voe.sx/cache/${videoId}_storyboard_L1.jpg`;
-}
-
-/**
- * Convert a VOE.sx URL to an embeddable /e/ link.
- */
-function toEmbedUrl(url) {
-  if (!url) return '';
-  const videoId = getVoeVideoId(url);
-  if (videoId) return `https://voe.sx/e/${videoId}`;
-  return url;
+  return getVideoThumbnailFromUtils(url);
 }
 
 function VideoDetail() {
@@ -89,6 +63,38 @@ function VideoDetail() {
             style={{ border: 'none' }}
           />
         </div>
+      </div>
+
+      {/* Video Player Fallback / Direct Link */}
+      <div style={{
+        marginTop: '0.8rem',
+        padding: '0.8rem 1.2rem',
+        backgroundColor: 'var(--color-bg-secondary)',
+        borderRadius: '8px',
+        border: '1px solid var(--color-border)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '0.8rem'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+          <span style={{ color: 'var(--color-warning)', fontSize: '1.1rem' }}>⚠️</span>
+          <span>
+            Nếu video không chạy hoặc lỗi 404 (do sever <strong>{getVideoProviderName(rawUrl)}</strong> hạn chế embed), bạn có thể mở video xem trực tiếp:
+          </span>
+        </div>
+        {rawUrl && (
+          <a
+            href={rawUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', padding: '0.45rem 1rem', whiteSpace: 'nowrap' }}
+          >
+            <ExternalLink size={15} /> Mở Trực Tiếp ({getVideoProviderName(rawUrl)})
+          </a>
+        )}
       </div>
 
       {/* Video Info */}
