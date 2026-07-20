@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
+import { Users, Gamepad2, Film } from 'lucide-react';
 
 import AdminStats from '../components/Admin/AdminStats';
 import UserManager from '../components/Admin/UserManager';
@@ -43,6 +44,7 @@ function Admin() {
   const [users, setUsers] = useState([]);
   const [editingGameId, setEditingGameId] = useState(null);
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY) || '');
+  const [activeTab, setActiveTab] = useState('users');
   
   const [newGame, setNewGame] = useState(INITIAL_FORM_STATE);
 
@@ -81,6 +83,7 @@ function Admin() {
   }, []);
 
   const handleEditClick = (game) => {
+    setActiveTab('games');
     setEditingGameId(game.id);
     setNewGame({
       title: game.title,
@@ -127,6 +130,7 @@ function Admin() {
   };
 
   const handleApplyRawgToForm = (game, aiData) => {
+    setActiveTab('games');
     const sysReq = aiData?.system_requirements
       ? `Tối thiểu: ${aiData.system_requirements.minimum || 'N/A'}\nĐề nghị: ${aiData.system_requirements.recommended || 'N/A'}`
       : '';
@@ -170,6 +174,7 @@ function Admin() {
   };
 
   const handleEditVideo = (video) => {
+    setActiveTab('videos');
     setEditingVideoId(video.id);
     setVideoData({
       title: video.title || '',
@@ -196,43 +201,116 @@ function Admin() {
       </h1>
 
       {/* Admin stats */}
-      <AdminStats usersCount={users.length} revenue={revenue} gamesCount={games.length} />
+      <AdminStats usersCount={users.length} revenue={revenue} gamesCount={games.length} videosCount={videos?.length || 0} />
 
-      <div className="admin-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-        {/* User manager */}
-        <UserManager users={users} games={games} />
-
-        {/* Game Form */}
-        <GameForm
-          newGame={newGame}
-          setNewGame={setNewGame}
-          editingGameId={editingGameId}
-          geminiApiKey={geminiApiKey}
-          setGeminiApiKey={setGeminiApiKey}
-          onSaveGame={handleSaveGame}
-          onCancelEdit={handleCancelEdit}
-        />
+      {/* Admin Tab Navigation */}
+      <div style={{
+        display: 'flex',
+        gap: '0.8rem',
+        backgroundColor: 'var(--color-bg-secondary)',
+        padding: '0.6rem',
+        borderRadius: '12px',
+        border: '1px solid var(--color-border)',
+        overflowX: 'auto',
+        position: 'sticky',
+        top: '70px',
+        zIndex: 50,
+        backdropFilter: 'blur(12px)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+      }}>
+        {[
+          { id: 'users', label: 'Quản lý Người dùng', icon: Users, count: users.length, color: '#3b82f6' },
+          { id: 'games', label: 'Quản lý Game', subLabel: '(Thêm & Sửa game)', icon: Gamepad2, count: games.length, color: '#f8b319' },
+          { id: 'videos', label: 'Quản lý Phim', subLabel: '(Thêm & Sửa phim)', icon: Film, count: videos?.length || 0, color: '#ec4899' }
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                flex: 1,
+                minWidth: '220px',
+                padding: '0.8rem 1.2rem',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: isActive ? 'var(--color-bg-main)' : 'transparent',
+                color: isActive ? 'var(--color-text-light)' : 'var(--color-text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.6rem',
+                cursor: 'pointer',
+                transition: 'all 0.25s ease',
+                boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)' : 'none',
+                borderBottom: isActive ? `3px solid ${tab.color}` : '3px solid transparent'
+              }}
+            >
+              <Icon size={22} style={{ color: isActive ? tab.color : 'inherit' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{tab.label}</span>
+                  {tab.count !== undefined && (
+                    <span style={{
+                      padding: '0.1rem 0.5rem',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      backgroundColor: isActive ? `${tab.color}25` : 'rgba(255,255,255,0.06)',
+                      color: isActive ? tab.color : 'var(--color-text-muted)'
+                    }}>
+                      {tab.count}
+                    </span>
+                  )}
+                </div>
+                {tab.subLabel && (
+                  <span style={{ fontSize: '0.75rem', color: isActive ? tab.color : 'var(--color-text-muted)', opacity: 0.85 }}>
+                    {tab.subLabel}
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Game List */}
-      <GameList
-        games={games}
-        onEditClick={handleEditClick}
-        onDeleteClick={deleteGameFromStore}
-      />
+      {/* Tab 1: User Management */}
+      {activeTab === 'users' && (
+        <div style={{ animation: 'fadeIn 0.3s ease' }}>
+          <UserManager users={users} games={games} />
+        </div>
+      )}
 
-      {/* RAWG AI Search */}
-      <RawgAiSearch
-        geminiApiKey={geminiApiKey}
-        onApplyToForm={handleApplyRawgToForm}
-      />
+      {/* Tab 2: Game Management (Add Game, AI Search & Game List) */}
+      {activeTab === 'games' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', animation: 'fadeIn 0.3s ease' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '2rem' }}>
+            <GameForm
+              newGame={newGame}
+              setNewGame={setNewGame}
+              editingGameId={editingGameId}
+              geminiApiKey={geminiApiKey}
+              setGeminiApiKey={setGeminiApiKey}
+              onSaveGame={handleSaveGame}
+              onCancelEdit={handleCancelEdit}
+            />
+            <RawgAiSearch
+              geminiApiKey={geminiApiKey}
+              onApplyToForm={handleApplyRawgToForm}
+            />
+          </div>
+          <GameList
+            games={games}
+            onEditClick={handleEditClick}
+            onDeleteClick={deleteGameFromStore}
+          />
+        </div>
+      )}
 
-      {/* Video Management Section */}
-      <div style={{ borderTop: '2px solid var(--color-accent)', paddingTop: '2rem', marginTop: '1rem' }}>
-        <h2 style={{ color: 'var(--color-accent)', marginBottom: '1.5rem', fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          🎬 Quản Lý Phim
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+      {/* Tab 3: Video Management (Add Video & Video List) */}
+      {activeTab === 'videos' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', animation: 'fadeIn 0.3s ease' }}>
           <VideoForm
             videoData={videoData}
             setVideoData={setVideoData}
@@ -246,7 +324,7 @@ function Admin() {
             onDeleteClick={deleteVideoFromStore}
           />
         </div>
-      </div>
+      )}
     </div>
   );
 }
