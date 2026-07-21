@@ -13,11 +13,11 @@ export function parseVideoUrl(input) {
   let url = input.trim();
 
   // If input is an iframe string or HTML code, extract the src or href URL
-  const iframeSrcMatch = url.match(/src=["']([^"']+)["']/i);
+  const iframeSrcMatch = url.match(/src\s*=\s*["']([^"']+)["']/i);
   if (iframeSrcMatch) {
     url = iframeSrcMatch[1];
   } else {
-    const hrefMatch = url.match(/href=["']([^"']+)["']/i);
+    const hrefMatch = url.match(/href\s*=\s*["']([^"']+)["']/i);
     if (hrefMatch && !url.match(/^https?:\/\//i)) {
       url = hrefMatch[1];
     }
@@ -214,14 +214,14 @@ export function extractVideoInfoFromPaste(pastedText) {
   let thumbnail = null;
 
   // Check VOE HTML + Thumbnail code: <a href="https://voe.sx/ID"><img src="https://voe.sx/cache/ID_storyboard_L1.jpg"/></a>
-  const voeHrefMatch = pastedText.match(/href=["']([^"']*(?:voe\.sx|voecdn\.com|caseyimpactstation\.com|launchreed\.com)[^"']*)["']/i);
-  const voeImgMatch = pastedText.match(/src=["']([^"']*(?:voe\.sx|voecdn\.com|caseyimpactstation\.com|launchreed\.com)\/cache\/[^"']*)["']/i);
+  const voeHrefMatch = pastedText.match(/href\s*=\s*["']([^"']*(?:voe\.sx|voecdn\.com|caseyimpactstation\.com|launchreed\.com)[^"']*)["']/i);
+  const voeImgMatch = pastedText.match(/src\s*=\s*["']([^"']*(?:voe\.sx|voecdn\.com|caseyimpactstation\.com|launchreed\.com)\/cache\/[^"']*)["']/i);
   if (voeHrefMatch && voeImgMatch) {
     return { videoUrl: voeHrefMatch[1], thumbnail: voeImgMatch[1] };
   }
 
   // Check iframe src inside pasted text
-  const iframeSrcMatch = pastedText.match(/src=["'](https?:\/\/[^"']+)["']/i);
+  const iframeSrcMatch = pastedText.match(/src\s*=\s*["'](https?:\/\/[^"']+)["']/i);
   if (iframeSrcMatch) {
     videoUrl = iframeSrcMatch[1];
   } else if (pastedText.trim().match(/^https?:\/\/[^\s]+$/i)) {
@@ -234,8 +234,8 @@ export function extractVideoInfoFromPaste(pastedText) {
   }
 
   // Try extracting image if present
-  if (!thumbnail) {
-    const anyImgMatch = pastedText.match(/src=["'](https?:\/\/[^"']+(?:\.jpg|\.jpeg|\.png|\.webp)[^"']*)["']/i);
+  if (!thumbnail && videoUrl) {
+    const anyImgMatch = pastedText.match(/src\s*=\s*["'](https?:\/\/[^"']+(?:\.jpg|\.jpeg|\.png|\.webp)[^"']*)["']/i);
     if (anyImgMatch) {
       thumbnail = anyImgMatch[1];
     } else {

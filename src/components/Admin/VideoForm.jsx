@@ -13,28 +13,43 @@ function VideoForm({
   const [isFetchingThumbnail, setIsFetchingThumbnail] = useState(false);
 
   /**
-   * Smart paste handler: if user pastes VOE or Doodstream embed code / HTML,
-   * auto-extract the video URL and thumbnail URL.
+   * Smart paste/input handler: if user pastes VOE or Doodstream/Playmogo embed code / HTML / iframe,
+   * auto-extract the video URL and thumbnail URL immediately.
    */
+  const handleUrlInput = (rawVal, preventDefaultEvent = null) => {
+    const { videoUrl, thumbnail } = extractVideoInfoFromPaste(rawVal);
+    const cleanUrl = videoUrl || rawVal;
+
+    if (preventDefaultEvent && cleanUrl && cleanUrl !== videoData.videoUrl) {
+      preventDefaultEvent.preventDefault();
+    }
+
+    setVideoData(prev => ({
+      ...prev,
+      videoUrl: cleanUrl,
+      thumbnail: thumbnail || prev.thumbnail
+    }));
+
+    return cleanUrl;
+  };
+
   const handlePaste = (e) => {
     const pasted = e.clipboardData.getData('text');
-    const { videoUrl, thumbnail } = extractVideoInfoFromPaste(pasted);
-    
-    if (videoUrl && videoUrl !== videoData.videoUrl) {
-      e.preventDefault();
-      setVideoData(prev => ({
-        ...prev,
-        videoUrl: videoUrl,
-        thumbnail: thumbnail || prev.thumbnail
-      }));
-    }
+    handleUrlInput(pasted, e);
   };
 
   const handleFetchThumbnail = async (optionalUrl, silent = false) => {
-    const url = (typeof optionalUrl === 'string' ? optionalUrl : videoData.videoUrl).trim();
+    let url = (typeof optionalUrl === 'string' ? optionalUrl : videoData.videoUrl).trim();
     if (!url) {
       if (!silent) alert('Vui lòng nhập link video trước!');
       return;
+    }
+
+    // Auto-clean if url contains iframe or html tags
+    const { videoUrl: extractedUrl, thumbnail: extractedThumb } = extractVideoInfoFromPaste(url);
+    if (extractedUrl && extractedUrl !== url) {
+      url = extractedUrl;
+      setVideoData(prev => ({ ...prev, videoUrl: url, thumbnail: extractedThumb || prev.thumbnail }));
     }
 
     const parsed = parseVideoUrl(url);
@@ -77,12 +92,16 @@ function VideoForm({
   const handleSubmit = (e) => {
     e.preventDefault();
 
+    const { videoUrl: extractedUrl, thumbnail: extractedThumb } = extractVideoInfoFromPaste(videoData.videoUrl);
+    const finalVideoUrl = (extractedUrl || videoData.videoUrl).trim();
+
     if (!videoData.title.trim()) return alert('Vui lòng nhập tên phim!');
-    if (!videoData.videoUrl.trim()) return alert('Vui lòng nhập link video!');
+    if (!finalVideoUrl) return alert('Vui lòng nhập link video!');
 
     const data = {
       ...videoData,
-      videoUrl: videoData.videoUrl.trim(),
+      videoUrl: finalVideoUrl,
+      thumbnail: extractedThumb || videoData.thumbnail,
       tags: typeof videoData.tags === 'string'
         ? videoData.tags.split(',').map(t => t.trim()).filter(Boolean)
         : videoData.tags || [],
@@ -125,7 +144,7 @@ function VideoForm({
               className="input-field"
               placeholder="Link Video (Filemoon, Doodstream, VOE, YouTube... hoặc paste code HTML/iframe)"
               value={videoData.videoUrl}
-              onChange={e => setVideoData({ ...videoData, videoUrl: e.target.value })}
+              onChange={e => handleUrlInput(e.target.value)}
               onPaste={handlePaste}
               onBlur={(e) => handleFetchThumbnail(e.target.value, true)}
               style={{ flex: 1, margin: 0 }}
