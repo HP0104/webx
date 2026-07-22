@@ -83,6 +83,7 @@ function Videos() {
           <p>Danh mục này hiện chưa có video. Hãy quay lại sau!</p>
         </div>
       ) : (
+        <>
         <div className="videos-grid">
           {paginatedVideos.map(video => {
             const rawUrl = video.videoUrl || video.streamtapeUrl;
@@ -174,6 +175,7 @@ function Videos() {
             </button>
           </div>
         )}
+        </>
       )}
     </div>
   );

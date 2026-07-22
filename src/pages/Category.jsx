@@ -130,11 +130,12 @@ function Category() {
             </Link>
           </div>
       ) : (
+        <>
           <div className="responsive-game-grid category-game-grid" style={{ 
             display: 'grid', 
             gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', 
             gap: '2.5rem 1.5rem',
-            marginBottom: '4rem'
+            marginBottom: '2rem'
           }}>
             {paginatedGames.map(game => (
               <Link 
@@ -232,6 +233,7 @@ function Category() {
               </button>
             </div>
           )}
+        </>
       )}
     </div>
   );
