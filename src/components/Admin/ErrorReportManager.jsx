@@ -1,19 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { AlertTriangle, Gamepad2, Film, User, CheckCircle, Trash2, Clock, Filter } from 'lucide-react';
+import { AlertTriangle, Gamepad2, Film, User, CheckCircle, Trash2, Clock, Filter, Image as ImageIcon } from 'lucide-react';
 
 function ErrorReportManager() {
-  const [reports, setReports] = useState([]);
+  const [errorReports, setErrorReports] = useState([]);
+  const [chatReports, setChatReports] = useState([]);
   const [activeSubTab, setActiveSubTab] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [loadingChat, setLoadingChat] = useState(true);
 
-  // Realtime subscription to error_reports
+  // Realtime subscription to error_reports (new system - game/video)
   useEffect(() => {
     const q = query(collection(db, 'error_reports'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setReports(list);
+      const list = snapshot.docs.map(d => ({
+        id: d.id,
+        _collection: 'error_reports',
+        ...d.data()
+      }));
+      setErrorReports(list);
       setLoading(false);
     }, (err) => {
       console.warn('Error reports subscription error:', err);
@@ -22,18 +28,79 @@ function ErrorReportManager() {
     return () => unsubscribe();
   }, []);
 
-  const handleMarkResolved = async (reportId) => {
+  // Realtime subscription to reports (old chat system - player reports)
+  useEffect(() => {
+    const q = query(collection(db, 'reports'), orderBy('createdAt', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      // Group chat messages by channelId, take the latest message per channel as summary
+      const messagesMap = {};
+      snapshot.docs.forEach(d => {
+        const data = d.data();
+        const channelId = data.channelId;
+        if (!channelId) return;
+        
+        // Skip admin replies - only show user messages
+        if (data.senderRole === 'admin') return;
+
+        if (!messagesMap[channelId]) {
+          messagesMap[channelId] = {
+            id: d.id,
+            _collection: 'reports',
+            _channelId: channelId,
+            type: 'player',
+            itemId: '',
+            itemTitle: '',
+            message: data.text || '',
+            image: data.image || null,
+            senderName: data.senderName || 'Người dùng',
+            senderId: data.senderId || '',
+            status: 'pending',
+            createdAt: data.createdAt,
+            _messageCount: 1
+          };
+        } else {
+          // Update with latest message
+          messagesMap[channelId].message = data.text || messagesMap[channelId].message;
+          messagesMap[channelId].image = data.image || messagesMap[channelId].image;
+          messagesMap[channelId].createdAt = data.createdAt || messagesMap[channelId].createdAt;
+          messagesMap[channelId]._messageCount += 1;
+        }
+      });
+
+      setChatReports(Object.values(messagesMap));
+      setLoadingChat(false);
+    }, (err) => {
+      console.warn('Chat reports subscription error:', err);
+      setLoadingChat(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Merge both report sources
+  const allReports = [...errorReports, ...chatReports].sort((a, b) => {
+    const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+    const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+    return timeB - timeA; // newest first
+  });
+
+  const handleMarkResolved = async (report) => {
     try {
-      await updateDoc(doc(db, 'error_reports', reportId), { status: 'resolved' });
+      await updateDoc(doc(db, report._collection, report.id), { status: 'resolved' });
     } catch (err) {
       alert('Lỗi cập nhật: ' + err.message);
     }
   };
 
-  const handleDelete = async (reportId) => {
+  const handleDelete = async (report) => {
     if (!window.confirm('Bạn chắc chắn muốn xóa báo lỗi này?')) return;
     try {
-      await deleteDoc(doc(db, 'error_reports', reportId));
+      if (report._collection === 'reports' && report._channelId) {
+        // For chat reports, delete all messages in the channel
+        // Just delete the summary doc for now (individual message)
+        await deleteDoc(doc(db, 'reports', report.id));
+      } else {
+        await deleteDoc(doc(db, report._collection, report.id));
+      }
     } catch (err) {
       alert('Lỗi xóa: ' + err.message);
     }
@@ -41,14 +108,14 @@ function ErrorReportManager() {
 
   // Filter reports by sub-tab
   const filteredReports = activeSubTab === 'all'
-    ? reports
-    : reports.filter(r => r.type === activeSubTab);
+    ? allReports
+    : allReports.filter(r => r.type === activeSubTab);
 
   const counts = {
-    all: reports.length,
-    player: reports.filter(r => r.type === 'player').length,
-    game: reports.filter(r => r.type === 'game').length,
-    video: reports.filter(r => r.type === 'video').length
+    all: allReports.length,
+    player: allReports.filter(r => r.type === 'player').length,
+    game: allReports.filter(r => r.type === 'game').length,
+    video: allReports.filter(r => r.type === 'video').length
   };
 
   const subTabs = [
@@ -76,6 +143,8 @@ function ErrorReportManager() {
     });
   };
 
+  const isLoading = loading || loadingChat;
+
   return (
     <div className="error-report-manager">
       {/* Sub-tab navigation */}
@@ -101,7 +170,7 @@ function ErrorReportManager() {
       </div>
 
       {/* Report List */}
-      {loading ? (
+      {isLoading ? (
         <div className="error-report-empty">
           <Clock size={32} className="spin" />
           <p>Đang tải báo lỗi...</p>
@@ -117,9 +186,10 @@ function ErrorReportManager() {
           {filteredReports.map(report => {
             const typeInfo = getTypeInfo(report.type);
             const isResolved = report.status === 'resolved';
+            const isChatReport = report._collection === 'reports';
             return (
               <div
-                key={report.id}
+                key={`${report._collection}-${report.id}`}
                 className={`error-report-card ${isResolved ? 'resolved' : ''}`}
               >
                 <div className="error-report-card-header">
@@ -130,6 +200,18 @@ function ErrorReportManager() {
                     >
                       {typeInfo.label}
                     </span>
+                    {isChatReport && report._messageCount > 1 && (
+                      <span style={{
+                        fontSize: '0.7rem',
+                        padding: '0.1rem 0.5rem',
+                        borderRadius: '10px',
+                        background: 'rgba(59,130,246,0.1)',
+                        color: '#3b82f6',
+                        fontWeight: 700
+                      }}>
+                        💬 {report._messageCount} tin nhắn
+                      </span>
+                    )}
                     {report.itemTitle && (
                       <span className="error-report-card-item-title">
                         {report.itemTitle}
@@ -142,7 +224,25 @@ function ErrorReportManager() {
                 </div>
 
                 <div className="error-report-card-body">
-                  <p className="error-report-card-message">{report.message}</p>
+                  {report.image && (
+                    <img
+                      src={report.image}
+                      alt="Ảnh báo lỗi"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '200px',
+                        borderRadius: '6px',
+                        marginBottom: '0.5rem',
+                        border: '1px solid var(--color-border)',
+                        cursor: 'pointer',
+                        display: 'block'
+                      }}
+                      onClick={() => window.open(report.image, '_blank')}
+                    />
+                  )}
+                  <p className="error-report-card-message">
+                    {report.message || <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>(Chỉ có ảnh đính kèm)</span>}
+                  </p>
                 </div>
 
                 <div className="error-report-card-footer">
@@ -153,11 +253,16 @@ function ErrorReportManager() {
                     <span className="error-report-card-time">
                       <Clock size={13} /> {formatTime(report.createdAt)}
                     </span>
+                    {isChatReport && (
+                      <span style={{ fontSize: '0.7rem', color: 'var(--color-accent)', fontWeight: 600 }}>
+                        từ Chat hỗ trợ
+                      </span>
+                    )}
                   </div>
                   <div className="error-report-card-actions">
                     {!isResolved && (
                       <button
-                        onClick={() => handleMarkResolved(report.id)}
+                        onClick={() => handleMarkResolved(report)}
                         className="error-report-action-btn resolve"
                         title="Đánh dấu đã xử lý"
                       >
@@ -165,7 +270,7 @@ function ErrorReportManager() {
                       </button>
                     )}
                     <button
-                      onClick={() => handleDelete(report.id)}
+                      onClick={() => handleDelete(report)}
                       className="error-report-action-btn delete"
                       title="Xóa báo lỗi"
                     >
