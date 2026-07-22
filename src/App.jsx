@@ -466,6 +466,9 @@ function App() {
 
             <aside className="sidebar">
               <ChatBox />
+              <div style={{ marginTop: '2rem' }}>
+                <AdBanner config={ADS_CONFIG.sidebar} />
+              </div>
             </aside>
           </div>
         </div>

@@ -10,10 +10,10 @@
  */
 
 export const ADS_CONFIG = {
-  // Vị trí 1: Ở giữa phần Lưu ý (Notification Banner) và Game mới cập nhật
+  // Vị trí 1: Ở giữa phần Lưu ý (Notification Banner) và Game mới cập nhật (2 ID)
   slot1: {
     provider: 'exoclick',
-    zones: ['5954560', '5954558', '5954556', '5954554', '5954552', '5954550', '5954540', '5954538'],
+    zones: ['5983698', '5983696'],
     className: 'eas6a97888e2',
     width: '728px',
     height: '90px',
@@ -21,10 +21,10 @@ export const ADS_CONFIG = {
     altText: 'Quảng cáo ExoClick vị trí 1',
   },
 
-  // Vị trí 2: Ở giữa Game mới cập nhật và Game hot nhất
+  // Vị trí 2: Ở giữa Game mới cập nhật và Game hot nhất / Cuối trang (2 ID)
   slot2: {
     provider: 'exoclick',
-    zones: ['5954532', '5954408', '5954406', '5954404', '5954402', '5954350', '5954348', '5954338'],
+    zones: ['5983694', '5983692'],
     className: 'eas6a97888e2',
     width: '728px',
     height: '90px',
@@ -35,10 +35,35 @@ export const ADS_CONFIG = {
     altText: 'Quảng cáo ExoClick vị trí 2',
   },
 
-  // Vị trí 3: Ở cuối trang (trên cùng phần footer/dưới cùng Home)
+  // Vị trí Sidebar: Ở dưới ChatBox cộng đồng (10 ID hiện ra hết, không thanh trượt)
+  sidebar: {
+    provider: 'exoclick',
+    zones: [
+      '5983690',
+      '5983688',
+      '5983686',
+      '5983684',
+      '5983682',
+      '5983680',
+      '5983678',
+      '5983676',
+      '5983674',
+      '5983672'
+    ],
+    className: 'eas6a97888e2',
+    width: '728px',
+    height: '90px',
+    gap: '1rem',
+    layout: 'column',
+    showAll: true,
+    altText: 'Quảng cáo ExoClick bên dưới ChatBox',
+  },
+
+  // Vị trí 3: Ở cuối trang (dự phòng cho banner ảnh tĩnh nếu dùng)
   slot3: {
     imageUrl: '', // Link ảnh banner (ví dụ: 'https://example.com/banner3.png')
     targetUrl: '', // Link liên kết khi người dùng click vào banner
     altText: 'Quảng cáo vị trí 3',
   }
 };
+

@@ -98,7 +98,7 @@ function ensureExoClickProvider({ forceReload = false } = {}) {
 
 function getExoClickZones(config) {
   if (Array.isArray(config?.zones)) {
-    return config.zones.filter(Boolean).slice(0, 10);
+    return config.zones.filter(Boolean);
   }
   return config?.zoneId ? [config.zoneId] : [];
 }
@@ -281,6 +281,7 @@ function ExoClickAdBanner({ config }) {
   const [adState, setAdState] = useState('loading');
   const zones = getExoClickZones(config);
   const zoneKey = zones.join(',');
+  const isColumnLayout = config.layout === 'column' || config.showAll;
 
   useEffect(() => {
     if (!zoneKey) return undefined;
@@ -364,10 +365,10 @@ function ExoClickAdBanner({ config }) {
         maxWidth: config.containerMaxWidth || '100%',
         minWidth: 0,
         height: 'auto',
-        maxHeight: config.height ? `calc(${config.height} + 2.5rem)` : '282px',
-        margin: config.margin || '0 auto 2.5rem',
+        maxHeight: isColumnLayout ? 'none' : (config.height ? `calc(${config.height} + 2.5rem)` : '282px'),
+        margin: config.margin || (isColumnLayout ? '0' : '0 auto 2.5rem'),
         borderRadius: '12px',
-        overflow: 'hidden',
+        overflow: isColumnLayout ? 'visible' : 'hidden',
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
         border: '1px solid var(--color-border)',
         background: 'rgba(255, 255, 255, 0.02)',
@@ -402,14 +403,15 @@ function ExoClickAdBanner({ config }) {
           minWidth: 0,
           maxWidth: '100%',
           display: 'flex',
-          flexDirection: 'row',
+          flexDirection: isColumnLayout ? 'column' : 'row',
           alignItems: 'center',
           justifyContent: zones.length === 1 ? 'center' : 'flex-start',
           gap: config.gap || '1rem',
-          overflowX: 'auto',
-          overflowY: 'hidden',
+          overflowX: isColumnLayout ? 'visible' : 'auto',
+          overflowY: isColumnLayout ? 'visible' : 'hidden',
+          paddingTop: isColumnLayout ? '1rem' : '0',
           paddingBottom: '0.5rem',
-          scrollbarWidth: 'thin',
+          scrollbarWidth: isColumnLayout ? 'none' : 'thin',
           scrollbarColor: 'rgba(255, 255, 255, 0.1) transparent'
         }}
       >
