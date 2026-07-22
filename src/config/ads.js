@@ -10,10 +10,10 @@
  */
 
 export const ADS_CONFIG = {
-  // Vị trí 1: Ở giữa phần Lưu ý (Notification Banner) và Game mới cập nhật (2 ID)
+  // Vị trí 1: Ở giữa phần Lưu ý (Notification Banner) và Game mới cập nhật (Gộp 2 ID mới + 8 ID cũ = 10 ID)
   slot1: {
     provider: 'exoclick',
-    zones: ['5983698', '5983696'],
+    zones: ['5983698', '5983696', '5954560', '5954558', '5954556', '5954554', '5954552', '5954550', '5954540', '5954538'],
     className: 'eas6a97888e2',
     width: '728px',
     height: '90px',
@@ -21,10 +21,10 @@ export const ADS_CONFIG = {
     altText: 'Quảng cáo ExoClick vị trí 1',
   },
 
-  // Vị trí 2: Ở giữa Game mới cập nhật và Game hot nhất / Cuối trang (2 ID)
+  // Vị trí 2: Ở giữa Game mới cập nhật và Game hot nhất / Cuối trang (Gộp 2 ID mới + 8 ID cũ = 10 ID)
   slot2: {
     provider: 'exoclick',
-    zones: ['5983694', '5983692'],
+    zones: ['5983694', '5983692', '5954532', '5954408', '5954406', '5954404', '5954402', '5954350', '5954348', '5954338'],
     className: 'eas6a97888e2',
     width: '728px',
     height: '90px',
