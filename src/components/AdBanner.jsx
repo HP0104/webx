@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 const EXOCLICK_PROVIDER_SRC = 'https://a.magsrv.com/ad-provider.js';
 const EXOCLICK_SCRIPT_ID = 'exoclick-ad-provider';
-const EXOCLICK_FILL_CHECK_DELAY = 4500;
+const EXOCLICK_FILL_CHECK_DELAY = 2000;
 const ADBLOCK_DETECT_DELAY = 3000;
 
 // ─── Ad Blocker Detection ───────────────────────────────────────────
@@ -57,17 +57,20 @@ function serveExoClickAd() {
 }
 
 function ensureExoClickProvider({ forceReload = false } = {}) {
+  // Nếu đang có một Promise tải/tải lại script đang thực hiện, luôn chia sẻ Promise đó
+  // để tránh việc các banner gỡ script của nhau khi gọi đồng thời
+  if (window.__exoClickProviderPromise) {
+    return window.__exoClickProviderPromise;
+  }
+
   const existingScript = document.getElementById(EXOCLICK_SCRIPT_ID);
 
   if (existingScript?.dataset.loaded === 'true' && typeof window.AdProvider !== 'undefined' && !forceReload) {
     return Promise.resolve(existingScript);
   }
 
-  if (existingScript && (forceReload || existingScript.dataset.loaded === 'true')) {
+  if (existingScript) {
     existingScript.remove();
-    window.__exoClickProviderPromise = null;
-  } else if (existingScript && window.__exoClickProviderPromise) {
-    return window.__exoClickProviderPromise;
   }
 
   const script = document.createElement('script');
@@ -79,6 +82,7 @@ function ensureExoClickProvider({ forceReload = false } = {}) {
   window.__exoClickProviderPromise = new Promise((resolve, reject) => {
     script.addEventListener('load', () => {
       script.dataset.loaded = 'true';
+      window.__exoClickProviderPromise = null;
       resolve(script);
     });
     script.addEventListener('error', () => {
@@ -316,7 +320,7 @@ function ExoClickAdBanner({ config }) {
       retryRef.current = true;
 
       try {
-        await ensureExoClickProvider({ forceReload: typeof window.AdProvider === 'undefined' });
+        await ensureExoClickProvider({ forceReload: true });
         if (cancelled) return;
         resetSlots();
         serveExoClickAd();
@@ -329,7 +333,7 @@ function ExoClickAdBanner({ config }) {
 
     retryRef.current = false;
 
-    ensureExoClickProvider()
+    ensureExoClickProvider({ forceReload: typeof window.AdProvider !== 'undefined' })
       .then(() => {
         if (cancelled) return;
         serveExoClickAd();
