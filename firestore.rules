@@ -59,6 +59,14 @@ service cloud.firestore {
     match /reports/{document} {
       allow read, write: if request.auth != null;
     }
+
+    // 6b. Quy tắc cho bảng Báo lỗi Game/Phim (error_reports)
+    match /error_reports/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null
+                            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
     
     // 7. Quy tắc cho bảng Ví nạp tiền (Tránh user tự đổi trạng thái nạp thành thành công)
     match /payments/{document} {

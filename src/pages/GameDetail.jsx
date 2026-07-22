@@ -6,6 +6,7 @@ import { db } from '../firebase';
 import { doc, updateDoc, increment } from 'firebase/firestore';
 import { findGameByRouteParam, getGamePath } from '../utils/gameRoutes';
 import { formatOwnershipDate, getGameOwnership } from '../utils/ownership';
+import ErrorReportButton from '../components/ErrorReportButton';
 
 function GameDetail() {
   const { gameSlug } = useParams();
@@ -264,6 +265,11 @@ function GameDetail() {
 
             <div style={{ marginTop: '1.5rem', fontSize: '0.8rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>
               Thanh toán bảo mật qua Ví điện tử
+            </div>
+
+            {/* Error Report Button */}
+            <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center' }}>
+              <ErrorReportButton type="game" itemId={game.id} itemTitle={game.title} />
             </div>
           </div>
         </div>

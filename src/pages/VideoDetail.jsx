@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight } from 'lucide-react';
 import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils } from '../utils/videoUtils';
+import ErrorReportButton from '../components/ErrorReportButton';
 
 /**
  * Get thumbnail from video URL (exported for backwards compatibility with Videos.jsx).
@@ -105,6 +106,11 @@ function VideoDetail() {
             <p>{video.description}</p>
           </div>
         )}
+
+        {/* Error Report Button */}
+        <div style={{ marginTop: '1rem' }}>
+          <ErrorReportButton type="video" itemId={video.id} itemTitle={video.title} />
+        </div>
       </div>
 
       {/* Back button */}

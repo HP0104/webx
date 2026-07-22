@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { Users, Gamepad2, Film } from 'lucide-react';
+import { Users, Gamepad2, Film, AlertTriangle } from 'lucide-react';
 
 import AdminStats from '../components/Admin/AdminStats';
 import UserManager from '../components/Admin/UserManager';
@@ -10,6 +10,7 @@ import GameForm from '../components/Admin/GameForm';
 import GameList from '../components/Admin/GameList';
 import VideoForm from '../components/Admin/VideoForm';
 import VideoList from '../components/Admin/VideoList';
+import ErrorReportManager from '../components/Admin/ErrorReportManager';
 
 const GEMINI_API_KEY_STORAGE_KEY = 'web18p_gemini_api_key';
 
@@ -189,7 +190,8 @@ function Admin() {
         {[
           { id: 'users', label: 'Quản lý Người dùng', icon: Users, count: users.length, color: '#3b82f6' },
           { id: 'games', label: 'Quản lý Game', subLabel: '(Thêm & Sửa game)', icon: Gamepad2, count: games.length, color: '#f8b319' },
-          { id: 'videos', label: 'Quản lý Phim', subLabel: '(Thêm & Sửa phim)', icon: Film, count: videos?.length || 0, color: '#ec4899' }
+          { id: 'videos', label: 'Quản lý Phim', subLabel: '(Thêm & Sửa phim)', icon: Film, count: videos?.length || 0, color: '#ec4899' },
+          { id: 'reports', label: 'Báo lỗi', subLabel: '(Người chơi, Game, Phim)', icon: AlertTriangle, color: '#ff4d4f' }
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -285,6 +287,13 @@ function Admin() {
             onEditClick={handleEditVideo}
             onDeleteClick={deleteVideoFromStore}
           />
+        </div>
+      )}
+
+      {/* Tab 4: Error Report Management */}
+      {activeTab === 'reports' && (
+        <div style={{ animation: 'fadeIn 0.3s ease' }}>
+          <ErrorReportManager />
         </div>
       )}
     </div>
