@@ -2,6 +2,21 @@ import React, { useState, useRef } from "react";
 import { searchGames, generateGameContentWithGemini } from "../services/gameInfo";
 import { Sparkles, Search, Loader2, ChevronDown, ChevronUp, Cpu, Monitor, HelpCircle, FileText, AlertTriangle } from "lucide-react";
 
+// Safe paragraph renderer to prevent XSS from AI output or raw API strings
+const renderSafeHtmlParagraphs = (htmlText) => {
+  if (!htmlText) return null;
+  const paragraphs = htmlText
+    .replace(/<\/?p[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '') // Strip remaining HTML tags (<script>, <img>, etc.)
+    .split('\n')
+    .map(p => p.trim())
+    .filter(Boolean);
+
+  return paragraphs.map((para, idx) => (
+    <p key={idx} style={{ marginBottom: '0.8rem', lineHeight: '1.6' }}>{para}</p>
+  ));
+};
+
 export default function GameSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -308,10 +323,9 @@ export default function GameSearch() {
                               <Monitor size={16} />
                               <h4>Đánh giá lối chơi</h4>
                             </div>
-                            <div 
-                              className="gs-ai-gameplay"
-                              dangerouslySetInnerHTML={{ __html: aiContent[game.id].gameplay }} 
-                            />
+                            <div className="gs-ai-gameplay">
+                              {renderSafeHtmlParagraphs(aiContent[game.id].gameplay)}
+                            </div>
                           </div>
 
                           {/* System Requirements */}

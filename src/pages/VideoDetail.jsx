@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight } from 'lucide-react';
 import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils } from '../utils/videoUtils';
 import ErrorReportButton from '../components/ErrorReportButton';
+import { doc, updateDoc, increment } from 'firebase/firestore';
+import { db } from '../firebase';
 
 /**
  * Get thumbnail from video URL (exported for backwards compatibility with Videos.jsx).
@@ -18,6 +20,17 @@ function VideoDetail() {
   const navigate = useNavigate();
 
   const video = videos.find(v => v.id.toString() === videoId);
+
+  useEffect(() => {
+    if (video?.id) {
+      const videoRef = doc(db, 'videos', video.id.toString());
+      updateDoc(videoRef, {
+        views: increment(1)
+      }).catch(err => {
+        console.warn("Failed to increment video views:", err.message);
+      });
+    }
+  }, [video?.id]);
 
   if (!video) {
     return (
