@@ -331,55 +331,37 @@ function ExoClickAdBanner({ config }) {
         maxWidth: '100%',
         minHeight: config.minHeight || '90px',
         margin: config.margin || '0 auto 2.5rem',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
-        border: '1px solid var(--color-border)',
-        background: 'rgba(255, 255, 255, 0.02)',
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '1rem',
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease'
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = '0 8px 30px rgba(255, 183, 77, 0.15)';
-        e.currentTarget.style.borderColor = 'rgba(255, 183, 77, 0.3)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.25)';
-        e.currentTarget.style.borderColor = 'var(--color-border)';
       }}
     >
-      <span style={{
-        position: 'absolute',
-        top: '8px',
-        right: '8px',
-        background: 'rgba(0, 0, 0, 0.6)',
-        color: 'rgba(255, 255, 255, 0.6)',
-        fontSize: '0.65rem',
-        padding: '2px 6px',
-        borderRadius: '4px',
-        pointerEvents: 'none',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        fontWeight: 'bold',
-        letterSpacing: '0.5px',
-        zIndex: 1
-      }}>
-        Tài trợ
-      </span>
-
       <div
         style={{
-          width: '100%',
+          position: 'relative',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
+          width: '100%',
+          maxWidth: '100%'
         }}
       >
+        <span style={{
+          position: 'absolute',
+          top: '0px',
+          right: '0px',
+          background: 'rgba(0, 0, 0, 0.4)',
+          color: 'rgba(255, 255, 255, 0.5)',
+          fontSize: '0.6rem',
+          padding: '2px 4px',
+          borderRadius: '0 0 0 4px',
+          pointerEvents: 'none',
+          zIndex: 10,
+          lineHeight: 1
+        }}>
+          Tài trợ
+        </span>
         {zones.map((zoneId) => (
           <ins
             key={zoneId}
