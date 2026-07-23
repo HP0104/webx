@@ -33,7 +33,7 @@ export const ADS_CONFIG = {
     altText: 'Quảng cáo ExoClick cuối trang',
   },
 
-  // Vị trí Sidebar: Dưới chatbox (Multi format)
+  // Vị trí Sidebar: Dưới chatbox (Kích thước 300x250)
   sidebar: {
     provider: 'exoclick',
     zoneId: '5983814',
