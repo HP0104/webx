@@ -277,68 +277,35 @@ export function AdBlockWall() {
 
 function ExoClickAdBanner({ config }) {
   const containerRef = useRef(null);
-  const retryRef = useRef(false);
   const [adState, setAdState] = useState('loading');
   const zones = getExoClickZones(config);
   const zoneKey = zones.join(',');
-  const isColumnLayout = config.layout === 'column' || config.showAll;
 
   useEffect(() => {
     if (!zoneKey) return undefined;
 
     let cancelled = false;
-    let fillCheckTimer;
-
-    const getEmptySlots = () => {
-      const container = containerRef.current;
-      if (!container) return [];
-      return [...container.querySelectorAll('ins')].filter((slot) => {
-        return slot.innerHTML.trim() === '' && slot.children.length === 0;
-      });
-    };
-
-    const resetSlots = () => {
-      getEmptySlots().forEach((slot) => {
-        slot.removeAttribute('data-processed');
-        slot.innerHTML = '';
-      });
-    };
-
-    const checkAndRetryNoFill = async () => {
-      if (cancelled) return;
-      const emptySlots = getEmptySlots();
-
-      if (emptySlots.length === 0) {
-        setAdState('showing');
-        return;
-      }
-
-      if (retryRef.current) {
-        setAdState('no-fill');
-        return;
-      }
-
-      retryRef.current = true;
-
-      try {
-        await ensureExoClickProvider({ forceReload: true });
-        if (cancelled) return;
-        resetSlots();
-        serveExoClickAd();
-        fillCheckTimer = window.setTimeout(checkAndRetryNoFill, EXOCLICK_FILL_CHECK_DELAY);
-      } catch (error) {
-        console.warn('ExoClick retry failed:', error.message);
-        setAdState('no-fill');
-      }
-    };
-
-    retryRef.current = false;
 
     ensureExoClickProvider({ forceReload: typeof window.AdProvider !== 'undefined' })
       .then(() => {
         if (cancelled) return;
         serveExoClickAd();
-        fillCheckTimer = window.setTimeout(checkAndRetryNoFill, EXOCLICK_FILL_CHECK_DELAY);
+        
+        // Chỉ kiểm tra fill 1 lần sau vài giây, không retry vô hạn nữa
+        setTimeout(() => {
+          if (cancelled) return;
+          const container = containerRef.current;
+          if (!container) return;
+          const emptySlots = [...container.querySelectorAll('ins')].filter((slot) => {
+            return slot.innerHTML.trim() === '' && slot.children.length === 0;
+          });
+          
+          if (emptySlots.length === 0) {
+            setAdState('showing');
+          } else {
+            setAdState('no-fill');
+          }
+        }, EXOCLICK_FILL_CHECK_DELAY);
       })
       .catch((error) => {
         console.warn('ExoClick provider failed:', error.message);
@@ -347,7 +314,6 @@ function ExoClickAdBanner({ config }) {
 
     return () => {
       cancelled = true;
-      if (fillCheckTimer) window.clearTimeout(fillCheckTimer);
     };
   }, [zoneKey, config.className]);
 
@@ -361,14 +327,12 @@ function ExoClickAdBanner({ config }) {
       ref={containerRef}
       data-ad-status={adState}
       style={{
-        width: config.containerWidth || '100%',
-        maxWidth: config.containerMaxWidth || '100%',
-        minWidth: 0,
-        height: 'auto',
-        maxHeight: isColumnLayout ? 'none' : (config.height ? `calc(${config.height} + 2.5rem)` : '282px'),
-        margin: config.margin || (isColumnLayout ? '0' : '0 auto 2.5rem'),
+        width: config.width || '100%',
+        maxWidth: '100%',
+        minHeight: config.minHeight || '90px',
+        margin: config.margin || '0 auto 2.5rem',
         borderRadius: '12px',
-        overflow: isColumnLayout ? 'visible' : 'hidden',
+        overflow: 'hidden',
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
         border: '1px solid var(--color-border)',
         background: 'rgba(255, 255, 255, 0.02)',
@@ -376,7 +340,18 @@ function ExoClickAdBanner({ config }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '1rem'
+        padding: '1rem',
+        transition: 'transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-2px)';
+        e.currentTarget.style.boxShadow = '0 8px 30px rgba(255, 183, 77, 0.15)';
+        e.currentTarget.style.borderColor = 'rgba(255, 183, 77, 0.3)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.25)';
+        e.currentTarget.style.borderColor = 'var(--color-border)';
       }}
     >
       <span style={{
@@ -400,48 +375,22 @@ function ExoClickAdBanner({ config }) {
       <div
         style={{
           width: '100%',
-          minWidth: 0,
-          maxWidth: '100%',
           display: 'flex',
-          flexDirection: isColumnLayout ? 'column' : 'row',
+          justifyContent: 'center',
           alignItems: 'center',
-          justifyContent: zones.length === 1 ? 'center' : 'flex-start',
-          gap: config.gap || '1rem',
-          overflowX: isColumnLayout ? 'visible' : 'auto',
-          overflowY: isColumnLayout ? 'visible' : 'hidden',
-          paddingTop: isColumnLayout ? '1rem' : '0',
-          paddingBottom: '0.5rem',
-          scrollbarWidth: isColumnLayout ? 'none' : 'thin',
-          scrollbarColor: 'rgba(255, 255, 255, 0.1) transparent'
         }}
       >
         {zones.map((zoneId) => (
-          <div
+          <ins
             key={zoneId}
+            className={config.className || 'eas6a97888e38'}
+            data-zoneid={zoneId}
             style={{
-              width: `min(100%, ${config.width || '300px'})`,
-              maxWidth: '100%',
-              minWidth: 0,
-              height: config.height || '250px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              overflow: 'hidden'
+              display: 'block',
+              width: '100%',
+              minHeight: config.minHeight || '90px'
             }}
-          >
-            <ins
-              className={config.className || 'eas6a97888e2'}
-              data-zoneid={zoneId}
-              style={{
-                display: 'block',
-                width: config.width || '300px',
-                height: config.height || '250px',
-                maxWidth: '100%',
-                flex: '0 0 auto'
-              }}
-            />
-          </div>
+          />
         ))}
       </div>
     </div>

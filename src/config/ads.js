@@ -10,60 +10,45 @@
  */
 
 export const ADS_CONFIG = {
-  // Vị trí 1: Ở giữa phần Lưu ý (Notification Banner) và Game mới cập nhật (Gộp 2 ID mới + 8 ID cũ = 10 ID)
+  // Vị trí 1: Đầu trang (Multi format)
   slot1: {
     provider: 'exoclick',
-    zones: ['5983698', '5983696', '5954560', '5954558', '5954556', '5954554', '5954552', '5954550', '5954540', '5954538'],
-    className: 'eas6a97888e2',
-    width: '728px',
-    height: '90px',
-    gap: '0.75rem',
-    altText: 'Quảng cáo ExoClick vị trí 1',
+    zoneId: '5983796',
+    className: 'eas6a97888e38',
+    width: '100%',
+    height: 'auto',
+    minHeight: '90px',
+    altText: 'Quảng cáo ExoClick đầu trang',
   },
 
-  // Vị trí 2: Ở giữa Game mới cập nhật và Game hot nhất / Cuối trang (Gộp 2 ID mới + 8 ID cũ = 10 ID)
+  // Vị trí 2: Cuối trang (Multi format)
   slot2: {
     provider: 'exoclick',
-    zones: ['5983694', '5983692', '5954532', '5954408', '5954406', '5954404', '5954402', '5954350', '5954348', '5954338'],
-    className: 'eas6a97888e2',
-    width: '728px',
-    height: '90px',
-    gap: '0.75rem',
-    containerWidth: '100%',
-    containerMaxWidth: '100%',
+    zoneId: '5983812',
+    className: 'eas6a97888e38',
+    width: '100%',
+    height: 'auto',
+    minHeight: '90px',
     margin: '2rem auto 3rem',
-    altText: 'Quảng cáo ExoClick vị trí 2',
+    altText: 'Quảng cáo ExoClick cuối trang',
   },
 
-  // Vị trí Sidebar: Ở dưới ChatBox cộng đồng (10 ID hiện ra hết, không thanh trượt)
+  // Vị trí Sidebar: Dưới chatbox (Multi format)
   sidebar: {
     provider: 'exoclick',
-    zones: [
-      '5983690',
-      '5983688',
-      '5983686',
-      '5983684',
-      '5983682',
-      '5983680',
-      '5983678',
-      '5983676',
-      '5983674',
-      '5983672'
-    ],
-    className: 'eas6a97888e2',
-    width: '728px',
-    height: '90px',
-    gap: '1rem',
-    layout: 'column',
-    showAll: true,
-    altText: 'Quảng cáo ExoClick bên dưới ChatBox',
+    zoneId: '5983814',
+    className: 'eas6a97888e38',
+    width: '100%',
+    height: 'auto',
+    minHeight: '250px',
+    altText: 'Quảng cáo ExoClick sidebar',
   },
 
   // Vị trí 3: Ở cuối trang (dự phòng cho banner ảnh tĩnh nếu dùng)
   slot3: {
     imageUrl: '', // Link ảnh banner (ví dụ: 'https://example.com/banner3.png')
     targetUrl: '', // Link liên kết khi người dùng click vào banner
-    altText: 'Quảng cáo vị trí 3',
+    altText: 'Quảng cáo dự phòng',
   }
 };
 
