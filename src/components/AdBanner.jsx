@@ -335,6 +335,8 @@ function ExoClickAdBanner({ config }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        overflow: 'hidden',
+        borderRadius: '12px',
       }}
     >
       <div
