@@ -32,6 +32,14 @@ function VideoDetail() {
     }
   }, [video?.id]);
 
+  // Vô hiệu hóa popup quảng cáo (popunder) khi đang ở trang xem video
+  useEffect(() => {
+    window.disablePopunder = true;
+    return () => {
+      window.disablePopunder = false;
+    };
+  }, []);
+
   if (!video) {
     return (
       <div className="container" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
