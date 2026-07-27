@@ -132,7 +132,7 @@ function App() {
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(0);
   const [ownedGames, setOwnedGames] = useState([]);
-  
+
   // App state
   const [games, setGames] = useState([]);
   const [loadingGames, setLoadingGames] = useState(true);
@@ -229,7 +229,7 @@ function App() {
         try {
           const userRef = doc(db, 'users', firebaseUser.uid);
           const userSnap = await getDoc(userRef);
-          
+
           if (userSnap.exists()) {
             userData = { ...userData, ...userSnap.data() };
           } else {
@@ -239,12 +239,12 @@ function App() {
           console.warn("Firestore error:", fsError.message);
         }
 
-        setUser({ 
-          id: userData.uid, 
-          username: userData.username, 
+        setUser({
+          id: userData.uid,
+          username: userData.username,
           email: userData.email,
           role: userData.role,
-          photoURL: userData.photoURL 
+          photoURL: userData.photoURL
         });
         const normalizedOwnedGames = normalizeOwnedGames(userData.ownedGames || []);
         setBalance(userData.balance || 0);
@@ -315,11 +315,11 @@ function App() {
     try {
       const userRef = doc(db, 'users', user.id);
       await updateDoc(userRef, newData);
-      
+
       // Cập nhật state cục bộ
       if (newData.balance !== undefined) setBalance(newData.balance);
       if (newData.ownedGames !== undefined) setOwnedGames(normalizeOwnedGames(newData.ownedGames));
-      
+
       setUser(prev => ({ ...prev, ...newData }));
       return true;
     } catch (error) {
@@ -425,7 +425,7 @@ function App() {
   };
 
   return (
-    <AppContext.Provider value={{ 
+    <AppContext.Provider value={{
       user, balance, ownedGames, logout, buyGame, updateUserInfo,
       games, loadingGames, revenue, addGameToStore, deleteGameFromStore, updateGameInStore,
       videos, loadingVideos, addVideoToStore, deleteVideoFromStore, updateVideoInStore
@@ -436,7 +436,7 @@ function App() {
           <AdBlockWall />
           <Navbar />
           <NotificationBanner />
-          
+
           <div className="app-layout">
             <main className="main-content">
               <div className="container" style={{ paddingBottom: 0 }}>

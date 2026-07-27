@@ -31,6 +31,40 @@ function checkScriptLoad(src) {
 }
 
 async function detectAdBlocker() {
+  // 1. DOM Check (Fast and effective against Cốc Cốc and uBlock)
+  const checkDOM = new Promise((resolve) => {
+    const bait = document.createElement('div');
+    bait.className = 'ad-banner adsbox doubleclick ad ads ad-placement ad-placeholder sponsor';
+    bait.style.position = 'absolute';
+    bait.style.top = '-9999px';
+    bait.style.left = '-9999px';
+    bait.style.width = '1px';
+    bait.style.height = '1px';
+    document.body.appendChild(bait);
+
+    setTimeout(() => {
+      let isBlocked = false;
+      if (document.body.contains(bait)) {
+        const style = window.getComputedStyle(bait);
+        isBlocked = 
+          bait.offsetParent === null ||
+          bait.offsetHeight === 0 ||
+          bait.offsetWidth === 0 ||
+          bait.clientHeight === 0 ||
+          bait.clientWidth === 0 ||
+          style.display === 'none' ||
+          style.visibility === 'hidden' ||
+          style.opacity === '0';
+        bait.remove();
+      }
+      resolve(isBlocked);
+    }, 250);
+  });
+
+  const domBlocked = await checkDOM;
+  if (domBlocked) return true;
+
+  // 2. Network Check (Fallback)
   const [exoBlocked, googleBlocked] = await Promise.all([
     checkScriptLoad(EXOCLICK_PROVIDER_SRC),
     checkScriptLoad('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js')
