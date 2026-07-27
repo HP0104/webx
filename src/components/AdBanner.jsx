@@ -171,14 +171,17 @@ export function AdBlockWall() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '1.5rem',
+      padding: '1rem', // Giảm padding ngoài cho mobile
     }}>
       <div style={{
         background: 'linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%)',
         borderRadius: '20px',
-        padding: '2.5rem 2rem',
+        padding: '2rem 1.5rem', // Tối ưu padding trong cho mobile
         maxWidth: '480px',
         width: '100%',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        boxSizing: 'border-box',
         textAlign: 'center',
         border: '1px solid rgba(255, 183, 77, 0.2)',
         boxShadow: '0 25px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(255, 183, 77, 0.05)',
