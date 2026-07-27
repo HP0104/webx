@@ -164,7 +164,7 @@ export function AdBlockWall() {
     <div style={{
       position: 'fixed',
       inset: 0,
-      zIndex: 99999,
+      zIndex: 2147483647,
       background: 'rgba(0, 0, 0, 0.85)',
       backdropFilter: 'blur(12px)',
       WebkitBackdropFilter: 'blur(12px)',
