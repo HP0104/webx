@@ -87,7 +87,13 @@ function VideoDetail() {
         </div>
       </div>
 
-
+      {/* VPN Notice */}
+      <div className="video-detail-vpn-notice">
+        <span className="vpn-notice-status">⚡ có thể hoạt động</span>
+        <span className="vpn-notice-text">
+          — nếu video lỗi hay quá nhiều quảng cáo thì có thể bật VPN (1.1.1.1 , Kiwi ,...) lên
+        </span>
+      </div>
 
       {/* Video Info */}
       <div className="video-detail-info">

@@ -2439,6 +2439,32 @@ a {
   height: 100%;
 }
 
+/* VPN Notice */
+.video-detail-vpn-notice {
+  margin-top: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.vpn-notice-status {
+  color: #f59e0b;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.vpn-notice-text {
+  color: var(--color-text-muted);
+}
+
 /* Video Info */
 .video-detail-info {
   margin-top: 1.5rem;
