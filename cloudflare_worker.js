@@ -247,6 +247,106 @@ export default {
       }
     }
 
+    if (url.pathname === "/sitemap.xml" && request.method === "GET") {
+      try {
+        if (!env.FIREBASE_PROJECT_ID || !env.FIREBASE_CLIENT_EMAIL || !env.FIREBASE_PRIVATE_KEY) {
+          return new Response(JSON.stringify({ success: false, error: "Firebase Service Account is not fully configured on Cloudflare." }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const token = await getFirebaseAuthToken(env.FIREBASE_CLIENT_EMAIL, env.FIREBASE_PRIVATE_KEY);
+        
+        // Fetch Games
+        const gamesUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/games?pageSize=500`;
+        const gamesResponse = await fetch(gamesUrl, { headers: { "Authorization": `Bearer ${token}` } });
+        let games = [];
+        if (gamesResponse.ok) {
+          const data = await gamesResponse.json();
+          if (data.documents) {
+            games = data.documents.map(doc => {
+              const parts = doc.name.split('/');
+              const id = parts[parts.length - 1];
+              const title = doc.fields?.title?.stringValue || "";
+              return createGameSlug(title, id);
+            });
+          }
+        }
+
+        // Fetch Videos
+        const videosUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/videos?pageSize=500`;
+        const videosResponse = await fetch(videosUrl, { headers: { "Authorization": `Bearer ${token}` } });
+        let videos = [];
+        if (videosResponse.ok) {
+          const data = await videosResponse.json();
+          if (data.documents) {
+            videos = data.documents.map(doc => {
+              const parts = doc.name.split('/');
+              return parts[parts.length - 1]; // id
+            });
+          }
+        }
+
+        let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://web18p.xyz/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/games</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/videos</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/blog</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`;
+
+        games.forEach(slug => {
+          xml += `
+  <url>
+    <loc>https://web18p.xyz/game/${slug}</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>`;
+        });
+
+        videos.forEach(id => {
+          xml += `
+  <url>
+    <loc>https://web18p.xyz/video/${id}</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`;
+        });
+
+        xml += `\n</urlset>`;
+
+        return new Response(xml, {
+          status: 200,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+            "Content-Type": "application/xml; charset=utf-8",
+            "Cache-Control": "public, max-age=3600"
+          }
+        });
+
+      } catch (err) {
+        return new Response(JSON.stringify({ success: false, error: err.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+    }
+
     return new Response("Not Found", { status: 404 });
   }
 };
@@ -387,4 +487,17 @@ function str2ab(str) {
     bufView[i] = str.charCodeAt(i);
   }
   return buf;
+}
+
+// --- Game Slug helper ---
+function createGameSlug(title, id) {
+  const source = title || id || 'game';
+  return source
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'game';
 }

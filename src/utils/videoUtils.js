@@ -13,13 +13,18 @@ export function parseVideoUrl(input) {
   let url = input.trim();
 
   // If input is an iframe string or HTML code, extract the src or href URL
-  const iframeSrcMatch = url.match(/src\s*=\s*["']([^"']+)["']/i);
+  const iframeSrcMatch = url.match(/<iframe[^>]*src\s*=\s*["']([^"']+)["']/i);
   if (iframeSrcMatch) {
     url = iframeSrcMatch[1];
   } else {
     const hrefMatch = url.match(/href\s*=\s*["']([^"']+)["']/i);
     if (hrefMatch && !url.match(/^https?:\/\//i)) {
       url = hrefMatch[1];
+    } else {
+      const srcMatch = url.match(/src\s*=\s*["']([^"']+)["']/i);
+      if (srcMatch && !srcMatch[1].match(/\.(jpg|jpeg|png|webp|gif)$/i)) {
+        url = srcMatch[1];
+      }
     }
   }
 
@@ -52,8 +57,8 @@ export function parseVideoUrl(input) {
     };
   }
 
-  // 3. Filemoon variants (filemoon.sx, filemoon.to, fmoonembed.com, etc.)
-  const fmMatch = url.match(/(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]*(?:filemoon|fmoonembed|fmoon)[a-zA-Z0-9.-]*)\/(?:d|e|v|download)\/([a-zA-Z0-9_-]+)/i);
+  // 3. Filemoon variants (filemoon.sx, filemoon.to, fmoonembed.com, hgcloud.to, etc.)
+  const fmMatch = url.match(/(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]*(?:filemoon|fmoonembed|fmoon|hgcloud)[a-zA-Z0-9.-]*)\/(?:(?:d|e|v|download)\/)?([a-zA-Z0-9_-]+)/i);
   if (fmMatch) {
     const domain = fmMatch[1];
     const id = fmMatch[2];
@@ -220,16 +225,29 @@ export function extractVideoInfoFromPaste(pastedText) {
     return { videoUrl: voeHrefMatch[1], thumbnail: voeImgMatch[1] };
   }
 
+  // Check generic HTML + Thumbnail code: <a href="URL"><img src="THUMB_URL"...>
+  const aHrefMatch = pastedText.match(/<a[^>]*href\s*=\s*["'](https?:\/\/[^"']+)["'][^>]*>/i);
+  const imgSrcMatch = pastedText.match(/<img[^>]*src\s*=\s*["'](https?:\/\/[^"']+)["'][^>]*>/i);
+  if (aHrefMatch && imgSrcMatch) {
+    return { videoUrl: aHrefMatch[1], thumbnail: imgSrcMatch[1] };
+  }
+
   // Check iframe src inside pasted text
-  const iframeSrcMatch = pastedText.match(/src\s*=\s*["'](https?:\/\/[^"']+)["']/i);
+  const iframeSrcMatch = pastedText.match(/<iframe[^>]*src\s*=\s*["'](https?:\/\/[^"']+)["']/i);
   if (iframeSrcMatch) {
     videoUrl = iframeSrcMatch[1];
   } else if (pastedText.trim().match(/^https?:\/\/[^\s]+$/i)) {
     videoUrl = pastedText.trim();
   } else {
-    const anyLinkMatch = pastedText.match(/(https?:\/\/[^\s"'<>]+)/i);
-    if (anyLinkMatch) {
-      videoUrl = anyLinkMatch[1];
+    // Check if it has a simple src="..." as a fallback if not iframe
+    const srcMatch = pastedText.match(/src\s*=\s*["'](https?:\/\/[^"']+)["']/i);
+    if (srcMatch && !srcMatch[1].match(/\.(jpg|jpeg|png|webp|gif)$/i)) {
+      videoUrl = srcMatch[1];
+    } else {
+      const anyLinkMatch = pastedText.match(/(https?:\/\/[^\s"'<>]+)/i);
+      if (anyLinkMatch) {
+        videoUrl = anyLinkMatch[1];
+      }
     }
   }
 
