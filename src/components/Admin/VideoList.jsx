@@ -50,10 +50,10 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Phim</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Thể loại</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Lượt xem</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Thao tác</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, minWidth: '280px' }}>Phim</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Thể loại</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Lượt xem</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -70,7 +70,18 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
                     <div style={{ width: '80px', height: '45px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--color-border)', backgroundColor: '#1a1a2e' }}>
                       <img src={video.thumbnail || 'https://placehold.co/160x90/1a1a2e/66c0f4?text=Video'} alt={video.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
-                    <span style={{ color: 'var(--color-text-light)', fontWeight: 600 }}>{video.title}</span>
+                    <span style={{ 
+                      color: 'var(--color-text-light)', 
+                      fontWeight: 600,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: '1.4'
+                    }}>
+                      {video.title}
+                    </span>
                   </div>
                 </td>
                 <td style={{ padding: '0.8rem 1rem' }}>

@@ -36,10 +36,10 @@ function GameList({ games, onEditClick, onDeleteClick }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Game</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Nhà phát triển</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Giá</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Thao tác</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, minWidth: '280px' }}>Game</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Nhà phát triển</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Giá</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -53,8 +53,19 @@ function GameList({ games, onEditClick, onDeleteClick }) {
               <tr key={game.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
                 <td style={{ padding: '0.8rem 1rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <img src={game.thumbnail || game.image} alt={game.title} style={{ width: '64px', height: '36px', objectFit: 'cover', borderRadius: '4px' }} />
-                    <span style={{ color: 'var(--color-text-light)', fontWeight: 600 }}>{game.title}</span>
+                    <div style={{ width: '64px', height: '36px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0 }}>
+                      <img src={game.thumbnail || game.image} alt={game.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <span style={{ 
+                      color: 'var(--color-text-light)', 
+                      fontWeight: 600,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: '1.4'
+                    }}>{game.title}</span>
                   </div>
                 </td>
                 <td style={{ padding: '0.8rem 1rem', color: 'var(--color-text-muted)' }}>{game.developer || '-'}</td>
