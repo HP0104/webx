@@ -96,7 +96,6 @@ function Videos() {
                 className="video-card"
                 style={{ textDecoration: 'none' }}
               >
-                {/* Thumbnail */}
                 <div className="video-card-thumbnail">
                   {video.thumbnail || getVideoThumbnail(rawUrl) ? (
                     <img
@@ -105,13 +104,20 @@ function Videos() {
                       loading="lazy"
                       onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
                     />
-                  ) : null}
+                  ) : (
+                    <img
+                      src={`https://image.thum.io/get/width/640/crop/360/${toEmbedUrl(rawUrl)}`}
+                      alt={video.title}
+                      loading="lazy"
+                      onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                    />
+                  )}
                   <div 
                     style={{ 
                       width: '100%', 
                       height: '100%', 
                       background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-                      display: (video.thumbnail || getVideoThumbnail(rawUrl)) ? 'none' : 'flex',
+                      display: 'none',
                       alignItems: 'center',
                       justifyContent: 'center',
                       color: 'var(--color-text-muted)'
