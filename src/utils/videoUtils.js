@@ -187,6 +187,11 @@ export function getVideoThumbnail(url) {
     return `https://img.youtube.com/vi/${parsed.id}/hqdefault.jpg`;
   }
 
+  if (parsed.provider === 'filemoon' && parsed.id) {
+    // StreamHG (hgcloud.to) stores thumbnails on huntrexus.com using the same ID
+    return `https://huntrexus.com/${parsed.id}.jpg`;
+  }
+
   return null;
 }
 
