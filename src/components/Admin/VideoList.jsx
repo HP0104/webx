@@ -87,15 +87,13 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
                     <div style={{ width: '80px', height: '45px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--color-border)', backgroundColor: '#1a1a2e', position: 'relative' }}>
                       {video.thumbnail || getVideoThumbnail(video.videoUrl || video.streamtapeUrl) ? (
                         <img src={video.thumbnail || getVideoThumbnail(video.videoUrl || video.streamtapeUrl)} alt={video.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
-                      ) : (
-                        <img src={`https://image.thum.io/get/width/160/crop/90/${toEmbedUrl(video.videoUrl || video.streamtapeUrl)}`} alt={video.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
-                      )}
+                      ) : null}
                       <div 
                         style={{ 
                           width: '100%', 
                           height: '100%', 
                           background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-                          display: 'none',
+                          display: (video.thumbnail || getVideoThumbnail(video.videoUrl || video.streamtapeUrl)) ? 'none' : 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           color: 'var(--color-text-muted)'
