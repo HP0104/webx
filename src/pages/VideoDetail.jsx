@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight } from 'lucide-react';
@@ -18,6 +18,7 @@ function VideoDetail() {
   const { videoId } = useParams();
   const { videos = [] } = useAppContext();
   const navigate = useNavigate();
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const video = videos.find(v => v.id.toString() === videoId);
 
@@ -74,11 +75,51 @@ function VideoDetail() {
       {/* Video Player */}
       <div className="video-detail-player-wrapper">
         <div className="video-detail-player">
-          {rawUrl && (rawUrl.trim().toLowerCase().startsWith('<iframe') || rawUrl.trim().toLowerCase().startsWith('<script')) ? (
+          {!isPlaying ? (
+            <div 
+              className="video-player-overlay" 
+              style={{
+                width: '100%',
+                height: '100%',
+                backgroundImage: `url(${thumbnail || 'https://via.placeholder.com/1280x720?text=No+Thumbnail'})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                position: 'relative',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onClick={() => setIsPlaying(true)}
+            >
+              <div style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <div style={{
+                  width: '60px',
+                  height: '60px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--color-accent)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+                  transition: 'transform 0.2s ease'
+                }}>
+                  <Play size={30} color="white" style={{ marginLeft: '4px' }} />
+                </div>
+              </div>
+            </div>
+          ) : rawUrl && (rawUrl.trim().toLowerCase().startsWith('<iframe') || rawUrl.trim().toLowerCase().startsWith('<script')) ? (
             <div dangerouslySetInnerHTML={{ __html: rawUrl }} style={{ width: '100%', height: '100%' }} className="raw-embed-container" />
           ) : (
             <iframe
-              src={embedUrl}
+              src={embedUrl ? (embedUrl.includes('?') ? `${embedUrl}&autoplay=1` : `${embedUrl}?autoplay=1`) : ''}
               width="100%"
               height="100%"
               allowFullScreen
