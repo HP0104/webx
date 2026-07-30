@@ -3309,3 +3309,9 @@ a {
     font-size: 0.85rem;
   }
 }
+
+.raw-embed-container iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none;
+}
