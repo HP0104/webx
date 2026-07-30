@@ -3,10 +3,15 @@ import { Film, Trash2, Edit, ExternalLink, Search } from 'lucide-react';
 
 function VideoList({ videos, onEditClick, onDeleteClick }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
 
-  const filteredVideos = (videos || []).filter(v => 
+  let filteredVideos = (videos || []).filter(v => 
     (v.title || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (sortBy === 'newest') {
+    filteredVideos = [...filteredVideos].reverse();
+  }
 
   const handleDelete = (videoId, title) => {
     if (window.confirm(`Bạn có chắc chắn muốn xóa phim "${title}"?`)) {
@@ -33,27 +38,38 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
         <h2 style={{ color: 'var(--color-text-light)', fontSize: '1.2rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Film size={20} /> Kho Phim ({videos.length})
         </h2>
-        <div style={{ position: 'relative', width: '250px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-          <input
-            type="text"
-            className="input-field"
-            placeholder="Tìm kiếm phim..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ paddingLeft: '32px', paddingRight: '12px', padding: '0.6rem 1rem 0.6rem 2rem', fontSize: '0.9rem' }}
-          />
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <select 
+            className="input-field" 
+            value={sortBy} 
+            onChange={(e) => setSortBy(e.target.value)}
+            style={{ padding: '0.6rem 1rem', fontSize: '0.9rem', minWidth: '150px' }}
+          >
+            <option value="newest">Mới cập nhật</option>
+            <option value="oldest">Cũ nhất</option>
+          </select>
+          <div style={{ position: 'relative', width: '250px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Tìm kiếm phim..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ paddingLeft: '32px', paddingRight: '12px', padding: '0.6rem 1rem 0.6rem 2rem', fontSize: '0.9rem' }}
+            />
+          </div>
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '680px', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, minWidth: '280px' }}>Phim</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Thể loại</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Lượt xem</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Thao tác</th>
+            <tr style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, minWidth: '280px', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Phim</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Thể loại</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Lượt xem</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Thao tác</th>
             </tr>
           </thead>
           <tbody>

@@ -3,11 +3,16 @@ import { Search, Edit, Trash2 } from 'lucide-react';
 
 function GameList({ games, onEditClick, onDeleteClick }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
 
-  const filteredGames = games.filter(g => 
+  let filteredGames = games.filter(g => 
     (g.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (g.developer || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (sortBy === 'newest') {
+    filteredGames = [...filteredGames].reverse();
+  }
 
   const handleDelete = (gameId, title) => {
     if (window.confirm(`Bạn có chắc chắn muốn xóa game "${title}"?`)) {
@@ -19,27 +24,38 @@ function GameList({ games, onEditClick, onDeleteClick }) {
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <h2 style={{ color: 'var(--color-text-light)', fontSize: '1.2rem', margin: 0 }}>Kho Game ({games.length})</h2>
-        <div style={{ position: 'relative', width: '250px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
-          <input
-            type="text"
-            className="input-field"
-            placeholder="Tìm kiếm game, dev..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{ paddingLeft: '32px', paddingRight: '12px', padding: '0.6rem 1rem 0.6rem 2rem', fontSize: '0.9rem' }}
-          />
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <select 
+            className="input-field" 
+            value={sortBy} 
+            onChange={(e) => setSortBy(e.target.value)}
+            style={{ padding: '0.6rem 1rem', fontSize: '0.9rem', minWidth: '150px' }}
+          >
+            <option value="newest">Mới cập nhật</option>
+            <option value="oldest">Cũ nhất</option>
+          </select>
+          <div style={{ position: 'relative', width: '250px' }}>
+            <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Tìm kiếm game, dev..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ paddingLeft: '32px', paddingRight: '12px', padding: '0.6rem 1rem 0.6rem 2rem', fontSize: '0.9rem' }}
+            />
+          </div>
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '680px', border: '1px solid var(--color-border)', borderRadius: '8px' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, minWidth: '280px' }}>Game</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Nhà phát triển</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Giá</th>
-              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>Thao tác</th>
+            <tr style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, minWidth: '280px', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Game</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Nhà phát triển</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Giá</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Thao tác</th>
             </tr>
           </thead>
           <tbody>
