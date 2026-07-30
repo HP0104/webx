@@ -4,7 +4,6 @@ import { Users, Banknote, Gamepad2, Film } from 'lucide-react';
 function AdminStats({ usersCount, revenue, gamesCount, videosCount = 0 }) {
   const stats = [
     { title: 'Tổng Tài khoản', value: usersCount, icon: Users, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
-    { title: 'Doanh thu', value: `${revenue.toLocaleString('vi-VN')} VNĐ`, icon: Banknote, color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)' },
     { title: 'Số lượng Game', value: gamesCount, icon: Gamepad2, color: '#f8b319', bg: 'rgba(248, 179, 25, 0.1)' },
     { title: 'Số lượng Phim', value: videosCount, icon: Film, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' }
   ];

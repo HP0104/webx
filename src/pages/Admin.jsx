@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { Users, Gamepad2, Film, AlertTriangle } from 'lucide-react';
+import { Users, Gamepad2, Film, AlertTriangle, BarChart3 } from 'lucide-react';
 
 import AdminStats from '../components/Admin/AdminStats';
 import UserManager from '../components/Admin/UserManager';
@@ -44,7 +44,7 @@ function Admin() {
   const [users, setUsers] = useState([]);
   const [editingGameId, setEditingGameId] = useState(null);
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY) || '');
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState('dashboard');
   
   const [newGame, setNewGame] = useState(INITIAL_FORM_STATE);
 
@@ -173,6 +173,7 @@ function Admin() {
         {/* Admin Sidebar Navigation */}
         <aside className="admin-sidebar">
           {[
+            { id: 'dashboard', label: 'Tổng quan', icon: BarChart3, color: '#10b981' },
             { id: 'users', label: 'Quản lý Người dùng', icon: Users, count: users.length, color: '#3b82f6' },
             { id: 'games', label: 'Quản lý Game', icon: Gamepad2, count: games.length, color: '#f8b319' },
             { id: 'videos', label: 'Quản lý Phim', icon: Film, count: videos?.length || 0, color: '#ec4899' },
@@ -210,11 +211,12 @@ function Admin() {
 
         {/* Admin Content Area */}
         <main className="admin-content-area">
-          {/* Admin stats */}
-          <AdminStats usersCount={users.length} revenue={revenue} gamesCount={games.length} videosCount={videos?.length || 0} />
-
           {/* Tab Content */}
           <div style={{ animation: 'fadeIn 0.3s ease' }}>
+            {activeTab === 'dashboard' && (
+              <AdminStats usersCount={users.length} gamesCount={games.length} videosCount={videos?.length || 0} />
+            )}
+
             {activeTab === 'users' && (
               <UserManager users={users} games={games} />
             )}
