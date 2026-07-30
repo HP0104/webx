@@ -248,7 +248,8 @@ function VideoForm({
                 width: '100%',
                 borderRadius: '6px',
                 border: '1px solid var(--color-border)',
-                objectFit: 'cover',
+                objectFit: 'contain',
+                backgroundColor: '#000',
                 aspectRatio: '16/9'
               }}
               onError={e => { e.target.style.display = 'none'; }}

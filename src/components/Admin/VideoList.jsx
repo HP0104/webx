@@ -86,7 +86,7 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <div style={{ width: '80px', height: '45px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--color-border)', backgroundColor: '#1a1a2e', position: 'relative' }}>
                       {video.thumbnail || getVideoThumbnail(video.videoUrl || video.streamtapeUrl) ? (
-                        <img src={(video.thumbnail || getVideoThumbnail(video.videoUrl || video.streamtapeUrl)).replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1')} alt={video.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                        <img src={(video.thumbnail || getVideoThumbnail(video.videoUrl || video.streamtapeUrl)).replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1')} alt={video.title} style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }} onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
                       ) : null}
                       <div 
                         style={{ 
