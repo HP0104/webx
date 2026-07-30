@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Film, Trash2, Edit, ExternalLink, Search } from 'lucide-react';
-
+import { getVideoThumbnail } from '../../pages/VideoDetail';
+import { toEmbedUrl } from '../../utils/videoUtils';
 function VideoList({ videos, onEditClick, onDeleteClick }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('newest');
@@ -83,8 +84,18 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
               <tr key={video.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
                 <td style={{ padding: '0.8rem 1rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div style={{ width: '80px', height: '45px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--color-border)', backgroundColor: '#1a1a2e' }}>
-                      <img src={video.thumbnail || 'https://placehold.co/160x90/1a1a2e/66c0f4?text=Video'} alt={video.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <div style={{ width: '80px', height: '45px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--color-border)', backgroundColor: '#1a1a2e', position: 'relative' }}>
+                      {video.thumbnail || getVideoThumbnail(video.videoUrl || video.streamtapeUrl) ? (
+                        <img src={video.thumbnail || getVideoThumbnail(video.videoUrl || video.streamtapeUrl)} alt={video.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.src = 'https://placehold.co/160x90/1a1a2e/66c0f4?text=Video'; }} />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', pointerEvents: 'none', overflow: 'hidden' }}>
+                          {(video.videoUrl || video.streamtapeUrl || '').trim().toLowerCase().startsWith('<iframe') || (video.videoUrl || video.streamtapeUrl || '').trim().toLowerCase().startsWith('<script') ? (
+                            <div dangerouslySetInnerHTML={{ __html: video.videoUrl || video.streamtapeUrl }} style={{ width: '640px', height: '360px', transform: 'scale(0.125)', transformOrigin: 'top left' }} />
+                          ) : (
+                            <iframe src={toEmbedUrl(video.videoUrl || video.streamtapeUrl)} width="640" height="360" frameBorder="0" scrolling="no" style={{ transform: 'scale(0.125)', transformOrigin: 'top left', border: 'none' }} />
+                          )}
+                        </div>
+                      )}
                     </div>
                     <span style={{ 
                       color: 'var(--color-text-light)', 
