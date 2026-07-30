@@ -88,7 +88,11 @@ function Videos() {
         <div className="videos-grid">
           {paginatedVideos.map(video => {
             const rawUrl = video.videoUrl || video.streamtapeUrl;
-            const thumbnail = video.thumbnail || getVideoThumbnail(rawUrl) || 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail';
+            let thumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
+            if (thumbnail && thumbnail.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
+              thumbnail = thumbnail.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
+            }
+            thumbnail = thumbnail || 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail';
             return (
               <Link
                 key={video.id}

@@ -57,7 +57,10 @@ function VideoDetail() {
   // Support both new field name (videoUrl) and legacy (streamtapeUrl)
   const rawUrl = video.videoUrl || video.streamtapeUrl;
   const embedUrl = toEmbedUrl(rawUrl);
-  const thumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
+  let thumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
+  if (thumbnail && thumbnail.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
+    thumbnail = thumbnail.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
+  }
 
   return (
     <div className="container video-detail-page">
