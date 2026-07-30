@@ -164,7 +164,6 @@ function Admin() {
   };
 
   return (
-  return (
     <div className="admin-page container" style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <h1 style={{ color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>
         Bảng điều khiển Quản trị
