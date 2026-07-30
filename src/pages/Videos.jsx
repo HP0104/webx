@@ -97,23 +97,28 @@ function Videos() {
                 style={{ textDecoration: 'none' }}
               >
                 {/* Thumbnail */}
-                <div className="video-card-thumbnail" style={{ position: 'relative' }}>
+                <div className="video-card-thumbnail">
                   {video.thumbnail || getVideoThumbnail(rawUrl) ? (
                     <img
                       src={thumbnail}
                       alt={video.title}
                       loading="lazy"
-                      onError={e => { e.target.src = 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail'; }}
+                      onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
                     />
-                  ) : (
-                    <div style={{ width: '100%', height: '100%', pointerEvents: 'none', overflow: 'hidden' }}>
-                      {rawUrl && (rawUrl.trim().toLowerCase().startsWith('<iframe') || rawUrl.trim().toLowerCase().startsWith('<script')) ? (
-                        <div dangerouslySetInnerHTML={{ __html: rawUrl.replace(/<iframe/i, '<iframe sandbox="allow-scripts allow-same-origin" loading="lazy"') }} className="raw-embed-container" style={{ width: '100%', height: '100%' }} />
-                      ) : (
-                        <iframe src={toEmbedUrl(rawUrl)} width="100%" height="100%" frameBorder="0" scrolling="no" sandbox="allow-scripts allow-same-origin" loading="lazy" />
-                      )}
-                    </div>
-                  )}
+                  ) : null}
+                  <div 
+                    style={{ 
+                      width: '100%', 
+                      height: '100%', 
+                      background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+                      display: (video.thumbnail || getVideoThumbnail(rawUrl)) ? 'none' : 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--color-text-muted)'
+                    }}
+                  >
+                    <Film size={48} opacity={0.5} />
+                  </div>
                   <div className="video-card-overlay">
                     <div className="video-card-play-btn">
                       <Play size={32} fill="white" />
