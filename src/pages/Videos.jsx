@@ -108,9 +108,9 @@ function Videos() {
                   ) : (
                     <div style={{ width: '100%', height: '100%', pointerEvents: 'none', overflow: 'hidden' }}>
                       {rawUrl && (rawUrl.trim().toLowerCase().startsWith('<iframe') || rawUrl.trim().toLowerCase().startsWith('<script')) ? (
-                        <div dangerouslySetInnerHTML={{ __html: rawUrl }} className="raw-embed-container" style={{ width: '100%', height: '100%' }} />
+                        <div dangerouslySetInnerHTML={{ __html: rawUrl.replace(/<iframe/i, '<iframe sandbox="allow-scripts allow-same-origin" loading="lazy"') }} className="raw-embed-container" style={{ width: '100%', height: '100%' }} />
                       ) : (
-                        <iframe src={toEmbedUrl(rawUrl)} width="100%" height="100%" frameBorder="0" scrolling="no" />
+                        <iframe src={toEmbedUrl(rawUrl)} width="100%" height="100%" frameBorder="0" scrolling="no" sandbox="allow-scripts allow-same-origin" loading="lazy" />
                       )}
                     </div>
                   )}

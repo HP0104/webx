@@ -90,9 +90,9 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
                       ) : (
                         <div style={{ width: '100%', height: '100%', pointerEvents: 'none', overflow: 'hidden' }}>
                           {(video.videoUrl || video.streamtapeUrl || '').trim().toLowerCase().startsWith('<iframe') || (video.videoUrl || video.streamtapeUrl || '').trim().toLowerCase().startsWith('<script') ? (
-                            <div dangerouslySetInnerHTML={{ __html: video.videoUrl || video.streamtapeUrl }} style={{ width: '640px', height: '360px', transform: 'scale(0.125)', transformOrigin: 'top left' }} />
+                            <div dangerouslySetInnerHTML={{ __html: (video.videoUrl || video.streamtapeUrl).replace(/<iframe/i, '<iframe sandbox="allow-scripts allow-same-origin" loading="lazy"') }} style={{ width: '640px', height: '360px', transform: 'scale(0.125)', transformOrigin: 'top left' }} />
                           ) : (
-                            <iframe src={toEmbedUrl(video.videoUrl || video.streamtapeUrl)} width="640" height="360" frameBorder="0" scrolling="no" style={{ transform: 'scale(0.125)', transformOrigin: 'top left', border: 'none' }} />
+                            <iframe src={toEmbedUrl(video.videoUrl || video.streamtapeUrl)} width="640" height="360" frameBorder="0" scrolling="no" style={{ transform: 'scale(0.125)', transformOrigin: 'top left', border: 'none' }} sandbox="allow-scripts allow-same-origin" loading="lazy" />
                           )}
                         </div>
                       )}
