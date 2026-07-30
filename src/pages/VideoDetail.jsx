@@ -75,13 +75,13 @@ function VideoDetail() {
       {/* Video Player */}
       <div className="video-detail-player-wrapper">
         <div className="video-detail-player">
-          {!isPlaying ? (
+          {!isPlaying && thumbnail ? (
             <div 
               className="video-player-overlay" 
               style={{
                 width: '100%',
                 height: '100%',
-                backgroundImage: `url(${thumbnail || 'https://via.placeholder.com/1280x720?text=No+Thumbnail'})`,
+                backgroundImage: `url(${thumbnail})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 position: 'relative',

@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film } from 'lucide-react';
 import { getVideoThumbnail } from './VideoDetail';
+import { toEmbedUrl } from '../utils/videoUtils';
 
 const CATEGORY_LABELS = {
   all: 'Tất Cả Phim',
@@ -96,13 +97,23 @@ function Videos() {
                 style={{ textDecoration: 'none' }}
               >
                 {/* Thumbnail */}
-                <div className="video-card-thumbnail">
-                  <img
-                    src={thumbnail}
-                    alt={video.title}
-                    loading="lazy"
-                    onError={e => { e.target.src = 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail'; }}
-                  />
+                <div className="video-card-thumbnail" style={{ position: 'relative' }}>
+                  {video.thumbnail || getVideoThumbnail(rawUrl) ? (
+                    <img
+                      src={thumbnail}
+                      alt={video.title}
+                      loading="lazy"
+                      onError={e => { e.target.src = 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail'; }}
+                    />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', pointerEvents: 'none', overflow: 'hidden' }}>
+                      {rawUrl && (rawUrl.trim().toLowerCase().startsWith('<iframe') || rawUrl.trim().toLowerCase().startsWith('<script')) ? (
+                        <div dangerouslySetInnerHTML={{ __html: rawUrl }} className="raw-embed-container" style={{ width: '100%', height: '100%' }} />
+                      ) : (
+                        <iframe src={toEmbedUrl(rawUrl)} width="100%" height="100%" frameBorder="0" scrolling="no" />
+                      )}
+                    </div>
+                  )}
                   <div className="video-card-overlay">
                     <div className="video-card-play-btn">
                       <Play size={32} fill="white" />
