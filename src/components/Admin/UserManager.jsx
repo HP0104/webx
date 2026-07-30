@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
-import { CheckCircle2, ChevronDown, ChevronRight, Clock, Gamepad2, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Clock, Gamepad2, XCircle, Search } from 'lucide-react';
 import { formatOwnershipDate, isOwnershipActive, normalizeOwnedGames } from '../../utils/ownership';
 
 function UserManager({ users, games }) {
   const [editingUserId, setEditingUserId] = useState(null);
   const [expandedUserId, setExpandedUserId] = useState(null);
   const [balanceAmount, setBalanceAmount] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const gamesById = useMemo(() => {
     return new Map((games || []).map(game => [game.id?.toString(), game]));
@@ -59,11 +60,32 @@ function UserManager({ users, games }) {
     }
   };
 
+  const filteredUsers = users.filter(u => 
+    (u.username || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (u.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="card">
-      <h2 style={{ color: 'var(--color-text-light)', marginBottom: '1.5rem', fontSize: '1.2rem' }}>Quản lý Người dùng</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <h2 style={{ color: 'var(--color-text-light)', fontSize: '1.2rem', margin: 0 }}>Quản lý Người dùng</h2>
+        <div style={{ position: 'relative', width: '250px' }}>
+          <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+          <input
+            type="text"
+            className="input-field"
+            placeholder="Tìm kiếm email, username..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ paddingLeft: '32px', paddingRight: '12px', padding: '0.6rem 1rem 0.6rem 2rem', fontSize: '0.9rem' }}
+          />
+        </div>
+      </div>
+      
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {users.map(u => {
+        {filteredUsers.length === 0 ? (
+          <div style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: '2rem' }}>Không tìm thấy người dùng nào.</div>
+        ) : filteredUsers.map(u => {
           const ownedGameRows = getUserOwnedGameRows(u.ownedGames);
           const activeOwnedCount = ownedGameRows.filter(({ ownership }) => isOwnershipActive(ownership)).length;
           const isExpanded = expandedUserId === u.id;

@@ -92,12 +92,7 @@ function Home() {
               animation: skeleton-pulse 1.5s infinite ease-in-out;
             }
           `}</style>
-          <div className="responsive-game-grid" style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
-            gap: '2.5rem 1.5rem',
-            marginBottom: '3rem'
-          }}>
+          <div className="game-grid">
             {Array.from({ length: 4 }).map((_, idx) => (
               <div key={idx} className="card skeleton-item" style={{ height: '320px', padding: 0, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
                 <div style={{ width: '100%', height: '150px', background: 'rgba(255,255,255,0.03)' }} />
@@ -121,12 +116,7 @@ function Home() {
         </div>
       ) : (
         <>
-          <div className="responsive-game-grid" style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
-            gap: '2.5rem 1.5rem',
-            marginBottom: '3rem'
-          }}>
+          <div className="game-grid">
             {paginatedNewGames.map(game => (
               <Link 
                 to={getGamePath(game)} 
@@ -317,11 +307,7 @@ function Home() {
       </div>
 
       {loadingGames ? (
-        <div className="responsive-game-grid" style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
-          gap: '2.5rem 1.5rem'
-        }}>
+        <div className="game-grid" style={{ marginBottom: 0 }}>
           {Array.from({ length: 6 }).map((_, idx) => (
             <div key={idx} className="card skeleton-item" style={{ height: '320px', padding: 0, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
               <div style={{ width: '100%', height: '150px', background: 'rgba(255,255,255,0.03)' }} />
@@ -343,11 +329,7 @@ function Home() {
           <p style={{ color: 'var(--color-text-muted)', margin: '0.5rem 0 0 0', fontSize: '0.9rem' }}>Hãy bấm xem chi tiết các game để tạo bảng xếp hạng xu hướng!</p>
         </div>
       ) : (
-        <div className="responsive-game-grid" style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', 
-          gap: '2.5rem 1.5rem'
-        }}>
+        <div className="game-grid" style={{ marginBottom: 0 }}>
           {hotGames.map((game, index) => (
             <Link 
               to={getGamePath(game)} 

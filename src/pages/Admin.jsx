@@ -164,66 +164,36 @@ function Admin() {
   };
 
   return (
-    <div className="admin-page" style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+  return (
+    <div className="admin-page container" style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <h1 style={{ color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>
         Bảng điều khiển Quản trị
       </h1>
 
-      {/* Admin stats */}
-      <AdminStats usersCount={users.length} revenue={revenue} gamesCount={games.length} videosCount={videos?.length || 0} />
-
-      {/* Admin Tab Navigation */}
-      <div style={{
-        display: 'flex',
-        gap: '0.8rem',
-        backgroundColor: 'var(--color-bg-secondary)',
-        padding: '0.6rem',
-        borderRadius: '12px',
-        border: '1px solid var(--color-border)',
-        overflowX: 'auto',
-        position: 'sticky',
-        top: '70px',
-        zIndex: 50,
-        backdropFilter: 'blur(12px)',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-      }}>
-        {[
-          { id: 'users', label: 'Quản lý Người dùng', icon: Users, count: users.length, color: '#3b82f6' },
-          { id: 'games', label: 'Quản lý Game', subLabel: '(Thêm & Sửa game)', icon: Gamepad2, count: games.length, color: '#f8b319' },
-          { id: 'videos', label: 'Quản lý Phim', subLabel: '(Thêm & Sửa phim)', icon: Film, count: videos?.length || 0, color: '#ec4899' },
-          { id: 'reports', label: 'Báo lỗi', subLabel: '(Người chơi, Game, Phim)', icon: AlertTriangle, color: '#ff4d4f' }
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                flex: 1,
-                minWidth: '220px',
-                padding: '0.8rem 1.2rem',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: isActive ? 'var(--color-bg-main)' : 'transparent',
-                color: isActive ? 'var(--color-text-light)' : 'var(--color-text-muted)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.6rem',
-                cursor: 'pointer',
-                transition: 'all 0.25s ease',
-                boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)' : 'none',
-                borderBottom: isActive ? `3px solid ${tab.color}` : '3px solid transparent'
-              }}
-            >
-              <Icon size={22} style={{ color: isActive ? tab.color : 'inherit' }} />
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>{tab.label}</span>
+      <div className="admin-dashboard">
+        {/* Admin Sidebar Navigation */}
+        <aside className="admin-sidebar">
+          {[
+            { id: 'users', label: 'Quản lý Người dùng', icon: Users, count: users.length, color: '#3b82f6' },
+            { id: 'games', label: 'Quản lý Game', icon: Gamepad2, count: games.length, color: '#f8b319' },
+            { id: 'videos', label: 'Quản lý Phim', icon: Film, count: videos?.length || 0, color: '#ec4899' },
+            { id: 'reports', label: 'Báo lỗi', icon: AlertTriangle, color: '#ff4d4f' }
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`admin-nav-item ${isActive ? 'active' : ''}`}
+                style={{ '--active-color': tab.color }}
+              >
+                <Icon size={20} style={{ color: isActive ? tab.color : 'inherit' }} />
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>{tab.label}</span>
                   {tab.count !== undefined && (
                     <span style={{
-                      padding: '0.1rem 0.5rem',
+                      padding: '0.15rem 0.5rem',
                       borderRadius: '20px',
                       fontSize: '0.75rem',
                       fontWeight: 700,
@@ -234,68 +204,64 @@ function Admin() {
                     </span>
                   )}
                 </div>
-                {tab.subLabel && (
-                  <span style={{ fontSize: '0.75rem', color: isActive ? tab.color : 'var(--color-text-muted)', opacity: 0.85 }}>
-                    {tab.subLabel}
-                  </span>
-                )}
+              </button>
+            );
+          })}
+        </aside>
+
+        {/* Admin Content Area */}
+        <main className="admin-content-area">
+          {/* Admin stats */}
+          <AdminStats usersCount={users.length} revenue={revenue} gamesCount={games.length} videosCount={videos?.length || 0} />
+
+          {/* Tab Content */}
+          <div style={{ animation: 'fadeIn 0.3s ease' }}>
+            {activeTab === 'users' && (
+              <UserManager users={users} games={games} />
+            )}
+
+            {activeTab === 'games' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <GameForm
+                  newGame={newGame}
+                  setNewGame={setNewGame}
+                  editingGameId={editingGameId}
+                  geminiApiKey={geminiApiKey}
+                  setGeminiApiKey={setGeminiApiKey}
+                  onSaveGame={handleSaveGame}
+                  onCancelEdit={handleCancelEdit}
+                />
+                <GameList
+                  games={games}
+                  onEditClick={handleEditClick}
+                  onDeleteClick={deleteGameFromStore}
+                />
               </div>
-            </button>
-          );
-        })}
+            )}
+
+            {activeTab === 'videos' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <VideoForm
+                  videoData={videoData}
+                  setVideoData={setVideoData}
+                  editingVideoId={editingVideoId}
+                  onSaveVideo={handleSaveVideo}
+                  onCancelEdit={handleCancelVideoEdit}
+                />
+                <VideoList
+                  videos={videos || []}
+                  onEditClick={handleEditVideo}
+                  onDeleteClick={deleteVideoFromStore}
+                />
+              </div>
+            )}
+
+            {activeTab === 'reports' && (
+              <ErrorReportManager />
+            )}
+          </div>
+        </main>
       </div>
-
-      {/* Tab 1: User Management */}
-      {activeTab === 'users' && (
-        <div style={{ animation: 'fadeIn 0.3s ease' }}>
-          <UserManager users={users} games={games} />
-        </div>
-      )}
-
-      {/* Tab 2: Game Management (Add Game & Game List) */}
-      {activeTab === 'games' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', animation: 'fadeIn 0.3s ease' }}>
-          <GameForm
-            newGame={newGame}
-            setNewGame={setNewGame}
-            editingGameId={editingGameId}
-            geminiApiKey={geminiApiKey}
-            setGeminiApiKey={setGeminiApiKey}
-            onSaveGame={handleSaveGame}
-            onCancelEdit={handleCancelEdit}
-          />
-          <GameList
-            games={games}
-            onEditClick={handleEditClick}
-            onDeleteClick={deleteGameFromStore}
-          />
-        </div>
-      )}
-
-      {/* Tab 3: Video Management (Add Video & Video List) */}
-      {activeTab === 'videos' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', animation: 'fadeIn 0.3s ease' }}>
-          <VideoForm
-            videoData={videoData}
-            setVideoData={setVideoData}
-            editingVideoId={editingVideoId}
-            onSaveVideo={handleSaveVideo}
-            onCancelEdit={handleCancelVideoEdit}
-          />
-          <VideoList
-            videos={videos || []}
-            onEditClick={handleEditVideo}
-            onDeleteClick={deleteVideoFromStore}
-          />
-        </div>
-      )}
-
-      {/* Tab 4: Error Report Management */}
-      {activeTab === 'reports' && (
-        <div style={{ animation: 'fadeIn 0.3s ease' }}>
-          <ErrorReportManager />
-        </div>
-      )}
     </div>
   );
 }

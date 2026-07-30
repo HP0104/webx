@@ -24,6 +24,7 @@ import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDo
 import { findGameByRouteParam, getGamePath } from './utils/gameRoutes';
 import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './utils/ownership';
 import { ADS_CONFIG } from './config/ads';
+import MobileBottomNav from './components/MobileBottomNav';
 
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
@@ -471,6 +472,7 @@ function App() {
               </div>
             </aside>
           </div>
+          <MobileBottomNav />
         </div>
       </Router>
     </AppContext.Provider>

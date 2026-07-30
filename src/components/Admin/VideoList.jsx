@@ -1,7 +1,13 @@
-import React from 'react';
-import { Film, Trash2, Edit3, ExternalLink } from 'lucide-react';
+import React, { useState } from 'react';
+import { Film, Trash2, Edit, ExternalLink, Search } from 'lucide-react';
 
 function VideoList({ videos, onEditClick, onDeleteClick }) {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredVideos = (videos || []).filter(v => 
+    (v.title || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   const handleDelete = (videoId, title) => {
     if (window.confirm(`Bạn có chắc chắn muốn xóa phim "${title}"?`)) {
       onDeleteClick(videoId);
@@ -23,104 +29,86 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
 
   return (
     <div className="card">
-      <h2 style={{ color: 'var(--color-text-light)', marginBottom: '1.5rem', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        <Film size={20} /> Kho Phim ({videos.length})
-      </h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-        {videos.map(video => (
-          <div
-            key={video.id}
-            style={{
-              display: 'flex',
-              gap: '1rem',
-              padding: '1rem',
-              backgroundColor: 'var(--color-bg-main)',
-              borderRadius: '8px',
-              border: '1px solid var(--color-border)',
-              transition: 'border-color 0.2s ease'
-            }}
-          >
-            {/* Thumbnail */}
-            <div style={{
-              width: '100px',
-              height: '60px',
-              borderRadius: '6px',
-              overflow: 'hidden',
-              flexShrink: 0,
-              border: '1px solid var(--color-border)',
-              backgroundColor: '#1a1a2e'
-            }}>
-              <img
-                src={video.thumbnail || 'https://placehold.co/160x90/1a1a2e/66c0f4?text=Video'}
-                alt={video.title}
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <h2 style={{ color: 'var(--color-text-light)', fontSize: '1.2rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <Film size={20} /> Kho Phim ({videos.length})
+        </h2>
+        <div style={{ position: 'relative', width: '250px' }}>
+          <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
+          <input
+            type="text"
+            className="input-field"
+            placeholder="Tìm kiếm phim..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ paddingLeft: '32px', paddingRight: '12px', padding: '0.6rem 1rem 0.6rem 2rem', fontSize: '0.9rem' }}
+          />
+        </div>
+      </div>
 
-            {/* Info */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                color: 'var(--color-text-light)',
-                fontSize: '0.9rem',
-                fontWeight: 'bold',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                marginBottom: '0.2rem'
-              }}>
-                {video.title}
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{
-                  fontSize: '0.65rem',
-                  fontWeight: 700,
-                  padding: '0.1rem 0.4rem',
-                  borderRadius: '3px',
-                  backgroundColor: video.category === 'vam' ? 'rgba(255, 77, 106, 0.15)' : 'rgba(102, 192, 244, 0.15)',
-                  color: video.category === 'vam' ? '#ff4d6a' : '#66c0f4',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
-                  {video.category === 'vam' ? 'VAM' : '3D'}
-                </span>
-                {video.views > 0 && (
-                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                    {video.views.toLocaleString()} views
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Phim</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Thể loại</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Lượt xem</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600 }}>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredVideos.length === 0 ? (
+              <tr>
+                <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                  Không tìm thấy phim nào.
+                </td>
+              </tr>
+            ) : filteredVideos.map(video => (
+              <tr key={video.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                <td style={{ padding: '0.8rem 1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ width: '80px', height: '45px', borderRadius: '4px', overflow: 'hidden', flexShrink: 0, border: '1px solid var(--color-border)', backgroundColor: '#1a1a2e' }}>
+                      <img src={video.thumbnail || 'https://placehold.co/160x90/1a1a2e/66c0f4?text=Video'} alt={video.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <span style={{ color: 'var(--color-text-light)', fontWeight: 600 }}>{video.title}</span>
+                  </div>
+                </td>
+                <td style={{ padding: '0.8rem 1rem' }}>
+                  <span style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 700,
+                    padding: '0.2rem 0.5rem',
+                    borderRadius: '4px',
+                    backgroundColor: video.category === 'vam' ? 'rgba(255, 77, 106, 0.15)' : 'rgba(102, 192, 244, 0.15)',
+                    color: video.category === 'vam' ? '#ff4d6a' : '#66c0f4',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}>
+                    {video.category === 'vam' ? 'VAM' : '3D'}
                   </span>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button
-                  onClick={() => onEditClick(video)}
-                  className="btn btn-outline"
-                  style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-                >
-                  <Edit3 size={12} /> Sửa
-                </button>
-                <button
-                  onClick={() => handleDelete(video.id, video.title)}
-                  className="btn btn-outline"
-                  style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', color: '#ff4d4f', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-                >
-                  <Trash2 size={12} /> Xóa
-                </button>
-                {(video.videoUrl || video.streamtapeUrl) && (
-                  <a
-                    href={video.videoUrl || video.streamtapeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-outline"
-                    style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--color-accent)' }}
-                  >
-                    <ExternalLink size={12} /> Link
-                  </a>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
+                </td>
+                <td style={{ padding: '0.8rem 1rem', color: 'var(--color-text-muted)' }}>
+                  {video.views > 0 ? `${video.views.toLocaleString()} views` : '-'}
+                </td>
+                <td style={{ padding: '0.8rem 1rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button onClick={() => onEditClick(video)} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <Edit size={14} /> Sửa
+                    </button>
+                    <button onClick={() => handleDelete(video.id, video.title)} className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', color: '#ff4d4f', borderColor: 'rgba(255, 77, 79, 0.2)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <Trash2 size={14} /> Xóa
+                    </button>
+                    {(video.videoUrl || video.streamtapeUrl) && (
+                      <a href={video.videoUrl || video.streamtapeUrl} target="_blank" rel="noopener noreferrer" className="btn btn-outline" style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem', color: 'var(--color-accent)', borderColor: 'rgba(102, 192, 244, 0.2)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                        <ExternalLink size={14} /> Link
+                      </a>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
