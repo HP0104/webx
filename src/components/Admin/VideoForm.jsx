@@ -229,7 +229,13 @@ function VideoForm({
           className="input-field"
           placeholder="Link ảnh bìa (thumbnail URL)"
           value={videoData.thumbnail}
-          onChange={e => setVideoData({ ...videoData, thumbnail: e.target.value })}
+          onChange={e => {
+            let val = e.target.value;
+            if (val.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
+              val = val.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
+            }
+            setVideoData({ ...videoData, thumbnail: val });
+          }}
         />
 
         {/* Thumbnail Preview */}

@@ -229,7 +229,12 @@ export function extractVideoInfoFromPaste(pastedText) {
   const aHrefMatch = pastedText.match(/<a[^>]*href\s*=\s*["'](https?:\/\/[^"']+)["'][^>]*>/i);
   const imgSrcMatch = pastedText.match(/<img[^>]*src\s*=\s*["'](https?:\/\/[^"']+)["'][^>]*>/i);
   if (aHrefMatch && imgSrcMatch) {
-    return { videoUrl: aHrefMatch[1], thumbnail: imgSrcMatch[1] };
+    let thumbUrl = imgSrcMatch[1];
+    // Upgrade Filemoon/Streamtape low-res thumbnails (_t.jpg) to high-res (.jpg)
+    if (thumbUrl.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
+      thumbUrl = thumbUrl.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
+    }
+    return { videoUrl: aHrefMatch[1], thumbnail: thumbUrl };
   }
 
   // Check iframe src inside pasted text
