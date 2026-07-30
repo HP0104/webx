@@ -74,7 +74,7 @@ function VideoDetail() {
       {/* Video Player */}
       <div className="video-detail-player-wrapper">
         <div className="video-detail-player">
-          {rawUrl.trim().toLowerCase().startsWith('<iframe') || rawUrl.trim().toLowerCase().startsWith('<script') ? (
+          {rawUrl && (rawUrl.trim().toLowerCase().startsWith('<iframe') || rawUrl.trim().toLowerCase().startsWith('<script')) ? (
             <div dangerouslySetInnerHTML={{ __html: rawUrl }} style={{ width: '100%', height: '100%' }} className="raw-embed-container" />
           ) : (
             <iframe

@@ -17,8 +17,10 @@ function VideoForm({
    * auto-extract the video URL and thumbnail URL immediately.
    */
   const handleUrlInput = (rawVal, preventDefaultEvent = null) => {
-    const { thumbnail } = extractVideoInfoFromPaste(rawVal);
-    const cleanUrl = rawVal; // Giữ nguyên giá trị người dùng nhập (hỗ trợ mã nhúng)
+    const { videoUrl: extractedUrl, thumbnail } = extractVideoInfoFromPaste(rawVal);
+    
+    const isRawEmbed = rawVal && (rawVal.trim().toLowerCase().startsWith('<iframe') || rawVal.trim().toLowerCase().startsWith('<script'));
+    const cleanUrl = isRawEmbed ? rawVal : (extractedUrl || rawVal);
 
     if (preventDefaultEvent && cleanUrl !== videoData.videoUrl) {
       preventDefaultEvent.preventDefault();
@@ -91,8 +93,9 @@ function VideoForm({
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    const { thumbnail: extractedThumb } = extractVideoInfoFromPaste(videoData.videoUrl);
-    const finalVideoUrl = videoData.videoUrl.trim();
+    const { videoUrl: extractedUrl, thumbnail: extractedThumb } = extractVideoInfoFromPaste(videoData.videoUrl);
+    const isRawEmbed = videoData.videoUrl && (videoData.videoUrl.trim().toLowerCase().startsWith('<iframe') || videoData.videoUrl.trim().toLowerCase().startsWith('<script'));
+    const finalVideoUrl = isRawEmbed ? videoData.videoUrl.trim() : (extractedUrl || videoData.videoUrl).trim();
 
     if (!videoData.title.trim()) return alert('Vui lòng nhập tên phim!');
     if (!finalVideoUrl) return alert('Vui lòng nhập link video!');
