@@ -447,11 +447,12 @@ function App() {
           <Navbar />
           <NotificationBanner />
 
-          <div className="app-layout">
+          <div className="container" style={{ paddingBottom: 0, paddingTop: '1rem', maxWidth: '1600px' }}>
+            <RouteAdBanner />
+          </div>
+
+          <div className="app-layout" style={{ paddingTop: '1rem' }}>
             <main className="main-content">
-              <div className="container" style={{ paddingBottom: 0 }}>
-                <RouteAdBanner />
-              </div>
 
               <Routes>
                 <Route path="/" element={<Home />} />
