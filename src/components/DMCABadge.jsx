@@ -16,10 +16,9 @@ function DMCABadge() {
     <div 
       className="dmca-badge-container"
       style={{
-        position: 'fixed',
-        bottom: '80px', // Đặt cao hơn một chút để không đè lên menu điện thoại
-        left: '20px',
-        zIndex: 9999,
+        marginTop: '2rem',
+        marginBottom: '2rem', // Khoảng cách với đáy trang
+        alignSelf: 'center', // Căn giữa
         backgroundColor: 'rgba(20, 20, 24, 0.8)',
         padding: '6px',
         borderRadius: '8px',
@@ -29,7 +28,9 @@ function DMCABadge() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backdropFilter: 'blur(4px)'
+        backdropFilter: 'blur(4px)',
+        width: 'fit-content',
+        position: 'static'
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'scale(1.05) translateY(-2px)';
