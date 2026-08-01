@@ -25,7 +25,8 @@ import { findGameByRouteParam, getGamePath } from './utils/gameRoutes';
 import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './utils/ownership';
 import { ADS_CONFIG } from './config/ads';
 import MobileBottomNav from './components/MobileBottomNav';
-
+import ErrorReportButton from './components/ErrorReportButton';
+import DMCABadge from './components/DMCABadge';
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
 
@@ -483,6 +484,8 @@ function App() {
             </aside>
           </div>
           <MobileBottomNav />
+          <ErrorReportButton />
+          <DMCABadge />
         </div>
       </Router>
     </AppContext.Provider>
