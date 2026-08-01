@@ -145,6 +145,9 @@ function VideoDetail() {
             <div 
               className="video-player-overlay" 
               style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
                 width: '100%',
                 height: '100%',
                 backgroundImage: `url(${thumbnail})`,
@@ -152,7 +155,6 @@ function VideoDetail() {
                 backgroundRepeat: 'no-repeat',
                 backgroundPosition: 'center',
                 backgroundColor: '#000',
-                position: 'relative',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -184,7 +186,7 @@ function VideoDetail() {
               </div>
             </div>
           ) : rawUrl && (rawUrl.trim().toLowerCase().startsWith('<iframe') || rawUrl.trim().toLowerCase().startsWith('<script')) ? (
-            <div dangerouslySetInnerHTML={{ __html: rawUrl }} style={{ width: '100%', height: '100%' }} className="raw-embed-container" />
+            <div dangerouslySetInnerHTML={{ __html: rawUrl }} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} className="raw-embed-container" />
           ) : (
             <iframe
               src={embedUrl ? (embedUrl.includes('?') ? `${embedUrl}&autoplay=1` : `${embedUrl}?autoplay=1`) : ''}
