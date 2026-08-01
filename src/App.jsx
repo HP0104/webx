@@ -119,7 +119,16 @@ function RouteAdBanner() {
   const location = useLocation();
   const routeKey = `${location.pathname}${location.search}`;
 
-  return <AdBanner key={routeKey} config={ADS_CONFIG.slot1} />;
+  return (
+    <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <AdBanner key={routeKey + '-1'} config={ADS_CONFIG.slot1} />
+      </div>
+      <div style={{ width: '728px', flexShrink: 0 }} className="ad-desktop-only">
+        <AdBanner key={routeKey + '-2'} config={ADS_CONFIG.slot1_right} />
+      </div>
+    </div>
+  );
 }
 
 function RouteAdBannerBottom() {
@@ -466,9 +475,6 @@ function App() {
             </main>
 
             <aside className="sidebar">
-              <div style={{ marginBottom: '2rem' }}>
-                <AdBanner config={ADS_CONFIG.sidebarTop} />
-              </div>
               <ChatBox />
               <div style={{ marginTop: '2rem' }}>
                 <AdBanner config={ADS_CONFIG.sidebar} />
