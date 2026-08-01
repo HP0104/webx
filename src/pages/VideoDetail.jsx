@@ -23,6 +23,8 @@ function VideoDetail() {
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
 
+  const video = videos.find(v => v.id.toString() === videoId);
+
   // Lắng nghe bình luận realtime
   useEffect(() => {
     if (!video?.id) return;
@@ -82,7 +84,6 @@ function VideoDetail() {
     }
   };
 
-  const video = videos.find(v => v.id.toString() === videoId);
 
   useEffect(() => {
     if (video?.id) {
