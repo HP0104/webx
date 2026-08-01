@@ -41,16 +41,16 @@ function DMCABadge() {
       }}
     >
       <a 
-        href="https://www.dmca.com/Protection/Status.aspx" 
+        href="https://www.dmca.com/Protection/Status.aspx?ID=b48d280e-0da6-4675-9697-1269c31b3715" 
         title="DMCA.com Protection Status" 
         className="dmca-badge"
         target="_blank"
         rel="noopener noreferrer"
       >
         <img 
-          src="https://images.dmca.com/Badges/dmca-badge-w100-5x1-11.png"  
+          src="https://images.dmca.com/Badges/dmca_protected_sml_120m.png?ID=b48d280e-0da6-4675-9697-1269c31b3715"  
           alt="DMCA.com Protection Status" 
-          style={{ display: 'block', width: '100px', height: 'auto' }}
+          style={{ display: 'block', width: '120px', height: 'auto' }}
         />
       </a>
     </div>
