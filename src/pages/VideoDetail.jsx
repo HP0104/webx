@@ -4,7 +4,7 @@ import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight } from 'lucide-react';
 import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils } from '../utils/videoUtils';
 import ErrorReportButton from '../components/ErrorReportButton';
-import { doc, updateDoc, increment } from 'firebase/firestore';
+import { doc, updateDoc, increment, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 
 /**
@@ -16,9 +16,71 @@ export function getVideoThumbnail(url) {
 
 function VideoDetail() {
   const { videoId } = useParams();
-  const { videos = [] } = useAppContext();
+  const { videos = [], user } = useAppContext();
   const navigate = useNavigate();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Lắng nghe bình luận realtime
+  useEffect(() => {
+    if (!video?.id) return;
+    const qComments = query(collection(db, 'video_comments'), where('videoId', '==', video.id.toString()));
+    const unsubscribe = onSnapshot(qComments, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)); // Sắp xếp cũ -> mới
+      setComments(list);
+    }, (err) => {
+      console.warn("Lỗi tải bình luận video:", err);
+    });
+    return () => unsubscribe();
+  }, [video?.id]);
+
+  const handleAddComment = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      alert("Vui lòng đăng nhập để bình luận!");
+      return;
+    }
+    if (!newComment.trim() || submittingComment) return;
+
+    setSubmittingComment(true);
+    const commentText = newComment.trim();
+
+    try {
+      // 1. Thêm bình luận
+      await addDoc(collection(db, 'video_comments'), {
+        videoId: video.id.toString(),
+        userId: user.id || user.uid,
+        authorName: user.username || user.email,
+        authorAvatar: user.photoURL || null,
+        text: commentText,
+        createdAt: new Date().toISOString()
+      });
+
+      // 2. Bot kiểm tra từ khóa "lỗi"
+      if (commentText.toLowerCase().includes('lỗi')) {
+        await addDoc(collection(db, 'error_reports'), {
+          type: 'video',
+          itemId: video.id.toString(),
+          itemTitle: video.title,
+          message: `[AUTO-BOT] Người dùng báo lỗi qua bình luận: "${commentText}"`,
+          senderName: user.username || user.email,
+          senderId: user.id || user.uid,
+          status: 'pending',
+          createdAt: serverTimestamp()
+        });
+      }
+
+      setNewComment('');
+    } catch (err) {
+      console.error("Lỗi gửi bình luận:", err);
+      alert("Gửi bình luận thất bại!");
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
 
   const video = videos.find(v => v.id.toString() === videoId);
 
@@ -187,6 +249,81 @@ function VideoDetail() {
         {/* Error Report Button */}
         <div style={{ marginTop: '1rem' }}>
           <ErrorReportButton type="video" itemId={video.id} itemTitle={video.title} />
+        </div>
+
+        {/* BÌNH LUẬN VIDEO */}
+        <div className="video-comments-section" style={{ marginTop: '3rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '2rem' }}>
+          <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            Bình luận ({comments.length})
+          </h3>
+          
+          {/* Form write comment */}
+          <div style={{ marginBottom: '2rem' }}>
+            {!user ? (
+              <div style={{ padding: '1.5rem', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '8px', textAlign: 'center' }}>
+                <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }}>Vui lòng đăng nhập để tham gia bình luận.</p>
+                <Link to="/auth" className="btn btn-primary btn-sm">Đăng nhập ngay</Link>
+              </div>
+            ) : (
+              <form onSubmit={handleAddComment} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                <div style={{ width: '45px', height: '45px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-light)', fontWeight: 'bold', fontSize: '1.2rem' }}>
+                      {(user.username || user.email || 'U')[0].toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <textarea
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Nhập bình luận của bạn (nếu báo lỗi phim, hãy gõ từ 'lỗi' để bot ghi nhận nhé)..."
+                    style={{ width: '100%', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', backgroundColor: 'rgba(0,0,0,0.2)', color: 'white', minHeight: '80px', resize: 'vertical' }}
+                    disabled={submittingComment}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                    <button type="submit" className="btn btn-primary" disabled={!newComment.trim() || submittingComment}>
+                      {submittingComment ? 'Đang gửi...' : 'Gửi bình luận'}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+
+          {/* Comment list */}
+          <div className="video-comments-list" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {comments.length === 0 ? (
+              <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', fontStyle: 'italic' }}>Chưa có bình luận nào. Hãy là người đầu tiên!</p>
+            ) : (
+              comments.map(comment => (
+                <div key={comment.id} style={{ display: 'flex', gap: '1rem', padding: '1rem', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, backgroundColor: 'rgba(255,255,255,0.1)' }}>
+                    {comment.authorAvatar ? (
+                      <img src={comment.authorAvatar} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-light)', fontWeight: 'bold' }}>
+                        {(comment.authorName || 'U')[0].toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                      <span style={{ color: 'var(--color-text-light)', fontWeight: 'bold', fontSize: '0.95rem' }}>{comment.authorName}</span>
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                        {comment.createdAt ? new Date(comment.createdAt).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </div>
+                    <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.95rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                      {comment.text}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 

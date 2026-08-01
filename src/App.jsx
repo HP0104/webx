@@ -224,7 +224,7 @@ function App() {
           photoURL: firebaseUser.photoURL,
           balance: 0,
           ownedGames: [],
-          role: firebaseUser.email === 'admin@gmail.com' ? 'admin' : 'user'
+          role: 'user' // Mặc định là user để bảo mật. Admin phải được set trong Database.
         };
 
         try {

@@ -2,34 +2,43 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Hàm kiểm tra quyền Admin
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // 1. Quy tắc cho Phòng Chat cộng đồng (Ai cũng đọc được, đăng nhập mới được chat)
     match /chats/{chatId} {
       allow read: if true;
       allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
     }
     
-    // 2. Quy tắc cho Người dùng (Chỉ cho phép sửa đổi thông tin cá nhân, không tự tăng tiền hay phân quyền Admin)
+    // 2. Quy tắc cho Người dùng (Bảo mật tối đa, chặn hack tiền/role)
     match /users/{userId} {
       allow read: if true;
       allow create: if request.auth != null && request.auth.uid == userId
                     && request.resource.data.balance == 0
                     && request.resource.data.role == 'user';
+      
       allow update: if request.auth != null && (
         (request.auth.uid == userId 
-         && request.resource.data.role == resource.data.role
-         && request.resource.data.balance <= resource.data.balance)
-        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+         && request.resource.data.role == resource.data.role // Không được tự đổi role
+         && request.resource.data.balance <= resource.data.balance) // Không được tự tăng tiền
+        || isAdmin() // Trừ khi là admin
       );
-      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      allow delete: if request.auth != null && isAdmin();
     }
 
     // 3. Quy tắc cho Blog & Bình luận Blog
     match /blogs/{blogId} {
       allow read: if true;
-      allow create, delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Chỉ Admin được tạo/xóa bài viết
+      allow create, delete: if request.auth != null && isAdmin();
       allow update: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        isAdmin() 
+        // User bình thường chỉ được phép tăng view (không được sửa nội dung)
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
             && request.resource.data.views == resource.data.views + 1)
       );
@@ -37,33 +46,35 @@ service cloud.firestore {
     match /comments/{commentId} {
       allow read: if true;
       allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // 4. Quy tắc cho Game trong store
     match /games/{gameId} {
       allow read: if true;
-      allow create, delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Chỉ Admin được thêm, sửa, xóa Game
+      allow create, delete: if request.auth != null && isAdmin();
       allow update: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        isAdmin()
+        // User bình thường chỉ được phép tải game (tăng view/lượt tải nếu có)
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
             && request.resource.data.views == resource.data.views + 1)
       );
     }
 
-    // 4b. Quy tắc cho Sticker (Ai cũng xem được, đăng nhập mới được thêm)
+    // 4b. Quy tắc cho Sticker
     match /stickers/{stickerId} {
       allow read: if true;
       allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow update, delete: if request.auth != null && isAdmin();
     }
 
     // 5. Quy tắc cho Video & Bình luận Video
     match /videos/{videoId} {
       allow read: if true;
-      allow create, delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow create, delete: if request.auth != null && isAdmin();
       allow update: if request.auth != null && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        isAdmin()
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
             && request.resource.data.views == resource.data.views + 1)
       );
@@ -71,35 +82,39 @@ service cloud.firestore {
     match /video_comments/{commentId} {
       allow read: if true;
       allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
-    // 6. Quy tắc cho bảng Báo lỗi & Hỗ trợ
+    // 6. Quy tắc cho bảng Báo lỗi & Hỗ trợ (User chỉ xem/tạo của mình)
     match /reports/{document} {
       allow create: if request.auth != null;
-      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-      allow update, delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow read: if request.auth != null && (resource.data.senderId == request.auth.uid || isAdmin());
+      allow update, delete: if request.auth != null && isAdmin();
     }
 
-    // 6b. Quy tắc cho bảng Báo lỗi Game/Phim (error_reports)
     match /error_reports/{document} {
-      allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update, delete: if request.auth != null
-                            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow read: if request.auth != null; // Ai cũng xem được báo lỗi chung
+      allow update, delete: if request.auth != null && isAdmin();
     }
     
-    // 7. Quy tắc cho bảng Ví nạp tiền (Tránh user tự đổi trạng thái nạp thành thành công)
+    // 7. Quy tắc cho bảng Ví nạp tiền (Cực kỳ quan trọng: chặn user tự đổi status thành công)
     match /payments/{document} {
       allow read: if request.auth != null;
+      
+      // User chỉ được tạo hóa đơn ở trạng thái "pending"
       allow create: if request.auth != null 
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.status == 'pending';
+      
+      // User không được tự sửa đổi nội dung hóa đơn (đặc biệt là status)
       allow update: if request.auth != null 
-                    && (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+                    && (isAdmin()
                         || (request.resource.data.userId == request.auth.uid 
                             && request.resource.data.status == resource.data.status));
-      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // Chặn xóa
+      allow delete: if request.auth != null && isAdmin();
     }
   }
 }
