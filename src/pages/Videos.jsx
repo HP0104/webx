@@ -201,23 +201,26 @@ function Videos() {
                   background: rgba(255, 255, 255, 0.3);
                 }
                 .random-videos-slider .video-card {
-                  min-width: calc(20% - 1.2rem); /* Show 5 cards (40% smaller) */
-                  flex: 0 0 auto;
+                  width: calc(20% - 1.2rem); /* Show 5 cards (40% smaller) */
+                  flex: 0 0 calc(20% - 1.2rem);
                   scroll-snap-align: start;
                 }
                 @media (max-width: 1200px) {
                   .random-videos-slider .video-card {
-                    min-width: calc(25% - 1.125rem); /* Show 4 cards */
+                    width: calc(25% - 1.125rem); /* Show 4 cards */
+                    flex: 0 0 calc(25% - 1.125rem);
                   }
                 }
                 @media (max-width: 1024px) {
                   .random-videos-slider .video-card {
-                    min-width: calc(33.333% - 1rem); /* Show 3 cards */
+                    width: calc(33.333% - 1rem); /* Show 3 cards */
+                    flex: 0 0 calc(33.333% - 1rem);
                   }
                 }
                 @media (max-width: 640px) {
                   .random-videos-slider .video-card {
-                    min-width: calc(60% - 1rem); /* Show 1.5 cards on mobile */
+                    width: calc(60% - 1rem); /* Show 1.5 cards on mobile */
+                    flex: 0 0 calc(60% - 1rem);
                   }
                 }
               `}
