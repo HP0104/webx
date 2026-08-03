@@ -85,8 +85,8 @@ const VideoCardItem = ({ video }) => {
               </span>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </Link>
   );
 };
