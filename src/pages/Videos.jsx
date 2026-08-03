@@ -11,98 +11,14 @@ const CATEGORY_LABELS = {
   '3d': 'Phim 3D'
 };
 
-// Video Card Component for reuse
-const VideoCardItem = ({ video }) => {
-  const rawUrl = video.videoUrl || video.streamtapeUrl;
-  let thumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
-  if (thumbnail && thumbnail.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
-    thumbnail = thumbnail.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
-  }
-  thumbnail = thumbnail || 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail';
-
-  return (
-    <Link
-      to={`/video/${video.id}`}
-      className="video-card"
-      style={{ textDecoration: 'none' }}
-    >
-      <div className="video-card-thumbnail">
-        {video.thumbnail || getVideoThumbnail(rawUrl) ? (
-          <img
-            src={thumbnail}
-            alt={video.title}
-            loading="lazy"
-            onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-          />
-        ) : null}
-        <div 
-          style={{ 
-            width: '100%', 
-            height: '100%', 
-            background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-            display: (video.thumbnail || getVideoThumbnail(rawUrl)) ? 'none' : 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--color-text-muted)'
-          }}
-        >
-          <Film size={48} opacity={0.5} />
-        </div>
-        <div className="video-card-overlay">
-          <div className="video-card-play-btn">
-            <Play size={32} fill="white" />
-          </div>
-        </div>
-        <span className="video-card-badge">
-          {video.category === 'vam' ? 'VAM' : '3D'}
-        </span>
-      </div>
-
-      {/* Info */}
-      <div className="video-card-info">
-        <h3 className="video-card-title">{video.title}</h3>
-        {video.description && (
-          <p className="video-card-desc">{video.description}</p>
-        )}
-        <div className="video-card-meta">
-          {video.views > 0 && (
-            <span className="video-card-meta-item">
-              <Eye size={13} /> {video.views.toLocaleString()}
-            </span>
-          )}
-          {video.createdAt && (
-            <span className="video-card-meta-item">
-              <Calendar size={13} />
-              {new Date(video.createdAt).toLocaleDateString('vi-VN')}
-            </span>
-          )}
-        </div>
-        {video.tags && video.tags.length > 0 && (
-          <div className="video-card-tags">
-            {video.tags.slice(0, 3).map((tag, idx) => (
-              <span key={idx} className="video-card-tag">
-                <Tag size={10} /> {tag}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-    </Link>
-  );
-};
+import VideoCardItem from '../components/VideoCardItem';
+import RandomVideosSlider from '../components/RandomVideosSlider';
 
 function Videos() {
   const { category } = useParams();
   const { videos = [] } = useAppContext();
 
-  // Random Videos Logic
-  const [randomVideos, setRandomVideos] = useState([]);
-  useEffect(() => {
-    if (videos.length > 0) {
-      const shuffled = [...videos].sort(() => 0.5 - Math.random());
-      setRandomVideos(shuffled.slice(0, 6));
-    }
-  }, [videos]);
+
 
   const currentCategory = category || 'all';
   const pageTitle = CATEGORY_LABELS[currentCategory] || 'Tất Cả Phim';
@@ -137,102 +53,12 @@ function Videos() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const sliderRef = React.useRef(null);
 
-  React.useEffect(() => {
-    const slider = sliderRef.current;
-    if (!slider) return;
-
-    const onWheel = (e) => {
-      if (e.deltaY === 0) return;
-      const isScrollable = slider.scrollWidth > slider.clientWidth;
-      if (!isScrollable) return;
-      
-      const atLeftEnd = slider.scrollLeft <= 0 && e.deltaY < 0;
-      const atRightEnd = Math.ceil(slider.scrollLeft + slider.clientWidth) >= slider.scrollWidth && e.deltaY > 0;
-      
-      if (!atLeftEnd && !atRightEnd) {
-        e.preventDefault();
-        const cardWidth = slider.querySelector('.video-card')?.clientWidth || 300;
-        const scrollAmount = e.deltaY > 0 ? cardWidth + 24 : -(cardWidth + 24);
-        slider.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-      }
-    };
-
-    slider.addEventListener('wheel', onWheel, { passive: false });
-    return () => slider.removeEventListener('wheel', onWheel);
-  }, [randomVideos]);
 
   return (
     <div className="container videos-page">
       {/* Random Videos Slider */}
-      {randomVideos.length > 0 && currentCategory === 'all' && (
-        <div className="random-videos-section" style={{ marginBottom: '3rem' }}>
-          <div className="videos-header-content" style={{ marginBottom: '1.5rem' }}>
-            <Film size={28} className="videos-header-icon" />
-            <div>
-              <h2 className="videos-title" style={{ fontSize: '1.5rem' }}>Phim Ngẫu Nhiên</h2>
-            </div>
-          </div>
-          <div 
-            className="random-videos-slider" 
-            ref={sliderRef}
-            style={{
-              display: 'flex',
-              overflowX: 'auto',
-              gap: '1.5rem',
-              paddingBottom: '1.5rem', /* extra padding for scrollbar */
-              scrollSnapType: 'x mandatory',
-              WebkitOverflowScrolling: 'touch',
-            }}
-          >
-            <style>
-              {`
-                .random-videos-slider::-webkit-scrollbar {
-                  height: 8px;
-                }
-                .random-videos-slider::-webkit-scrollbar-track {
-                  background: rgba(255, 255, 255, 0.05);
-                  border-radius: 4px;
-                }
-                .random-videos-slider::-webkit-scrollbar-thumb {
-                  background: rgba(255, 255, 255, 0.2);
-                  border-radius: 4px;
-                }
-                .random-videos-slider::-webkit-scrollbar-thumb:hover {
-                  background: rgba(255, 255, 255, 0.3);
-                }
-                .random-videos-slider .video-card {
-                  width: calc(28.57% - 1.07rem); /* Show 3.5 cards */
-                  flex: 0 0 calc(28.57% - 1.07rem);
-                  scroll-snap-align: start;
-                }
-                @media (max-width: 1200px) {
-                  .random-videos-slider .video-card {
-                    width: calc(25% - 1.125rem); /* Show 4 cards */
-                    flex: 0 0 calc(25% - 1.125rem);
-                  }
-                }
-                @media (max-width: 1024px) {
-                  .random-videos-slider .video-card {
-                    width: calc(33.333% - 1rem); /* Show 3 cards */
-                    flex: 0 0 calc(33.333% - 1rem);
-                  }
-                }
-                @media (max-width: 640px) {
-                  .random-videos-slider .video-card {
-                    width: calc(60% - 1rem); /* Show 1.5 cards on mobile */
-                    flex: 0 0 calc(60% - 1rem);
-                  }
-                }
-              `}
-            </style>
-            {randomVideos.map(video => (
-              <VideoCardItem key={video.id} video={video} />
-            ))}
-          </div>
-        </div>
-      )}
+      {currentCategory === 'all' && <RandomVideosSlider />}
 
       {/* Header */}
       <div className="videos-header">

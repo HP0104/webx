@@ -3,11 +3,12 @@ import { Gamepad2, TrendingUp, Clock, Star, Eye, ChevronLeft, ChevronRight } fro
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
+import RandomVideosSlider from '../components/RandomVideosSlider';
 
 function Home() {
   const { games, loadingGames } = useAppContext();
   const [currentPage, setCurrentPage] = useState(1);
-  const GAMES_PER_PAGE = 12;
+  const GAMES_PER_PAGE = 9;
   const [hotFilter, setHotFilter] = useState('day');
 
   // Sắp xếp Game mới cập nhật (updatedAt hoặc createdAt giảm dần)
@@ -71,6 +72,8 @@ function Home() {
 
   return (
     <div className="container" style={{ paddingBottom: '4rem' }}>
+      <RandomVideosSlider />
+      
       {/* ==========================================
           PHẦN 1: GAME MỚI CẬP NHẬT (Sắp xếp theo thời gian cập nhật + Phân trang)
           ========================================== */}
