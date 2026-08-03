@@ -137,6 +137,30 @@ function Videos() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const sliderRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const slider = sliderRef.current;
+    if (!slider) return;
+
+    const onWheel = (e) => {
+      if (e.deltaY === 0) return;
+      const isScrollable = slider.scrollWidth > slider.clientWidth;
+      if (!isScrollable) return;
+      
+      const atLeftEnd = slider.scrollLeft === 0 && e.deltaY < 0;
+      const atRightEnd = Math.ceil(slider.scrollLeft + slider.clientWidth) >= slider.scrollWidth && e.deltaY > 0;
+      
+      if (!atLeftEnd && !atRightEnd) {
+        e.preventDefault();
+        slider.scrollLeft += e.deltaY;
+      }
+    };
+
+    slider.addEventListener('wheel', onWheel, { passive: false });
+    return () => slider.removeEventListener('wheel', onWheel);
+  }, [randomVideos]);
+
   return (
     <div className="container videos-page">
       {/* Random Videos Slider */}
@@ -148,34 +172,52 @@ function Videos() {
               <h2 className="videos-title" style={{ fontSize: '1.5rem' }}>Phim Ngẫu Nhiên</h2>
             </div>
           </div>
-          <div className="random-videos-slider" style={{
-            display: 'flex',
-            overflowX: 'auto',
-            gap: '1.5rem',
-            paddingBottom: '1rem',
-            scrollSnapType: 'x mandatory',
-            WebkitOverflowScrolling: 'touch',
-            scrollbarWidth: 'none', // Firefox
-            msOverflowStyle: 'none',  // IE and Edge
-          }}>
+          <div 
+            className="random-videos-slider" 
+            ref={sliderRef}
+            style={{
+              display: 'flex',
+              overflowX: 'auto',
+              gap: '1.5rem',
+              paddingBottom: '1.5rem', /* extra padding for scrollbar */
+              scrollSnapType: 'x mandatory',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
             <style>
               {`
                 .random-videos-slider::-webkit-scrollbar {
-                  display: none;
+                  height: 8px;
+                }
+                .random-videos-slider::-webkit-scrollbar-track {
+                  background: rgba(255, 255, 255, 0.05);
+                  border-radius: 4px;
+                }
+                .random-videos-slider::-webkit-scrollbar-thumb {
+                  background: rgba(255, 255, 255, 0.2);
+                  border-radius: 4px;
+                }
+                .random-videos-slider::-webkit-scrollbar-thumb:hover {
+                  background: rgba(255, 255, 255, 0.3);
                 }
                 .random-videos-slider .video-card {
-                  min-width: calc(33.333% - 1rem); /* Show 3 cards */
+                  min-width: calc(20% - 1.2rem); /* Show 5 cards (40% smaller) */
                   flex: 0 0 auto;
                   scroll-snap-align: start;
                 }
+                @media (max-width: 1200px) {
+                  .random-videos-slider .video-card {
+                    min-width: calc(25% - 1.125rem); /* Show 4 cards */
+                  }
+                }
                 @media (max-width: 1024px) {
                   .random-videos-slider .video-card {
-                    min-width: calc(50% - 0.75rem); /* Show 2 cards on tablet */
+                    min-width: calc(33.333% - 1rem); /* Show 3 cards */
                   }
                 }
                 @media (max-width: 640px) {
                   .random-videos-slider .video-card {
-                    min-width: 85%; /* Show 1.5 cards on mobile */
+                    min-width: calc(60% - 1rem); /* Show 1.5 cards on mobile */
                   }
                 }
               `}
