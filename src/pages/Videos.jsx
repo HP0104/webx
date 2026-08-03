@@ -148,12 +148,14 @@ function Videos() {
       const isScrollable = slider.scrollWidth > slider.clientWidth;
       if (!isScrollable) return;
       
-      const atLeftEnd = slider.scrollLeft === 0 && e.deltaY < 0;
+      const atLeftEnd = slider.scrollLeft <= 0 && e.deltaY < 0;
       const atRightEnd = Math.ceil(slider.scrollLeft + slider.clientWidth) >= slider.scrollWidth && e.deltaY > 0;
       
       if (!atLeftEnd && !atRightEnd) {
         e.preventDefault();
-        slider.scrollLeft += e.deltaY;
+        const cardWidth = slider.querySelector('.video-card')?.clientWidth || 300;
+        const scrollAmount = e.deltaY > 0 ? cardWidth + 24 : -(cardWidth + 24);
+        slider.scrollBy({ left: scrollAmount, behavior: 'smooth' });
       }
     };
 
@@ -201,8 +203,8 @@ function Videos() {
                   background: rgba(255, 255, 255, 0.3);
                 }
                 .random-videos-slider .video-card {
-                  width: calc(20% - 1.2rem); /* Show 5 cards (40% smaller) */
-                  flex: 0 0 calc(20% - 1.2rem);
+                  width: calc(28.57% - 1.07rem); /* Show 3.5 cards */
+                  flex: 0 0 calc(28.57% - 1.07rem);
                   scroll-snap-align: start;
                 }
                 @media (max-width: 1200px) {
