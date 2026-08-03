@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Gamepad2, Star, Download, Calendar, ArrowLeft } from 'lucide-react';
 import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
+import VideoCardItem from '../components/VideoCardItem';
 
 function Category() {
   const { categoryType } = useParams();
-  const { games } = useAppContext();
+  const { games, videos = [] } = useAppContext();
   const location = useLocation();
+  const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
   const searchQuery = searchParams.get('search');
 
@@ -32,12 +34,21 @@ function Category() {
   if (searchQuery) {
     title = `KẾT QUẢ TÌM KIẾM CHO "${searchQuery}"`;
     const lowerQuery = searchQuery.toLowerCase();
-    filteredGames = games.filter(g => 
+    
+    const gameMatches = games.filter(g => 
       g.title?.toLowerCase().includes(lowerQuery) || 
       g.developer?.toLowerCase().includes(lowerQuery) ||
       (Array.isArray(g.tags) ? g.tags : []).some(t => t.toLowerCase().includes(lowerQuery)) ||
       g.description?.toLowerCase().includes(lowerQuery)
-    );
+    ).map(g => ({ ...g, itemType: 'game' }));
+
+    const videoMatches = videos.filter(v => 
+      v.title?.toLowerCase().includes(lowerQuery) || 
+      v.description?.toLowerCase().includes(lowerQuery) ||
+      (Array.isArray(v.tags) ? v.tags : []).some(t => t.toLowerCase().includes(lowerQuery))
+    ).map(v => ({ ...v, itemType: 'video' }));
+
+    filteredGames = [...gameMatches, ...videoMatches];
   } else {
     switch (categoryType) {
       case 'hot':
@@ -106,18 +117,47 @@ function Category() {
 
   return (
     <div className="container">
-      {/* Category Header */}
-      <div className="section-header category-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Link to="/" style={{ color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem', hover: 'color: white' }}>
-            <ArrowLeft size={16} />
-            <span>Quay lại</span>
-          </Link>
-          <h2 className="section-title" style={{ margin: 0 }}>{title}</h2>
-        </div>
-        <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', background: 'rgba(255,255,255,0.03)', padding: '0.3rem 0.8rem', borderRadius: '20px', border: '1px solid var(--color-border)' }}>
-          {filteredGames.length} Trò chơi
-        </span>
+      <div className="section-header" style={{ marginBottom: '2rem' }}>
+        <h2 className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {searchQuery ? <ArrowLeft size={24} style={{ cursor: 'pointer' }} onClick={() => window.history.back()} /> : <Gamepad2 size={24} color="var(--color-accent)" />}
+          {title}
+        </h2>
+        <div className="section-line"></div>
+      </div>
+
+      <style>
+        {`
+          .mobile-search-box {
+            display: none;
+          }
+          @media (max-width: 768px) {
+            .mobile-search-box {
+              display: block;
+              margin-bottom: 2rem;
+            }
+          }
+        `}
+      </style>
+      
+      {/* Mobile Search Box */}
+      <div className="mobile-search-box">
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const val = e.target.search.value.trim();
+          if (val) {
+            navigate(`/games?search=${encodeURIComponent(val)}`);
+          }
+        }} style={{ display: 'flex', gap: '0.5rem' }}>
+          <input 
+            name="search"
+            type="text" 
+            placeholder="Tìm game, phim..." 
+            defaultValue={searchQuery || ''}
+            className="input-field" 
+            style={{ flex: 1, padding: '0.6rem 1rem' }}
+          />
+          <button type="submit" className="btn btn-primary" style={{ padding: '0.6rem 1rem' }}>Tìm</button>
+        </form>
       </div>
 
       {filteredGames.length === 0 ? (
@@ -133,11 +173,14 @@ function Category() {
         <>
           <div className="game-grid category-game-grid" style={{ marginBottom: '2rem' }}>
             {paginatedGames.map(game => (
-              <Link 
-                to={getGamePath(game)} 
-                key={game.id} 
-                className="game-card fade-in"
-              >
+              game.itemType === 'video' ? (
+                <VideoCardItem key={`vid-${game.id}`} video={game} />
+              ) : (
+                <Link 
+                  to={getGamePath(game)} 
+                  key={game.id} 
+                  className="game-card fade-in"
+                >
                 <div className="game-card-inner">
                   <div className="game-image-wrapper">
                     <img 
@@ -164,7 +207,6 @@ function Category() {
                   <div className="game-info">
                     <h3 className="game-title">{game.title}</h3>
                     
-                    {/* Category-specific metadata badges */}
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
                       {categoryType === 'new' && game.releaseDate && (
                         <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
@@ -195,8 +237,9 @@ function Category() {
                       </div>
                     </div>
                   </div>
-                </div>
-              </Link>
+                  </div>
+                </Link>
+              )
             ))}
           </div>
 

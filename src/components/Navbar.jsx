@@ -5,7 +5,7 @@ import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
 
 function Navbar() {
-  const { user, logout, balance, games } = useAppContext();
+  const { user, logout, balance, games, videos = [] } = useAppContext();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -207,10 +207,16 @@ function Navbar() {
             </div>
             
             {(() => {
-              const matches = games.filter(g => 
+              const gameMatches = games.filter(g => 
                 g.title?.toLowerCase().includes(navSearch.toLowerCase()) ||
                 g.developer?.toLowerCase().includes(navSearch.toLowerCase())
-              ).slice(0, 5);
+              ).map(g => ({ ...g, itemType: 'game' }));
+
+              const videoMatches = videos.filter(v => 
+                v.title?.toLowerCase().includes(navSearch.toLowerCase())
+              ).map(v => ({ ...v, itemType: 'video' }));
+
+              const matches = [...gameMatches, ...videoMatches].slice(0, 5);
 
               if (matches.length === 0) {
                 return (
@@ -220,11 +226,11 @@ function Navbar() {
                 );
               }
 
-              return matches.map(game => (
+              return matches.map(item => (
                 <Link
-                  key={game.id}
+                  key={`${item.itemType}-${item.id}`}
                   className="nav-search-suggestion"
-                  to={getGamePath(game)}
+                  to={item.itemType === 'video' ? `/video/${item.id}` : getGamePath(item)}
                   onClick={() => {
                     setNavSearch('');
                     setShowSuggestions(false);
@@ -245,8 +251,8 @@ function Navbar() {
                   {/* Thumbnail Cover */}
                   <div style={{ width: '80px', height: '45px', overflow: 'hidden', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
                     <img 
-                      src={game.thumbnail || game.image} 
-                      alt={game.title} 
+                      src={item.thumbnail || item.image || item.videoUrl} 
+                      alt={item.title} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                     />
                   </div>
@@ -254,27 +260,32 @@ function Navbar() {
                   {/* Title & Price Column */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0 }}>
                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {game.title}
+                      {item.title}
                     </div>
                     <div>
-                      {game.price === 0 ? (
-                        <span style={{ fontSize: '0.8rem', color: '#a3a3a3' }}>Miễn phí</span>
+                      {item.itemType === 'video' ? (
+                        <span style={{ fontSize: '0.75rem', color: '#ff5353', border: '1px solid #ff5353', padding: '1px 4px', borderRadius: '4px' }}>Phim</span>
                       ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          {game.discount > 0 && (
-                            <span style={{ backgroundColor: '#4c6b22', color: '#a3cf06', fontSize: '0.7rem', padding: '0.05rem 0.2rem', borderRadius: '2px', fontWeight: 'bold' }}>
-                              -{game.discount}%
+                        item.price === 0 ? (
+                          <span style={{ fontSize: '0.8rem', color: '#a3a3a3' }}>Game Miễn phí</span>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ fontSize: '0.75rem', color: '#1a9fff', border: '1px solid #1a9fff', padding: '1px 4px', borderRadius: '4px' }}>Game</span>
+                            {item.discount > 0 && (
+                              <span style={{ backgroundColor: '#4c6b22', color: '#a3cf06', fontSize: '0.7rem', padding: '0.05rem 0.2rem', borderRadius: '2px', fontWeight: 'bold' }}>
+                                -{item.discount}%
+                              </span>
+                            )}
+                            {item.discount > 0 && (
+                              <span style={{ fontSize: '0.7rem', textDecoration: 'line-through', color: '#626366' }}>
+                                {item.price.toLocaleString('vi-VN')}đ
+                              </span>
+                            )}
+                            <span style={{ fontSize: '0.8rem', color: '#acb2b8', fontWeight: 'bold' }}>
+                              {(item.discount > 0 ? (item.price * (1 - item.discount / 100)) : item.price).toLocaleString('vi-VN')}đ
                             </span>
-                          )}
-                          {game.discount > 0 && (
-                            <span style={{ fontSize: '0.7rem', textDecoration: 'line-through', color: '#626366' }}>
-                              {game.price.toLocaleString('vi-VN')}đ
-                            </span>
-                          )}
-                          <span style={{ fontSize: '0.8rem', color: '#acb2b8', fontWeight: 'bold' }}>
-                            {(game.discount > 0 ? (game.price * (1 - game.discount / 100)) : game.price).toLocaleString('vi-VN')}đ
-                          </span>
-                        </div>
+                          </div>
+                        )
                       )}
                     </div>
                   </div>
