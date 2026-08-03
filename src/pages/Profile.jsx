@@ -128,9 +128,16 @@ function Profile() {
             </div>
 
             {!isEditing ? (
-              <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setIsMenuOpen(true)}>
-                Chỉnh sửa thông tin
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setIsMenuOpen(true)}>
+                  Chỉnh sửa thông tin
+                </button>
+                {user?.role === 'admin' && (
+                  <Link to="/admin" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', backgroundColor: 'rgba(255, 83, 83, 0.1)', color: '#ff5353', border: '1px solid #ff5353' }}>
+                    <ShieldCheck size={18} style={{ marginRight: '0.4rem' }} /> Quản lý Admin
+                  </Link>
+                )}
+              </div>
             ) : (
               <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setIsMenuOpen(false)}>
                 Hủy chỉnh sửa
