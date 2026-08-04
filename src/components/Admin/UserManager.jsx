@@ -69,7 +69,7 @@ function UserManager({ users, games }) {
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <h2 style={{ color: 'var(--color-text-light)', fontSize: '1.2rem', margin: 0 }}>Quản lý Người dùng</h2>
-        <div style={{ position: 'relative', width: '250px' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
           <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
           <input
             type="text"

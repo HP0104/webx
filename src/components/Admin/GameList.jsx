@@ -24,17 +24,17 @@ function GameList({ games, onEditClick, onDeleteClick }) {
     <div className="card">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <h2 style={{ color: 'var(--color-text-light)', fontSize: '1.2rem', margin: 0 }}>Kho Game ({games.length})</h2>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', flex: 1, justifyContent: 'flex-end' }}>
           <select 
             className="input-field" 
             value={sortBy} 
             onChange={(e) => setSortBy(e.target.value)}
-            style={{ padding: '0.6rem 1rem', fontSize: '0.9rem', minWidth: '150px' }}
+            style={{ padding: '0.6rem 1rem', fontSize: '0.9rem', minWidth: '150px', flex: '1 1 150px' }}
           >
             <option value="newest">Mới cập nhật</option>
             <option value="oldest">Cũ nhất</option>
           </select>
-          <div style={{ position: 'relative', width: '250px' }}>
+          <div style={{ position: 'relative', flex: '2 1 200px', minWidth: '200px' }}>
             <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)' }} />
             <input
               type="text"
