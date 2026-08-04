@@ -8,7 +8,7 @@ import { getGamePath } from '../utils/gameRoutes';
 import { formatOwnershipDate, getGameOwnership } from '../utils/ownership';
 
 function Profile() {
-  const { user, balance, ownedGames, games, updateUserInfo } = useAppContext();
+  const { user, balance, ownedGames, games, updateUserInfo, logout } = useAppContext();
   const [isEditing, setIsMenuOpen] = useState(false);
   const [formData, setFormData] = useState({
     username: user?.username || '',
@@ -137,6 +137,13 @@ function Profile() {
                     <ShieldCheck size={18} style={{ marginRight: '0.4rem' }} /> Quản lý Admin
                   </Link>
                 )}
+                <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', backgroundColor: 'rgba(255, 83, 83, 0.1)', color: '#ff5353', border: '1px solid #ff5353' }} onClick={() => {
+                  if (window.confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+                    logout();
+                  }
+                }}>
+                  Đăng xuất
+                </button>
               </div>
             ) : (
               <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setIsMenuOpen(false)}>

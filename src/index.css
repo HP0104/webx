@@ -628,11 +628,9 @@ a {
 }
 
 @media (max-width: 768px) {
-  .mobile-toggle { display: none; }
-  .nav-menu { display: none; }
   .nav-search-form { display: none !important; }
   .nav-actions { display: none !important; }
-  .navbar { justify-content: center; }
+  .navbar { justify-content: space-between; }
   .nav-brand { margin-right: 0; }
 }
 
