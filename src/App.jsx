@@ -29,6 +29,40 @@ import DMCABadge from './components/DMCABadge';
 const AppContext = createContext();
 export const useAppContext = () => useContext(AppContext);
 
+function GlobalAdController() {
+  const location = useLocation();
+  const { user } = useAppContext();
+
+  React.useEffect(() => {
+    let timeoutId;
+    const checkPopunderStatus = () => {
+      const isVideoRoute = location.pathname.startsWith('/video/'); // /video/:id is VideoDetail, /videos/:cat is list. /video/:id hides popunder.
+      const hasAdFreeTime = user && user.adFreeUntil && Date.now() < user.adFreeUntil;
+      
+      if (isVideoRoute || hasAdFreeTime) {
+        window.disablePopunder = true;
+      } else {
+        window.disablePopunder = false;
+      }
+
+      if (hasAdFreeTime && !isVideoRoute) {
+        const timeRemaining = user.adFreeUntil - Date.now();
+        timeoutId = setTimeout(() => {
+          window.disablePopunder = false;
+        }, timeRemaining);
+      }
+    };
+
+    checkPopunderStatus();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [location.pathname, user?.adFreeUntil]);
+
+  return null;
+}
+
 const CATEGORY_TITLES = {
   hot: 'Game Hot',
   new: 'Game Mới Nhất',
@@ -233,7 +267,9 @@ function App() {
           photoURL: firebaseUser.photoURL,
           balance: 0,
           ownedGames: [],
-          role: 'user' // Mặc định là user để bảo mật. Admin phải được set trong Database.
+          role: 'user', // Mặc định là user để bảo mật. Admin phải được set trong Database.
+          adFreeUntil: 0,
+          lastAdClaimed: 0
         };
 
         try {
@@ -254,7 +290,9 @@ function App() {
           username: userData.username,
           email: userData.email,
           role: userData.role,
-          photoURL: userData.photoURL
+          photoURL: userData.photoURL,
+          adFreeUntil: userData.adFreeUntil || 0,
+          lastAdClaimed: userData.lastAdClaimed || 0
         });
         const normalizedOwnedGames = normalizeOwnedGames(userData.ownedGames || []);
         setBalance(userData.balance || 0);
@@ -334,6 +372,28 @@ function App() {
       return true;
     } catch (error) {
       console.error("Error updating profile:", error);
+      return false;
+    }
+  };
+
+  const claimAdFreeTime = async (minutes) => {
+    if (!user) return false;
+    const nowMs = Date.now();
+    const currentAdFree = user.adFreeUntil || 0;
+    const newAdFree = Math.max(nowMs, currentAdFree) + (minutes * 60 * 1000);
+    
+    // We update using updateDoc to bypass updateUserInfo's merge, but updateUserInfo is also fine.
+    try {
+      const userRef = doc(db, 'users', user.id);
+      const updates = {
+        adFreeUntil: newAdFree,
+        lastAdClaimed: nowMs
+      };
+      await updateDoc(userRef, updates);
+      setUser(prev => ({ ...prev, ...updates }));
+      return true;
+    } catch (error) {
+      console.error("Lỗi khi cộng giờ vàng (có thể do Firebase Rules hoặc lỗi mạng):", error);
       return false;
     }
   };
@@ -436,11 +496,12 @@ function App() {
 
   return (
     <AppContext.Provider value={{
-      user, balance, ownedGames, logout, buyGame, updateUserInfo,
+      user, balance, ownedGames, logout, buyGame, updateUserInfo, claimAdFreeTime,
       games, loadingGames, revenue, addGameToStore, deleteGameFromStore, updateGameInStore,
       videos, loadingVideos, addVideoToStore, deleteVideoFromStore, updateVideoInStore
     }}>
       <Router>
+        <GlobalAdController />
         <PageTitle games={games} />
         <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
           <AdBlockWall />

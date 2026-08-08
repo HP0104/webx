@@ -14,7 +14,7 @@ service cloud.firestore {
       allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
     }
     
-    // 2. Quy tắc cho Người dùng (Bảo mật tối đa, chặn hack tiền/role)
+    // 2. Quy tắc cho Người dùng (Bảo mật tối đa, chặn hack tiền/role/hack giờ vàng)
     match /users/{userId} {
       allow read: if true;
       allow create: if request.auth != null && request.auth.uid == userId
@@ -24,7 +24,19 @@ service cloud.firestore {
       allow update: if request.auth != null && (
         (request.auth.uid == userId 
          && request.resource.data.role == resource.data.role // Không được tự đổi role
-         && request.resource.data.balance <= resource.data.balance) // Không được tự tăng tiền
+         && request.resource.data.balance <= resource.data.balance // Không được tự tăng tiền
+         // Kiểm tra chặt chẽ giờ vàng Ad-Free (Chống hack F12)
+         && (
+           request.resource.data.get('adFreeUntil', 0) == resource.data.get('adFreeUntil', 0) || (
+             request.resource.data.get('lastAdClaimed', 0) == request.time.toMillis() &&
+             request.time.toMillis() >= resource.data.get('lastAdClaimed', 0) + 180000 &&
+             (
+               (resource.data.get('adFreeUntil', 0) > request.time.toMillis() && request.resource.data.get('adFreeUntil', 0) <= resource.data.get('adFreeUntil', 0) + 420000) ||
+               (resource.data.get('adFreeUntil', 0) <= request.time.toMillis() && request.resource.data.get('adFreeUntil', 0) <= request.time.toMillis() + 420000)
+             )
+           )
+         )
+        )
         || isAdmin() // Trừ khi là admin
       );
       

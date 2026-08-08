@@ -6,9 +6,11 @@ import { updatePassword, updateEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 import { getGamePath } from '../utils/gameRoutes';
 import { formatOwnershipDate, getGameOwnership } from '../utils/ownership';
+import fluidPlayer from 'fluid-player';
+import 'fluid-player/src/css/fluidplayer.css';
 
 function Profile() {
-  const { user, balance, ownedGames, games, updateUserInfo, logout } = useAppContext();
+  const { user, balance, ownedGames, games, updateUserInfo, logout, claimAdFreeTime } = useAppContext();
   const [isEditing, setIsMenuOpen] = useState(false);
   const [formData, setFormData] = useState({
     username: user?.username || '',
@@ -18,6 +20,80 @@ function Profile() {
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  
+  const [showAdModal, setShowAdModal] = useState(false);
+  const videoPlayerRef = React.useRef(null);
+  const fluidPlayerInstance = React.useRef(null);
+  const [timeRemaining, setTimeRemaining] = useState(0);
+
+  React.useEffect(() => {
+    if (user?.adFreeUntil && Date.now() < user.adFreeUntil) {
+      const interval = setInterval(() => {
+        const remaining = Math.max(0, user.adFreeUntil - Date.now());
+        setTimeRemaining(remaining);
+        if (remaining === 0) clearInterval(interval);
+      }, 1000);
+      // init call
+      const initRemaining = Math.max(0, user.adFreeUntil - Date.now());
+      setTimeRemaining(initRemaining);
+      return () => clearInterval(interval);
+    } else {
+      setTimeRemaining(0);
+    }
+  }, [user?.adFreeUntil]);
+
+  const formatTime = (ms) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  React.useEffect(() => {
+    if (showAdModal && videoPlayerRef.current) {
+      fluidPlayerInstance.current = fluidPlayer(videoPlayerRef.current, {
+        layoutControls: {
+          controlsBarText: 'Quảng cáo sẽ giúp duy trì server, cảm ơn bạn!',
+          allowTheatre: false,
+          playPauseAnimation: false,
+          playButtonShowing: true,
+          fillToContainer: true,
+          autoPlay: true,
+          mute: false
+        },
+        vastOptions: {
+          allowVPAID: true,
+          adList: [
+            {
+              roll: 'preRoll',
+              vastTag: 'https://s.magsrv.com/v1/vast.php?idz=5997948'
+            }
+          ]
+        }
+      });
+      
+      const player = fluidPlayerInstance.current;
+
+      player.on('vast.adEnd', async () => {
+        // Cộng phút ngẫu nhiên 3 - 7
+        const randomMinutes = Math.floor(Math.random() * (7 - 3 + 1)) + 3;
+        const success = await claimAdFreeTime(randomMinutes);
+        if (success) {
+          setMessage({ type: 'success', text: `Chúc mừng! Bạn đã nhận được ${randomMinutes} phút không có quảng cáo (Popup)!` });
+        } else {
+          setMessage({ type: 'error', text: 'Nhận thưởng thất bại. Vui lòng đợi 3 phút nếu bạn vừa nhận xong.' });
+        }
+        setShowAdModal(false);
+      });
+    }
+    
+    return () => {
+      if (fluidPlayerInstance.current) {
+        fluidPlayerInstance.current.destroy();
+        fluidPlayerInstance.current = null;
+      }
+    };
+  }, [showAdModal]);
   
   const myGames = games
     .map(game => ({
@@ -148,6 +224,39 @@ function Profile() {
             ) : (
               <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setIsMenuOpen(false)}>
                 Hủy chỉnh sửa
+              </button>
+            )}
+          </div>
+
+          <div className="card" style={{ marginTop: '1.5rem', background: 'linear-gradient(135deg, rgba(235, 172, 38, 0.1), rgba(255, 255, 255, 0.05))', border: '1px solid rgba(235, 172, 38, 0.2)' }}>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-light)', marginBottom: '1rem', fontSize: '1.2rem' }}>
+              🌟 Trải nghiệm Không Quảng Cáo
+            </h2>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+              Xem một video quảng cáo ngắn để nhận ngẫu nhiên <strong style={{color: '#ebac26'}}>3 đến 7 phút</strong> loại bỏ hoàn toàn các quảng cáo nhảy tab (Popup) khó chịu. Số phút có thể cộng dồn!
+            </p>
+            
+            {timeRemaining > 0 ? (
+              <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                <div style={{ color: 'var(--color-success)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Bạn đang trong thời gian ưu tiên</div>
+                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-text-light)', fontFamily: 'monospace' }}>
+                  {formatTime(timeRemaining)}
+                </div>
+                <button 
+                  className="btn btn-outline" 
+                  style={{ width: '100%', justifyContent: 'center', marginTop: '1rem', borderColor: 'var(--color-success)', color: 'var(--color-success)' }}
+                  onClick={() => setShowAdModal(true)}
+                >
+                  <Play size={16} /> Xem tiếp để cộng dồn
+                </button>
+              </div>
+            ) : (
+              <button 
+                className="btn btn-primary" 
+                style={{ width: '100%', justifyContent: 'center', backgroundColor: '#ebac26', color: '#000', border: 'none', fontWeight: 'bold' }}
+                onClick={() => setShowAdModal(true)}
+              >
+                <Play size={18} fill="#000" /> Xem Video Nhận Thưởng
               </button>
             )}
           </div>
@@ -299,6 +408,59 @@ function Profile() {
           )}
         </div>
       </div>
+
+      {showAdModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.95)',
+          zIndex: 99999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '2rem'
+        }}>
+          <div style={{ 
+            width: '100%', 
+            maxWidth: '900px', 
+            position: 'relative',
+            backgroundColor: '#000',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
+          }}>
+            <button 
+              onClick={() => {
+                if(window.confirm('Bạn sẽ không nhận được phần thưởng nếu đóng quảng cáo giữa chừng! Bạn chắc chứ?')) {
+                  setShowAdModal(false);
+                }
+              }} 
+              style={{
+                position: 'absolute',
+                top: '1rem',
+                right: '1rem',
+                zIndex: 10,
+                background: 'rgba(255,255,255,0.2)',
+                border: 'none',
+                color: 'white',
+                padding: '0.5rem 1rem',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                backdropFilter: 'blur(4px)'
+              }}
+            >
+              Đóng
+            </button>
+            <video ref={videoPlayerRef} style={{ width: '100%', height: '100%', aspectRatio: '16/9' }}>
+              <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4" />
+            </video>
+          </div>
+          <div style={{ marginTop: '1.5rem', color: 'rgba(255,255,255,0.7)' }}>
+            Vui lòng xem hết video để nhận thưởng...
+          </div>
+        </div>
+      )}
     </div>
   );
 }
