@@ -26,6 +26,15 @@ function Profile() {
   const [claimHistory, setClaimHistory] = useState([]);
   
   const [showAdModal, setShowAdModal] = useState(false);
+  const showAdModalRef = useRef(showAdModal);
+  useEffect(() => { showAdModalRef.current = showAdModal; }, [showAdModal]);
+
+  const [isAutoPlay, setIsAutoPlay] = useState(false);
+  const isAutoPlayRef = useRef(isAutoPlay);
+  useEffect(() => { isAutoPlayRef.current = isAutoPlay; }, [isAutoPlay]);
+
+  const [adPlayKey, setAdPlayKey] = useState(0);
+
   const videoPlayerRef = useRef(null);
   const fluidPlayerInstance = useRef(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
@@ -112,11 +121,21 @@ function Profile() {
         const minutes = getRandomMinutes();
         const success = await claimAdFreeTime(minutes);
         if (success) {
-          setAdMessage({ type: 'success', text: `Chúc mừng! Bạn đã nhận được ${minutes} phút không có quảng cáo (Popup)!` });
+          setAdMessage({ type: 'success', text: `Chúc mừng! Bạn đã nhận được ${minutes} phút không quảng cáo!` });
         } else {
-          setAdMessage({ type: 'error', text: 'Nhận thưởng thất bại. Vui lòng đợi 3 phút nếu bạn vừa nhận xong.' });
+          setAdMessage({ type: 'error', text: 'Nhận thưởng thất bại. Có thể bạn đang gửi yêu cầu quá nhanh.' });
         }
-        setShowAdModal(false);
+        
+        if (isAutoPlayRef.current) {
+          // Đợi 2 giây rồi tự động mở video mới
+          setTimeout(() => {
+            if (showAdModalRef.current) {
+              setAdPlayKey(prev => prev + 1);
+            }
+          }, 2000);
+        } else {
+          setShowAdModal(false);
+        }
       });
     }
     
@@ -126,7 +145,7 @@ function Profile() {
         fluidPlayerInstance.current = null;
       }
     };
-  }, [showAdModal]);
+  }, [showAdModal, adPlayKey]);
   
   const myGames = games
     .map(game => ({
@@ -298,6 +317,34 @@ function Profile() {
                 <Play size={18} fill="#000" /> Xem Video Nhận Thưởng
               </button>
             )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', backgroundColor: 'rgba(0,0,0,0.2)', padding: '0.8rem 1rem', borderRadius: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '0.8rem', width: '100%' }}>
+                <div style={{ position: 'relative', width: '40px', height: '22px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={isAutoPlay} 
+                    onChange={(e) => setIsAutoPlay(e.target.checked)}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span style={{
+                    position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: isAutoPlay ? '#ebac26' : 'rgba(255,255,255,0.2)',
+                    transition: '.4s', borderRadius: '34px'
+                  }}>
+                    <span style={{
+                      position: 'absolute', content: '""', height: '16px', width: '16px', left: '3px', bottom: '3px',
+                      backgroundColor: 'white', transition: '.4s', borderRadius: '50%',
+                      transform: isAutoPlay ? 'translateX(18px)' : 'translateX(0)'
+                    }}></span>
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ color: 'var(--color-text-light)', fontSize: '0.95rem', fontWeight: 'bold' }}>Tự động xem tiếp</span>
+                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Treo máy kiếm giờ liên tục không cần bấm tay</span>
+                </div>
+              </label>
+            </div>
 
             {claimHistory.length > 0 && (
               <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
@@ -476,7 +523,17 @@ function Profile() {
           justifyContent: 'center',
           padding: '2rem'
         }}>
-          <div style={{ 
+          {adMessage && (
+            <div className={`alert alert-${adMessage.type}`} style={{ position: 'absolute', top: '2rem', left: '50%', transform: 'translateX(-50%)', zIndex: 100, minWidth: '300px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+              {adMessage.text}
+            </div>
+          )}
+          {isAutoPlay && (
+             <div style={{ position: 'absolute', top: '1rem', left: '1rem', zIndex: 10, background: 'rgba(235, 172, 38, 0.2)', color: '#ebac26', padding: '0.5rem 1rem', borderRadius: '8px', fontWeight: 'bold', border: '1px solid rgba(235, 172, 38, 0.5)' }}>
+               ⚡ Đang bật Tự động Phát
+             </div>
+          )}
+          <div key={adPlayKey} style={{ 
             width: '100%', 
             maxWidth: '900px', 
             position: 'relative',

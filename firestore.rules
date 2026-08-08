@@ -29,7 +29,7 @@ service cloud.firestore {
          && (
            request.resource.data.get('adFreeUntil', 0) == resource.data.get('adFreeUntil', 0) || (
              request.resource.data.get('lastAdClaimed', 0) == request.time.toMillis() &&
-             request.time.toMillis() >= resource.data.get('lastAdClaimed', 0) + 180000 &&
+             request.time.toMillis() >= resource.data.get('lastAdClaimed', 0) + 15000 &&
              (
                (resource.data.get('adFreeUntil', 0) > request.time.toMillis() && request.resource.data.get('adFreeUntil', 0) <= resource.data.get('adFreeUntil', 0) + 420000) ||
                (resource.data.get('adFreeUntil', 0) <= request.time.toMillis() && request.resource.data.get('adFreeUntil', 0) <= request.time.toMillis() + 420000)
