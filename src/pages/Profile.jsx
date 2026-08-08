@@ -111,34 +111,49 @@ function Profile() {
               roll: 'preRoll',
               vastTag: 'https://s.magsrv.com/v1/vast.php?idz=5997948'
             }
-          ]
+          ],
+          vastAdvanced: {
+            vastVideoEndedCallback: async () => {
+              const minutes = getRandomMinutes();
+              const success = await claimAdFreeTime(minutes);
+              if (success) {
+                setAdMessage({ type: 'success', text: `Chúc mừng! Bạn đã nhận được ${minutes} phút không quảng cáo!` });
+              } else {
+                setAdMessage({ type: 'error', text: 'Nhận thưởng thất bại. Có thể bạn đang gửi yêu cầu quá nhanh.' });
+              }
+              
+              if (isAutoPlayRef.current) {
+                // Đợi 2 giây rồi tự động mở video mới
+                setTimeout(() => {
+                  if (showAdModalRef.current) {
+                    setAdPlayKey(prev => prev + 1);
+                  }
+                }, 2000);
+              } else {
+                setShowAdModal(false);
+              }
+            },
+            noVastVideoCallback: () => {
+              setAdMessage({ type: 'error', text: 'Hệ thống tạm thời hết quảng cáo. Đang thử lại...' });
+              if (isAutoPlayRef.current) {
+                setTimeout(() => {
+                  if (showAdModalRef.current) {
+                    setAdPlayKey(prev => prev + 1);
+                  }
+                }, 5000);
+              } else {
+                setTimeout(() => {
+                  if (showAdModalRef.current) setShowAdModal(false);
+                }, 3000);
+              }
+            }
+          }
         }
       });
       
       const player = fluidPlayerInstance.current;
-
-      player.on('ended', async () => {
-        const minutes = getRandomMinutes();
-        const success = await claimAdFreeTime(minutes);
-        if (success) {
-          setAdMessage({ type: 'success', text: `Chúc mừng! Bạn đã nhận được ${minutes} phút không quảng cáo!` });
-        } else {
-          setAdMessage({ type: 'error', text: 'Nhận thưởng thất bại. Có thể bạn đang gửi yêu cầu quá nhanh.' });
-        }
-        
-        if (isAutoPlayRef.current) {
-          // Đợi 2 giây rồi tự động mở video mới
-          setTimeout(() => {
-            if (showAdModalRef.current) {
-              setAdPlayKey(prev => prev + 1);
-            }
-          }, 2000);
-        } else {
-          setShowAdModal(false);
-        }
-      });
     }
-    
+
     return () => {
       if (fluidPlayerInstance.current) {
         fluidPlayerInstance.current.destroy();
