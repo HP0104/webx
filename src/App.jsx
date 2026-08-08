@@ -27,41 +27,11 @@ import { ADS_CONFIG } from './config/ads';
 import MobileBottomNav from './components/MobileBottomNav';
 import DMCABadge from './components/DMCABadge';
 const AppContext = createContext();
+import ExoClickPopunder from './components/ExoClickPopunder';
+
 export const useAppContext = () => useContext(AppContext);
 
-function GlobalAdController() {
-  const location = useLocation();
-  const { user } = useAppContext();
 
-  React.useEffect(() => {
-    let timeoutId;
-    const checkPopunderStatus = () => {
-      const isVideoRoute = location.pathname.startsWith('/video/'); // /video/:id is VideoDetail, /videos/:cat is list. /video/:id hides popunder.
-      const hasAdFreeTime = user && user.adFreeUntil && Date.now() < user.adFreeUntil;
-      
-      if (isVideoRoute || hasAdFreeTime) {
-        window.disablePopunder = true;
-      } else {
-        window.disablePopunder = false;
-      }
-
-      if (hasAdFreeTime && !isVideoRoute) {
-        const timeRemaining = user.adFreeUntil - Date.now();
-        timeoutId = setTimeout(() => {
-          window.disablePopunder = false;
-        }, timeRemaining);
-      }
-    };
-
-    checkPopunderStatus();
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [location.pathname, user?.adFreeUntil]);
-
-  return null;
-}
 
 const CATEGORY_TITLES = {
   hot: 'Game Hot',
@@ -512,7 +482,7 @@ function App() {
       videos, loadingVideos, addVideoToStore, deleteVideoFromStore, updateVideoInStore
     }}>
       <Router>
-        <GlobalAdController />
+        <ExoClickPopunder />
         <PageTitle games={games} />
         <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
           <AdBlockWall />
