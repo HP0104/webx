@@ -54,7 +54,7 @@ export default function ExoClickPopunder() {
           "capping_enabled": true,
           "tcf_enabled": true,
           "agego_cross_site_enabled": true,
-          "only_inline": false
+          "only_inline": true
         };
 
         window.document.querySelectorAll || (document.querySelectorAll = document.body.querySelectorAll = Object.querySelectorAll = function (e, o, t, i, n) { var r = document, a = r.createStyleSheet(); for (n = r.all, o = [], t = (e = e.replace(/\\[for\\b/gi, "[htmlFor").split(",")).length; t--;) { for (a.addRule(e[t], "k:v"), i = n.length; i--;)n[i].currentStyle.k && o.push(n[i]); a.removeRule(0) } return o }); 
