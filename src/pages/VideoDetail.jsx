@@ -202,11 +202,11 @@ function VideoDetail() {
         </div>
       </div>
 
-      {/* VPN Notice */}
-      <div className="video-detail-vpn-notice">
-        <span className="vpn-notice-status">⚡ có thể hoạt động</span>
+      {/* Ad-Free Notice */}
+      <div className="video-detail-vpn-notice" style={{ border: '1px solid rgba(235, 172, 38, 0.3)', backgroundColor: 'rgba(235, 172, 38, 0.05)' }}>
+        <span className="vpn-notice-status" style={{ color: '#ebac26' }}>💡 Bạn có thể chưa biết:</span>
         <span className="vpn-notice-text">
-          — nếu video lỗi hay quá nhiều quảng cáo thì có thể bật VPN (1.1.1.1 , Kiwi ,...) lên
+          Web có tính năng xem dồn quảng cáo để giảm sự khó chịu khi xem <Link to="/profile" style={{ color: '#ebac26', fontWeight: 'bold', textDecoration: 'underline', textShadow: '0 0 8px rgba(235, 172, 38, 0.8), 0 0 15px rgba(235, 172, 38, 0.5)' }}>tại đây</Link>
         </span>
       </div>
 
