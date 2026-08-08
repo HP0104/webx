@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { User, Wallet, Gamepad2, Download, Save, Mail, Lock, ShieldCheck, ShoppingCart, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
@@ -74,7 +75,7 @@ function Profile() {
       
       const player = fluidPlayerInstance.current;
 
-      player.on('vast.adEnd', async () => {
+      player.on('ended', async () => {
         // Cộng phút ngẫu nhiên 3 - 7
         const randomMinutes = Math.floor(Math.random() * (7 - 3 + 1)) + 3;
         const success = await claimAdFreeTime(randomMinutes);
@@ -409,12 +410,12 @@ function Profile() {
         </div>
       </div>
 
-      {showAdModal && (
+      {showAdModal && createPortal(
         <div style={{
           position: 'fixed',
           top: 0, left: 0, right: 0, bottom: 0,
           backgroundColor: 'rgba(0,0,0,0.95)',
-          zIndex: 99999,
+          zIndex: 9999999,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -452,14 +453,15 @@ function Profile() {
             >
               Đóng
             </button>
-            <video ref={videoPlayerRef} style={{ width: '100%', height: '100%', aspectRatio: '16/9' }}>
-              <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4" />
-            </video>
+            {/* Thẻ video rỗng không có src để khi VAST kết thúc, nó trigger luôn ended */}
+            <video ref={videoPlayerRef} style={{ width: '100%', height: '100%', aspectRatio: '16/9' }}></video>
           </div>
-          <div style={{ marginTop: '1.5rem', color: 'rgba(255,255,255,0.7)' }}>
-            Vui lòng xem hết video để nhận thưởng...
+          <div style={{ marginTop: '1.5rem', color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>
+            Vui lòng xem hết (các) video quảng cáo để nhận thưởng... <br/>
+            <span style={{fontSize: '0.8rem', opacity: 0.7}}>Quảng cáo có thể phát tự động 2-3 lần liên tục.</span>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
