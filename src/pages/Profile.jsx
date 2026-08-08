@@ -96,7 +96,7 @@ function Profile() {
     if (showAdModal && videoPlayerRef.current) {
       fluidPlayerInstance.current = fluidPlayer(videoPlayerRef.current, {
         layoutControls: {
-          controlsBarText: 'Quảng cáo sẽ giúp duy trì server, cảm ơn bạn!',
+          controlsBarText: 'Video tài trợ sẽ giúp duy trì server, cảm ơn bạn!',
           allowTheatre: false,
           playPauseAnimation: false,
           playButtonShowing: true,
@@ -303,13 +303,13 @@ function Profile() {
 
           <div className="card" style={{ marginTop: '1.5rem', background: 'linear-gradient(135deg, rgba(235, 172, 38, 0.1), rgba(255, 255, 255, 0.05))', border: '1px solid rgba(235, 172, 38, 0.2)' }}>
             <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-light)', marginBottom: '1rem', fontSize: '1.2rem' }}>
-              🌟 Trải nghiệm Không Quảng Cáo
+              🌟 Trải nghiệm VIP (Chặn Popup)
             </h2>
             <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-              Xem một video quảng cáo ngắn để nhận ngẫu nhiên <strong style={{color: '#ebac26'}}>3 đến 7 phút</strong> loại bỏ hoàn toàn các quảng cáo nhảy tab (Popup) khó chịu trên web. Số phút có thể cộng dồn!
+              Xem một đoạn video ngắn để nhận ngẫu nhiên <strong style={{color: '#ebac26'}}>3 đến 7 phút</strong> loại bỏ hoàn toàn các popup ẩn khó chịu trên web. Số phút có thể cộng dồn!
             </p>
             <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '1.5rem', fontStyle: 'italic' }}>
-              * Lưu ý: Tính năng này chặn 100% quảng cáo ẩn của WEB18P, nhưng không thể chặn được quảng cáo popup nằm trong Trình phát video (như Doodstream, Streamtape...) vì đó là máy chủ bên thứ 3.
+              * Lưu ý: Tính năng này chặn 100% popup ẩn của WEB18P, nhưng không thể can thiệp vào popup nằm trong Trình phát video (như Doodstream, Streamtape...) vì đó là máy chủ bên thứ 3.
             </div>
             
             {timeRemaining > 0 ? (
@@ -586,8 +586,8 @@ function Profile() {
             <video ref={videoPlayerRef} style={{ width: '100%', height: '100%', aspectRatio: '16/9' }}></video>
           </div>
           <div style={{ marginTop: '1.5rem', color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>
-            Vui lòng xem hết (các) video quảng cáo để nhận thưởng... <br/>
-            <span style={{fontSize: '0.8rem', opacity: 0.7}}>Quảng cáo có thể phát tự động 2-3 lần liên tục.</span>
+            Vui lòng xem hết (các) video để nhận thưởng... <br/>
+            <span style={{fontSize: '0.8rem', opacity: 0.7}}>Hệ thống có thể phát tự động 2-3 lần liên tục.</span>
           </div>
         </div>,
         document.body
