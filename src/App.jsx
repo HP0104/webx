@@ -20,7 +20,7 @@ import VideoDetail from './pages/VideoDetail';
 import { INITIAL_GAMES } from './data/games';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { findGameByRouteParam, getGamePath } from './utils/gameRoutes';
 import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './utils/ownership';
 import { ADS_CONFIG } from './config/ads';
@@ -390,6 +390,17 @@ function App() {
         lastAdClaimed: nowMs
       };
       await updateDoc(userRef, updates);
+      
+      // Ghi lịch sử nhận thưởng
+      try {
+        await addDoc(collection(db, 'users', user.id, 'ad_claims'), {
+          minutes: minutes,
+          claimedAt: serverTimestamp()
+        });
+      } catch (histErr) {
+        console.warn("Could not save claim history:", histErr);
+      }
+
       setUser(prev => ({ ...prev, ...updates }));
       return true;
     } catch (error) {

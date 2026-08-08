@@ -4,7 +4,8 @@ import { User, Wallet, Gamepad2, Download, Save, Mail, Lock, ShieldCheck, Shoppi
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { updatePassword, updateEmail } from 'firebase/auth';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { getGamePath } from '../utils/gameRoutes';
 import { formatOwnershipDate, getGameOwnership } from '../utils/ownership';
 import fluidPlayer from 'fluid-player';
@@ -21,6 +22,8 @@ function Profile() {
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [adMessage, setAdMessage] = useState(null);
+  const [claimHistory, setClaimHistory] = useState([]);
   
   const [showAdModal, setShowAdModal] = useState(false);
   const videoPlayerRef = useRef(null);
@@ -51,6 +54,36 @@ function Profile() {
   };
 
   useEffect(() => {
+    if (user?.id) {
+      const q = query(
+        collection(db, 'users', user.id, 'ad_claims'),
+        orderBy('claimedAt', 'desc'),
+        limit(5)
+      );
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const history = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setClaimHistory(history);
+      }, (err) => {
+        console.warn("Could not fetch ad claims:", err);
+      });
+      return () => unsubscribe();
+    }
+  }, [user?.id]);
+
+  const getRandomMinutes = () => {
+    const rand = Math.random() * 100;
+    // 3 phút: 40%, 4 phút: 30%, 5 phút: 15%, 6 phút: 10%, 7 phút: 5%
+    if (rand < 40) return 3;
+    if (rand < 70) return 4;
+    if (rand < 85) return 5;
+    if (rand < 95) return 6;
+    return 7;
+  };
+
+  useEffect(() => {
     if (showAdModal && videoPlayerRef.current) {
       fluidPlayerInstance.current = fluidPlayer(videoPlayerRef.current, {
         layoutControls: {
@@ -76,13 +109,12 @@ function Profile() {
       const player = fluidPlayerInstance.current;
 
       player.on('ended', async () => {
-        // Cộng phút ngẫu nhiên 3 - 7
-        const randomMinutes = Math.floor(Math.random() * (7 - 3 + 1)) + 3;
-        const success = await claimAdFreeTime(randomMinutes);
+        const minutes = getRandomMinutes();
+        const success = await claimAdFreeTime(minutes);
         if (success) {
-          setMessage({ type: 'success', text: `Chúc mừng! Bạn đã nhận được ${randomMinutes} phút không có quảng cáo (Popup)!` });
+          setAdMessage({ type: 'success', text: `Chúc mừng! Bạn đã nhận được ${minutes} phút không có quảng cáo (Popup)!` });
         } else {
-          setMessage({ type: 'error', text: 'Nhận thưởng thất bại. Vui lòng đợi 3 phút nếu bạn vừa nhận xong.' });
+          setAdMessage({ type: 'error', text: 'Nhận thưởng thất bại. Vui lòng đợi 3 phút nếu bạn vừa nhận xong.' });
         }
         setShowAdModal(false);
       });
@@ -229,6 +261,12 @@ function Profile() {
             )}
           </div>
 
+          {adMessage && (
+            <div className={`alert alert-${adMessage.type}`} style={{ marginTop: '1.5rem', marginBottom: '0' }}>
+              {adMessage.text}
+            </div>
+          )}
+
           <div className="card" style={{ marginTop: '1.5rem', background: 'linear-gradient(135deg, rgba(235, 172, 38, 0.1), rgba(255, 255, 255, 0.05))', border: '1px solid rgba(235, 172, 38, 0.2)' }}>
             <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-light)', marginBottom: '1rem', fontSize: '1.2rem' }}>
               🌟 Trải nghiệm Không Quảng Cáo
@@ -259,6 +297,22 @@ function Profile() {
               >
                 <Play size={18} fill="#000" /> Xem Video Nhận Thưởng
               </button>
+            )}
+
+            {claimHistory.length > 0 && (
+              <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <h3 style={{ fontSize: '0.9rem', color: 'var(--color-text-light)', marginBottom: '1rem' }}>Lịch sử nhận gần đây:</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {claimHistory.map(record => (
+                    <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.8rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '6px', fontSize: '0.85rem' }}>
+                      <span style={{ color: 'var(--color-text-muted)' }}>
+                        {record.claimedAt?.toDate ? new Date(record.claimedAt.toDate()).toLocaleString('vi-VN') : 'Đang xử lý...'}
+                      </span>
+                      <span style={{ color: '#ebac26', fontWeight: 'bold' }}>+{record.minutes} phút</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         </div>

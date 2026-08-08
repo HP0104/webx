@@ -41,6 +41,14 @@ service cloud.firestore {
       );
       
       allow delete: if request.auth != null && isAdmin();
+
+      // Cho phép ghi lại lịch sử nhận thưởng (subcollection)
+      match /ad_claims/{claimId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId
+                      && request.resource.data.minutes >= 3 
+                      && request.resource.data.minutes <= 7;
+      }
     }
 
     // 3. Quy tắc cho Blog & Bình luận Blog
