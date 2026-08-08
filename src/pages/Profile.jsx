@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { User, Wallet, Gamepad2, Download, Save, Mail, Lock, ShieldCheck, ShoppingCart } from 'lucide-react';
+import { User, Wallet, Gamepad2, Download, Save, Mail, Lock, ShieldCheck, ShoppingCart, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { updatePassword, updateEmail } from 'firebase/auth';
