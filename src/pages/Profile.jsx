@@ -192,7 +192,16 @@ function Profile() {
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.45rem' }}>
                           {isActive ? (
                             <>
-                              <a href={game.downloadUrl || '#'} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+                              <a 
+                                href={game.downloadUrl || '#'} 
+                                target={game.downloadUrl ? "_blank" : "_self"} 
+                                rel="noreferrer" 
+                                className="btn btn-primary" 
+                                style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                                onClick={(e) => {
+                                  if (!game.downloadUrl) e.preventDefault();
+                                }}
+                              >
                                 <Download size={16} /> Tải game
                               </a>
                               <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', textAlign: 'right' }}>

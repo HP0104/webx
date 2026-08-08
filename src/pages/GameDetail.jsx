@@ -238,7 +238,16 @@ function GameDetail() {
             
             {isOwned ? (
               <>
-                <a href={game.downloadUrl || '#'} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ display: 'flex', width: '100%', justifyContent: 'center', padding: '1rem', borderRadius: '8px' }}>
+                <a 
+                  href={game.downloadUrl || '#'} 
+                  target={game.downloadUrl ? "_blank" : "_self"} 
+                  rel="noreferrer" 
+                  className="btn btn-primary" 
+                  style={{ display: 'flex', width: '100%', justifyContent: 'center', padding: '1rem', borderRadius: '8px' }}
+                  onClick={(e) => {
+                    if (!game.downloadUrl) e.preventDefault();
+                  }}
+                >
                   <Download size={20} /> Tải xuống ngay
                 </a>
                 {expiresAtText && (

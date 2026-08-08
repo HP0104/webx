@@ -476,6 +476,11 @@ function AdBanner({ config }) {
         target={config.targetUrl ? "_blank" : "_self"} 
         rel="noopener noreferrer"
         style={{ display: 'block', width: '100%', height: '100%', lineHeight: 0 }}
+        onClick={(e) => {
+          if (!config.targetUrl || config.targetUrl === '#') {
+            e.preventDefault();
+          }
+        }}
       >
         <img 
           src={config.imageUrl} 
