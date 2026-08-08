@@ -290,9 +290,12 @@ function Profile() {
             <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-light)', marginBottom: '1rem', fontSize: '1.2rem' }}>
               🌟 Trải nghiệm Không Quảng Cáo
             </h2>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
-              Xem một video quảng cáo ngắn để nhận ngẫu nhiên <strong style={{color: '#ebac26'}}>3 đến 7 phút</strong> loại bỏ hoàn toàn các quảng cáo nhảy tab (Popup) khó chịu. Số phút có thể cộng dồn!
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+              Xem một video quảng cáo ngắn để nhận ngẫu nhiên <strong style={{color: '#ebac26'}}>3 đến 7 phút</strong> loại bỏ hoàn toàn các quảng cáo nhảy tab (Popup) khó chịu trên web. Số phút có thể cộng dồn!
             </p>
+            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '1.5rem', fontStyle: 'italic' }}>
+              * Lưu ý: Tính năng này chặn 100% quảng cáo ẩn của WEB18P, nhưng không thể chặn được quảng cáo popup nằm trong Trình phát video (như Doodstream, Streamtape...) vì đó là máy chủ bên thứ 3.
+            </div>
             
             {timeRemaining > 0 ? (
               <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
