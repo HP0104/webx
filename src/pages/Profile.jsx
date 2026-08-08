@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { User, Wallet, Gamepad2, Download, Save, Mail, Lock, ShieldCheck, ShoppingCart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
@@ -22,11 +22,11 @@ function Profile() {
   const [message, setMessage] = useState({ type: '', text: '' });
   
   const [showAdModal, setShowAdModal] = useState(false);
-  const videoPlayerRef = React.useRef(null);
-  const fluidPlayerInstance = React.useRef(null);
+  const videoPlayerRef = useRef(null);
+  const fluidPlayerInstance = useRef(null);
   const [timeRemaining, setTimeRemaining] = useState(0);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (user?.adFreeUntil && Date.now() < user.adFreeUntil) {
       const interval = setInterval(() => {
         const remaining = Math.max(0, user.adFreeUntil - Date.now());
@@ -49,7 +49,7 @@ function Profile() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (showAdModal && videoPlayerRef.current) {
       fluidPlayerInstance.current = fluidPlayer(videoPlayerRef.current, {
         layoutControls: {
