@@ -58,7 +58,7 @@ function Videos() {
   return (
     <div className="container videos-page">
       {/* Random Videos Slider */}
-      {currentCategory === 'all' && <RandomVideosSlider />}
+      <RandomVideosSlider />
 
       {/* Header */}
       <div className="videos-header">

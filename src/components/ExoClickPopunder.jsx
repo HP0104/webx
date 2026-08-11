@@ -14,13 +14,10 @@ export default function ExoClickPopunder() {
     // Set global flag
     window.disablePopunder = !!(isVideoRoute || hasAdFreeTime);
 
-    // If disabled, try to clean up if it was previously injected
-    if (window.disablePopunder) {
-      if (window.popMagic && window.popMagic.methods) {
-        document.removeEventListener('click', window.popMagic.methods.default);
-        document.removeEventListener('click', window.popMagic.methods.chromeTab);
-        document.removeEventListener('click', window.popMagic.methods.popup);
-      }
+    // If already injected in this session, don't inject again
+    // The script itself will check window.disablePopunder on every click,
+    // so we don't need to manually remove event listeners.
+    if (window.disablePopunder && !document.getElementById('exoclick-popunder-script')) {
       return;
     }
 
