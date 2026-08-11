@@ -49,6 +49,7 @@ export default function RandomVideosSlider() {
           <h2 className="videos-title" style={{ fontSize: '1.5rem', margin: 0, color: 'var(--color-text-light)' }}>Phim Ngẫu Nhiên</h2>
         </div>
         <div className="section-line" style={{ flex: 1, height: '1px', background: 'var(--color-border)' }}></div>
+        <a href="https://web18p.xyz/videos/all" style={{ color: 'var(--color-accent)', textDecoration: 'none', fontSize: '0.9rem', whiteSpace: 'nowrap', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.target.style.opacity = '0.8'} onMouseLeave={(e) => e.target.style.opacity = '1'}>Xem thêm &raquo;</a>
       </div>
       <div 
         className="random-videos-slider" 
