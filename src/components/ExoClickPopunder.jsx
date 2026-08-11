@@ -42,7 +42,7 @@ export default function ExoClickPopunder() {
           "syndication_host": "s.pemsrv.com",
           "idzone": 5983670,
           "popup_fallback": true,
-          "popup_force": false,
+          "popup_force": true,
           "chrome_enabled": true,
           "new_tab": true,
           "frequency_period": 12,
