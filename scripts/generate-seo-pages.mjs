@@ -23,6 +23,9 @@ const staticRoutes = [
   '/category/18-uncensored',
   '/category/18-pc',
   '/category/18-android',
+  '/videos/all',
+  '/videos/vam',
+  '/videos/3d',
   '/blog',
   '/report'
 ];
@@ -52,6 +55,9 @@ const titleByRoute = {
   '/category/18-uncensored': '18+ Không Che | WEB18P',
   '/category/18-pc': 'Game 18+ Cho PC | WEB18P',
   '/category/18-android': 'Game 18+ Cho Android | WEB18P',
+  '/videos/all': 'Tất Cả Phim | WEB18P',
+  '/videos/vam': 'Phim VAM | WEB18P',
+  '/videos/3d': 'Phim 3D | WEB18P',
   '/blog': 'Blog | WEB18P',
   '/report': 'Báo Lỗi | WEB18P'
 };
@@ -59,6 +65,9 @@ const titleByRoute = {
 const descriptionByRoute = {
   '/': 'WEB18P - kho game Việt hóa, game PC và Android được cập nhật thường xuyên với thông tin chi tiết, ảnh minh họa và link tải.',
   '/games': 'Danh sách tất cả trò chơi đang có trên WEB18P.',
+  '/videos/all': 'Xem tất cả phim trên WEB18P - cập nhật liên tục với chất lượng cao.',
+  '/videos/vam': 'Xem phim VAM trên WEB18P - bộ sưu tập phim VAM chất lượng cao.',
+  '/videos/3d': 'Xem phim 3D trên WEB18P - bộ sưu tập phim 3D chất lượng cao.',
   '/blog': 'Bài viết và cập nhật từ WEB18P.',
   '/report': 'Gửi báo lỗi và góp ý cho WEB18P.'
 };
@@ -112,8 +121,8 @@ const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 ${routes.map(route => `  <url>
     <loc>${siteUrl}${route === '/' ? '/' : `${route}/`}</loc>
     <lastmod>${today}</lastmod>
-    <changefreq>${route.startsWith('/game/') ? 'weekly' : 'daily'}</changefreq>
-    <priority>${route === '/' ? '1.0' : route.startsWith('/game/') ? '0.8' : '0.7'}</priority>
+    <changefreq>${route.startsWith('/game/') ? 'weekly' : route.startsWith('/videos') ? 'daily' : 'daily'}</changefreq>
+    <priority>${route === '/' ? '1.0' : route.startsWith('/game/') ? '0.8' : route.startsWith('/videos') ? '0.8' : '0.7'}</priority>
   </url>`).join('\n')}
 </urlset>
 `;
