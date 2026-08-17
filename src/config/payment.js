@@ -8,7 +8,7 @@ export const PAYMENT_CONFIG = {
   // CỔNG SEPAY (Khuyên dùng chính vì hỗ trợ kiểm tra giao dịch ở Frontend siêu dễ và mượt)
   sepay: {
     // API Token lấy từ trang Dashboard SePay.vn (Bắt đầu bằng spsk_...)
-    apiToken: import.meta.env.VITE_SEPAY_API_TOKEN || '',
+    apiToken: '', // Token removed from client-side for security. It should only be configured in the Cloudflare Worker.
 
     // Thông tin tài khoản ngân hàng của bạn để hiển thị mã QR nhận tiền
     bankId: import.meta.env.VITE_BANK_ID || 'MB',          // Mã Ngân hàng nhận tiền (Ví dụ: MB = MBBank)

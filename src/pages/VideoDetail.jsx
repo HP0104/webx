@@ -185,8 +185,55 @@ function VideoDetail() {
                 </div>
               </div>
             </div>
-          ) : rawUrl && (rawUrl.trim().toLowerCase().startsWith('<iframe') || rawUrl.trim().toLowerCase().startsWith('<script')) ? (
-            <div dangerouslySetInnerHTML={{ __html: rawUrl }} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} className="raw-embed-container" />
+          ) : rawUrl && rawUrl.trim().toLowerCase().startsWith('<iframe') ? (
+            /* SECURITY: Parse iframe src and validate against trusted domains instead of using dangerouslySetInnerHTML */
+            (() => {
+              const TRUSTED_DOMAINS = [
+                'streamtape.com', 'streamtape.to',
+                'filemoon.sx', 'filemoon.to', 'filemoon.in',
+                'doodstream.com', 'dood.pm', 'dood.to', 'dood.so', 'dood.watch', 'dood.wf', 'ds2play.com', 'd0000d.com',
+                'upstream.to',
+                'mixdrop.co', 'mixdrop.to', 'mixdrop.sx',
+                'vidoza.net',
+                'voe.sx',
+                'mp4upload.com',
+                'wishonly.site',
+                'player.vimeo.com',
+                'youtube.com', 'youtube-nocookie.com',
+                'iframe.mediadelivery.net'
+              ];
+              try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(rawUrl, 'text/html');
+                const iframe = doc.querySelector('iframe');
+                if (iframe && iframe.src) {
+                  const iframeSrc = iframe.src;
+                  const hostname = new URL(iframeSrc).hostname.toLowerCase();
+                  const isTrusted = TRUSTED_DOMAINS.some(domain => hostname === domain || hostname.endsWith('.' + domain));
+                  if (isTrusted) {
+                    return (
+                      <iframe
+                        src={iframeSrc.includes('?') ? `${iframeSrc}&autoplay=1` : `${iframeSrc}?autoplay=1`}
+                        width="100%"
+                        height="100%"
+                        allowFullScreen
+                        frameBorder="0"
+                        scrolling="no"
+                        allow="autoplay; encrypted-media"
+                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+                      />
+                    );
+                  }
+                }
+              } catch (e) {
+                console.warn('Failed to parse embed code:', e.message);
+              }
+              return (
+                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d1117', color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem' }}>
+                  ⚠️ Embed code không hợp lệ hoặc domain không được tin cậy. Vui lòng liên hệ Admin.
+                </div>
+              );
+            })()
           ) : (
             <iframe
               src={embedUrl ? (embedUrl.includes('?') ? `${embedUrl}&autoplay=1` : `${embedUrl}?autoplay=1`) : ''}

@@ -13,7 +13,6 @@ export default function ExoClickPopunder() {
     
     // Set global flag
     window.disablePopunder = !!(isVideoRoute || hasAdFreeTime);
-    console.log('[ExoClick] disablePopunder set to:', window.disablePopunder, ' | isVideo:', isVideoRoute, ' | hasAdFreeTime:', !!hasAdFreeTime);
 
     // If already injected in this session, don't inject again
     // The script itself will check window.disablePopunder on every click,

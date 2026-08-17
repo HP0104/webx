@@ -15,8 +15,10 @@
  *    - PAYOS_API_KEY
  */
 
+const ALLOWED_ORIGIN = "https://web18p.xyz";
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };
@@ -323,6 +325,61 @@ export default {
     <loc>https://web18p.xyz/blog</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/report</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/category/hot</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/category/new</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/category/popular</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/category/top-rated</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/category/18-plus</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/category/18-all</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/category/18-vn</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/category/18-uncensored</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/category/18-pc</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/category/18-android</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
   </url>`;
 
         games.forEach(slug => {
@@ -348,7 +405,7 @@ export default {
         return new Response(xml, {
           status: 200,
           headers: {
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
             "Content-Type": "application/xml; charset=utf-8",
             "Cache-Control": "public, max-age=3600"
           }

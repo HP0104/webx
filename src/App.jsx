@@ -17,7 +17,7 @@ import Report from './pages/Report';
 import GameSearch from './pages/GameSearch';
 import Videos from './pages/Videos';
 import VideoDetail from './pages/VideoDetail';
-import { INITIAL_GAMES } from './data/games';
+import ExoClickPopunder from './components/ExoClickPopunder';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -26,8 +26,8 @@ import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './
 import { ADS_CONFIG } from './config/ads';
 import MobileBottomNav from './components/MobileBottomNav';
 import DMCABadge from './components/DMCABadge';
+
 const AppContext = createContext();
-import ExoClickPopunder from './components/ExoClickPopunder';
 
 export const useAppContext = () => useContext(AppContext);
 
@@ -150,58 +150,25 @@ function App() {
   // App state
   const [games, setGames] = useState([]);
   const [loadingGames, setLoadingGames] = useState(true);
-  const [revenue] = useState(0);
 
   // Video state
   const [videos, setVideos] = useState([]);
   const [loadingVideos, setLoadingVideos] = useState(true);
 
-  // Sync games from Firestore in Real-time & Clean up test games
+  // Sync games from Firestore in Real-time
   React.useEffect(() => {
-    // Tự động dọn dẹp game test khỏi Firestore nếu còn tồn tại
-    const removeTestGames = async () => {
-      try {
-        await deleteDoc(doc(db, 'games', '2'));
-        await deleteDoc(doc(db, 'games', '3'));
-      } catch (err) {
-        console.warn("Firestore cleanup warn:", err.message);
-      }
-    };
-    removeTestGames();
-
     const q = query(collection(db, 'games'));
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-      if (querySnapshot.empty) {
-        // Seed database with INITIAL_GAMES
-        for (const game of INITIAL_GAMES) {
-          const gameId = game.id.toString();
-          await setDoc(doc(db, 'games', gameId), {
-            ...game,
-            id: gameId,
-            rating: game.rating || 4.9,
-            downloads: game.downloads || Math.floor(Math.random() * 500) + 15,
-            is18Plus: game.is18Plus ?? (game.tags?.includes('Mature') || game.tags?.includes('18+') || game.title.includes('Wild Sluts')),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            views: game.views || 0,
-            updateHistory: game.updateHistory || [
-              { version: '1.0', date: game.releaseDate || '15/05/2026', content: 'Ra mắt phiên bản đầu tiên của trò chơi.' }
-            ]
-          });
-        }
-        setLoadingGames(false);
-      } else {
-        const gamesList = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          gamesList.push({
-            ...data,
-            id: isNaN(doc.id) ? doc.id : Number(doc.id) // keep original ID type (number or string)
-          });
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const gamesList = [];
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        gamesList.push({
+          ...data,
+          id: isNaN(docSnap.id) ? docSnap.id : Number(docSnap.id)
         });
-        setGames(gamesList);
-        setLoadingGames(false);
-      }
+      });
+      setGames(gamesList);
+      setLoadingGames(false);
     }, (error) => {
       console.warn("Firestore games sub error:", error.message);
       setLoadingGames(false);
@@ -478,7 +445,7 @@ function App() {
   return (
     <AppContext.Provider value={{
       user, balance, ownedGames, logout, buyGame, updateUserInfo, claimAdFreeTime,
-      games, loadingGames, revenue, addGameToStore, deleteGameFromStore, updateGameInStore,
+      games, loadingGames, addGameToStore, deleteGameFromStore, updateGameInStore,
       videos, loadingVideos, addVideoToStore, deleteVideoFromStore, updateVideoInStore
     }}>
       <Router>

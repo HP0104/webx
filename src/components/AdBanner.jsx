@@ -352,7 +352,7 @@ function ExoClickAdBanner({ config }) {
     return () => {
       cancelled = true;
     };
-  }, [zoneKey, config.className]);
+  }, [zoneKey]);
 
   if (!zones.length) return null;
 
