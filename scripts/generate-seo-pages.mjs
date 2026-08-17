@@ -1,8 +1,6 @@
 import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { INITIAL_GAMES } from '../src/data/games.js';
-import { getGamePath } from '../src/utils/gameRoutes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -30,8 +28,7 @@ const staticRoutes = [
   '/report'
 ];
 
-const gameRoutes = INITIAL_GAMES.map(getGamePath);
-const routes = [...new Set([...staticRoutes, ...gameRoutes])];
+const routes = [...new Set(staticRoutes)];
 const indexPath = path.join(distDir, 'index.html');
 
 const indexHtml = await readFile(indexPath, 'utf8');
@@ -73,15 +70,6 @@ const descriptionByRoute = {
 };
 
 const getRouteMeta = (route) => {
-  const game = INITIAL_GAMES.find(game => getGamePath(game) === route);
-
-  if (game) {
-    return {
-      title: `${game.title} | WEB18P`,
-      description: game.description || `Thông tin chi tiết game ${game.title} trên WEB18P.`
-    };
-  }
-
   return {
     title: titleByRoute[route] || 'WEB18P',
     description: descriptionByRoute[route] || `${(titleByRoute[route] || 'WEB18P').replace(' | WEB18P', '')} được cập nhật trên WEB18P.`
