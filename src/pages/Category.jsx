@@ -4,6 +4,7 @@ import { Gamepad2, Star, Download, Calendar, ArrowLeft } from 'lucide-react';
 import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
 import VideoCardItem from '../components/VideoCardItem';
+import Pagination from '../components/Pagination';
 
 function Category() {
   const { categoryType } = useParams();
@@ -244,33 +245,11 @@ function Category() {
           </div>
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="pagination-bar">
-              <button
-                className="pagination-btn"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-              >
-                ‹
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  className={`pagination-btn ${currentPage === page ? 'active' : ''}`}
-                  onClick={() => handlePageChange(page)}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                className="pagination-btn"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-              >
-                ›
-              </button>
-            </div>
-          )}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
         </>
       )}
     </div>

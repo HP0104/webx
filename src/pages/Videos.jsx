@@ -4,6 +4,7 @@ import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film } from 'lucide-react';
 import { getVideoThumbnail } from './VideoDetail';
 import { toEmbedUrl } from '../utils/videoUtils';
+import Pagination from '../components/Pagination';
 
 const CATEGORY_LABELS = {
   all: 'Tất Cả Phim',
@@ -102,33 +103,11 @@ function Videos() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="pagination-bar">
-            <button
-              className="pagination-btn"
-              onClick={() => handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-            >
-              ‹
-            </button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-              <button
-                key={page}
-                className={`pagination-btn ${currentPage === page ? 'active' : ''}`}
-                onClick={() => handlePageChange(page)}
-              >
-                {page}
-              </button>
-            ))}
-            <button
-              className="pagination-btn"
-              onClick={() => handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
-            >
-              ›
-            </button>
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+        />
         </>
       )}
     </div>
