@@ -36,6 +36,10 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_BANK_ID: ${{ secrets.VITE_BANK_ID }}
+          VITE_ACCOUNT_NUMBER: ${{ secrets.VITE_ACCOUNT_NUMBER }}
+          VITE_ACCOUNT_NAME: ${{ secrets.VITE_ACCOUNT_NAME }}
 
       - name: Generate SEO files
         run: node scripts/generate-seo-pages.mjs
