@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { Gamepad2, TrendingUp, Clock, Star, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
 import RandomVideosSlider from '../components/RandomVideosSlider';
 
 function Home() {
   const { games, loadingGames } = useAppContext();
-  const [currentPage, setCurrentPage] = useState(1);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pageParam = parseInt(searchParams.get('page') || '1', 10);
+  const currentPage = isNaN(pageParam) ? 1 : pageParam;
+  const setCurrentPage = (page) => setSearchParams(prev => { prev.set('page', page); return prev; });
   const GAMES_PER_PAGE = 9;
   const [hotFilter, setHotFilter] = useState('day');
 

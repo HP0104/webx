@@ -6,6 +6,7 @@ import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils } from '../
 import ErrorReportButton from '../components/ErrorReportButton';
 import { doc, updateDoc, increment, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
+import VideoCardItem from '../components/VideoCardItem';
 
 /**
  * Get thumbnail from video URL (exported for backwards compatibility with Videos.jsx).
@@ -22,6 +23,7 @@ function VideoDetail() {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [recommendedVideos, setRecommendedVideos] = useState([]);
 
   const video = videos.find(v => v.id.toString() === videoId);
 
@@ -38,6 +40,77 @@ function VideoDetail() {
     });
     return () => unsubscribe();
   }, [video?.id]);
+
+  // Logic đề xuất video
+  useEffect(() => {
+    if (!video || !videos.length) return;
+
+    // Lọc bỏ video hiện tại
+    const otherVideos = videos.filter(v => v.id.toString() !== videoId);
+
+    // Hàm lấy tên gốc và số tập ở cuối
+    const extractInfo = (title) => {
+      const match = title.match(/^(.*?)(?:\s*(?:tập|phần|part|ep|t)?\s*(\d+))\s*$/i);
+      if (match) {
+        return {
+          baseName: match[1].trim().toLowerCase(),
+          epNumber: parseInt(match[2], 10)
+        };
+      }
+      return { baseName: title.trim().toLowerCase(), epNumber: null };
+    };
+
+    const { baseName: currentBaseName, epNumber: currentEpNumber } = extractInfo(video.title);
+
+    // Tách các từ trong tiêu đề video hiện tại (độ dài > 2 để bỏ qua từ nối ngắn)
+    const currentTitleWords = video.title.toLowerCase().match(/[\p{L}\d]+/gu) || [];
+    const significantWords = currentTitleWords.filter(w => w.length > 2);
+
+    // Tính điểm cho các video khác dựa trên số từ trùng khớp và cùng series
+    const scoredVideos = otherVideos.map(v => {
+      let score = 0;
+      if (v.category === video.category) score += 1; // Cùng thể loại cộng 1 điểm
+
+      const { baseName: vBaseName, epNumber: vEpNumber } = extractInfo(v.title);
+      
+      // Nếu cùng series (tên gốc giống nhau) thì điểm cực cao để luôn lên đầu
+      if (vBaseName === currentBaseName && currentBaseName.length > 0) {
+        score += 1000;
+
+        // Xử lý ưu tiên tập tiếp theo
+        if (currentEpNumber !== null && vEpNumber !== null) {
+          const diff = vEpNumber - currentEpNumber;
+          if (diff === 1) {
+            score += 500; // Tập ngay sau đó (đang xem tập 8 -> ưu tiên tập 9 lên đầu tiên)
+          } else if (diff > 1) {
+            score += 200 - diff; // Các tập sau nữa (10, 11) - càng gần càng ưu tiên
+          } else if (diff < 0) {
+            score += 100 + diff; // Các tập trước đó (diff âm, càng xa càng ít điểm)
+          }
+        }
+      }
+
+      const vTitleWords = v.title.toLowerCase().match(/[\p{L}\d]+/gu) || [];
+      const vSignificantWords = vTitleWords.filter(w => w.length > 2);
+
+      // Đếm số từ trùng lặp (dùng làm điểm phụ nếu không phải cùng series)
+      const overlap = significantWords.filter(word => vSignificantWords.includes(word)).length;
+      score += overlap * 10; // Trùng từ khóa cộng điểm
+
+      return { ...v, score, random: Math.random() };
+    });
+
+    // Sắp xếp theo điểm giảm dần, nếu điểm bằng nhau thì sắp xếp ngẫu nhiên
+    scoredVideos.sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      return b.random - a.random;
+    });
+
+    // Lấy 6 video cao điểm nhất (hoặc ngẫu nhiên nếu không có điểm cao)
+    setRecommendedVideos(scoredVideos.slice(0, 6));
+  }, [video, videos, videoId]);
 
   const handleAddComment = async (e) => {
     e.preventDefault();
@@ -300,6 +373,21 @@ function VideoDetail() {
         <div style={{ marginTop: '1rem' }}>
           <ErrorReportButton type="video" itemId={video.id} itemTitle={video.title} />
         </div>
+
+        {/* ĐỀ XUẤT VIDEO NGẪU NHIÊN / CÙNG BỘ */}
+        {recommendedVideos.length > 0 && (
+          <div className="recommended-videos-section" style={{ marginTop: '3rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '2rem' }}>
+            <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-light)' }}>
+              <Film size={20} color="var(--color-accent)" />
+              Có thể bạn muốn xem
+            </h3>
+            <div className="videos-grid">
+              {recommendedVideos.map(recVideo => (
+                <VideoCardItem key={recVideo.id} video={recVideo} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* BÌNH LUẬN VIDEO */}
         <div className="video-comments-section" style={{ marginTop: '3rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '2rem' }}>

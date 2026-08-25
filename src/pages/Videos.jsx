@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film } from 'lucide-react';
 import { getVideoThumbnail } from './VideoDetail';
@@ -38,19 +38,16 @@ function Videos() {
 
   // Pagination
   const ITEMS_PER_PAGE = 9;
-  const [currentPage, setCurrentPage] = useState(1);
-
-  // Reset page when category changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [currentCategory]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pageParam = parseInt(searchParams.get('page') || '1', 10);
+  const currentPage = isNaN(pageParam) ? 1 : pageParam;
 
   const totalPages = Math.ceil(sortedVideos.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedVideos = sortedVideos.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   const handlePageChange = (page) => {
-    setCurrentPage(page);
+    setSearchParams({ page: page.toString() });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
