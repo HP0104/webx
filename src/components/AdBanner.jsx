@@ -34,12 +34,16 @@ async function detectAdBlocker() {
   // 1. DOM Check (Fast and effective against Cốc Cốc and uBlock)
   const checkDOM = new Promise((resolve) => {
     const bait = document.createElement('div');
-    bait.className = 'ad-banner adsbox doubleclick ad ads ad-placement ad-placeholder sponsor';
+    // More aggressive classes and ids based on EasyList
+    bait.className = 'ad-banner adsbox doubleclick ad ads ad-placement ad-placeholder sponsor ad-container ad-wrapper pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
+    bait.id = 'adsense';
     bait.style.position = 'absolute';
     bait.style.top = '-9999px';
     bait.style.left = '-9999px';
-    bait.style.width = '1px';
-    bait.style.height = '1px';
+    bait.style.width = '10px';
+    bait.style.height = '10px';
+    bait.style.display = 'block';
+    
     document.body.appendChild(bait);
 
     setTimeout(() => {
@@ -56,15 +60,47 @@ async function detectAdBlocker() {
           style.visibility === 'hidden' ||
           style.opacity === '0';
         bait.remove();
+      } else {
+        isBlocked = true;
       }
       resolve(isBlocked);
-    }, 250);
+    }, 300);
   });
 
   const domBlocked = await checkDOM;
   if (domBlocked) return true;
 
-  // 2. Network Check (Fallback)
+  // 2. Fetch Check (Detects strict network blocks like Brave Shields without DOM pollution)
+  const fetchBait = async () => {
+    try {
+      await Promise.all([
+        fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }),
+        // Fake popup script request to trigger popunder/popup blocker lists
+        fetch('https://a.magsrv.com/popunder1000.js', { method: 'HEAD', mode: 'no-cors', cache: 'no-store' })
+      ]);
+      return false; // not blocked
+    } catch (e) {
+      return true; // blocked
+    }
+  };
+
+  const fetchBlocked = await fetchBait();
+  if (fetchBlocked) return true;
+
+  // 3. Popup Blocker Hook Detection
+  // Many popup blocker extensions overwrite window.open to intercept and block it
+  const isPopupBlockerActive = () => {
+    try {
+      const openStr = window.open.toString();
+      return openStr.indexOf('[native code]') === -1;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  if (isPopupBlockerActive()) return true;
+
+  // 4. Network Check (Fallback)
   const [exoBlocked, googleBlocked] = await Promise.all([
     checkScriptLoad(EXOCLICK_PROVIDER_SRC),
     checkScriptLoad('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js')
@@ -144,6 +180,7 @@ function getExoClickZones(config) {
 export function AdBlockWall() {
   const [blocked, setBlocked] = useState(false);
   const [checking, setChecking] = useState(true);
+  const wallRef = useRef(null);
 
   const checkAdBlock = useCallback(async () => {
     setChecking(true);
@@ -157,11 +194,37 @@ export function AdBlockWall() {
     checkAdBlock();
   }, [checkAdBlock]);
 
+  useEffect(() => {
+    if (blocked && !checking) {
+      // Block body scrolling
+      document.body.style.setProperty('overflow', 'hidden', 'important');
+      
+      // Prevent Element Zapper / DevTools bypass
+      const interval = setInterval(() => {
+        if (wallRef.current && !document.body.contains(wallRef.current)) {
+          window.location.reload();
+        } else if (wallRef.current) {
+          const style = window.getComputedStyle(wallRef.current);
+          if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+            window.location.reload();
+          }
+        }
+      }, 1000);
+
+      return () => {
+        clearInterval(interval);
+        document.body.style.removeProperty('overflow');
+      };
+    }
+  }, [blocked, checking]);
+
   // Không bị chặn hoặc đang kiểm tra lần đầu → không hiện gì
   if (!blocked || checking) return null;
 
   return (
-    <div style={{
+    <div 
+      ref={wallRef}
+      style={{
       position: 'fixed',
       inset: 0,
       zIndex: 2147483647,
