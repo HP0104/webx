@@ -57,8 +57,8 @@ export function parseVideoUrl(input) {
     };
   }
 
-  // 3. Filemoon variants (filemoon.sx, filemoon.to, fmoonembed.com, hgcloud.to, etc.)
-  const fmMatch = url.match(/(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]*(?:filemoon|fmoonembed|fmoon|hgcloud)[a-zA-Z0-9.-]*)\/(?:(?:d|e|v|download)\/)?([a-zA-Z0-9_-]+)/i);
+  // 3. Filemoon variants (filemoon.sx, filemoon.to, fmoonembed.com, hgcloud.to, vibuxer.com, etc.)
+  const fmMatch = url.match(/(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]*(?:filemoon|fmoonembed|fmoon|hgcloud|vibuxer)[a-zA-Z0-9.-]*)\/(?:(?:d|e|v|download)\/)?([a-zA-Z0-9_-]+)/i);
   if (fmMatch) {
     const domain = fmMatch[1];
     const id = fmMatch[2];
@@ -272,4 +272,35 @@ export function extractVideoInfoFromPaste(pastedText) {
   }
 
   return { videoUrl, thumbnail };
+}
+
+/**
+ * Get download page URL from video URL where possible.
+ */
+export function getDownloadUrl(url) {
+  if (!url) return '';
+  const parsed = parseVideoUrl(url);
+  
+  if (parsed.provider === 'filemoon') {
+    return `https://${parsed.domain}/d/${parsed.id}`;
+  }
+  if (parsed.provider === 'streamtape') {
+    return `https://${parsed.domain}/v/${parsed.id}`;
+  }
+  if (parsed.provider === 'doodstream') {
+    return `https://${parsed.domain}/d/${parsed.id}`;
+  }
+  if (parsed.provider === 'vidguard' || parsed.provider === 'lulustream') {
+    return `https://${parsed.domain}/d/${parsed.id}`;
+  }
+  if (parsed.provider === 'mixdrop') {
+    return `https://${parsed.domain}/f/${parsed.id}`;
+  }
+  
+  // Fallback: If it's an embed URL, try to guess the download or view page
+  let dlUrl = parsed.rawUrl;
+  if (typeof dlUrl === 'string' && dlUrl.includes('/e/')) {
+    dlUrl = dlUrl.replace('/e/', '/d/');
+  }
+  return dlUrl;
 }

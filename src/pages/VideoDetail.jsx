@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
-import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight } from 'lucide-react';
-import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils } from '../utils/videoUtils';
+import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, Download } from 'lucide-react';
+import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getDownloadUrl } from '../utils/videoUtils';
 import ErrorReportButton from '../components/ErrorReportButton';
 import { doc, updateDoc, increment, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -193,6 +193,7 @@ function VideoDetail() {
   // Support both new field name (videoUrl) and legacy (streamtapeUrl)
   const rawUrl = video.videoUrl || video.streamtapeUrl;
   const embedUrl = toEmbedUrl(rawUrl);
+  const downloadUrl = getDownloadUrl(rawUrl);
   let thumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
   if (thumbnail && thumbnail.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
     thumbnail = thumbnail.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
@@ -369,9 +370,21 @@ function VideoDetail() {
           </div>
         )}
 
-        {/* Error Report Button */}
-        <div style={{ marginTop: '1rem' }}>
+        {/* Action Buttons */}
+        <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <ErrorReportButton type="video" itemId={video.id} itemTitle={video.title} />
+          
+          {downloadUrl && (
+            <a 
+              href={downloadUrl} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="btn btn-outline"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
+            >
+              <Download size={16} /> Tải Video Này
+            </a>
+          )}
         </div>
 
         {/* ĐỀ XUẤT VIDEO NGẪU NHIÊN / CÙNG BỘ */}
