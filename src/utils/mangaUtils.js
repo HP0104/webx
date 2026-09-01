@@ -26,7 +26,7 @@ export const IMGBB_API_KEY_STORAGE = 'web18p_imgbb_api_key';
 /**
  * Compress and convert image to WebP format for fast upload and lightweight viewing
  * @param {File} file - Original image file
- * @param {object} options - Compression options
+ * @param {object} options - Compression options (maxWidth, maxHeight, quality, outputType, customName)
  * @returns {Promise<File>} Compressed WebP file
  */
 export async function optimizeMangaImage(file, options = {}) {
@@ -34,7 +34,8 @@ export async function optimizeMangaImage(file, options = {}) {
     maxWidth = 1600,
     maxHeight = 2500,
     quality = 0.82,
-    outputType = 'image/webp'
+    outputType = 'image/webp',
+    customName = ''
   } = options;
 
   // If not an image or SVG/GIF, return original file without modifying
@@ -80,7 +81,8 @@ export async function optimizeMangaImage(file, options = {}) {
               return resolve(file);
             }
 
-            const newName = file.name.replace(/\.[^/.]+$/, "") + '.webp';
+            const baseName = customName || file.name.replace(/\.[^/.]+$/, "");
+            const newName = baseName.endsWith('.webp') ? baseName : baseName + '.webp';
             const optimizedFile = new File([blob], newName, { type: outputType, lastModified: Date.now() });
             resolve(optimizedFile);
           },
@@ -104,14 +106,15 @@ export async function optimizeMangaImage(file, options = {}) {
  * Upload a single image file to ImgBB (automatically optimized to WebP)
  * @param {File} file - Image file to upload
  * @param {string} apiKey - ImgBB API key
+ * @param {string} customName - Optional custom title/filename for ImgBB (e.g. "Tên truyện 01")
  * @param {boolean} shouldOptimize - Whether to auto-compress to WebP
  * @returns {Promise<{url: string, thumb: string, deleteUrl: string}>}
  */
-export async function uploadToImgBB(file, apiKey, shouldOptimize = true) {
+export async function uploadToImgBB(file, apiKey, customName = '', shouldOptimize = true) {
   let fileToUpload = file;
   if (shouldOptimize) {
     try {
-      fileToUpload = await optimizeMangaImage(file);
+      fileToUpload = await optimizeMangaImage(file, { customName });
     } catch (e) {
       console.warn('Image optimization skipped:', e);
       fileToUpload = file;
@@ -119,7 +122,10 @@ export async function uploadToImgBB(file, apiKey, shouldOptimize = true) {
   }
 
   const formData = new FormData();
-  formData.append('image', fileToUpload);
+  if (customName) {
+    formData.append('name', customName);
+  }
+  formData.append('image', fileToUpload, customName ? (customName.endsWith('.webp') ? customName : customName + '.webp') : fileToUpload.name);
   formData.append('key', apiKey);
 
   const response = await fetch('https://api.imgbb.com/1/upload', {
@@ -145,20 +151,34 @@ export async function uploadToImgBB(file, apiKey, shouldOptimize = true) {
 }
 
 /**
- * Upload multiple image files to ImgBB with automatic WebP compression & progress tracking
+ * Upload multiple image files to ImgBB with automatic WebP compression, custom naming & progress tracking
  * @param {File[]} files - Array of image files
  * @param {string} apiKey - ImgBB API key
  * @param {function} onProgress - Callback(uploaded, total, currentFileName)
+ * @param {object} options - Optional naming options: { namePrefix, chapterTitle, nameGenerator }
  * @returns {Promise<string[]>} Array of image URLs
  */
-export async function uploadMultipleToImgBB(files, apiKey, onProgress) {
+export async function uploadMultipleToImgBB(files, apiKey, onProgress, options = {}) {
   const urls = [];
+  const { namePrefix = '', chapterTitle = '', nameGenerator = null } = options;
+
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    if (onProgress) onProgress(i, files.length, file.name);
+    let customName = '';
+
+    if (typeof nameGenerator === 'function') {
+      customName = nameGenerator(file, i, files.length);
+    } else if (namePrefix) {
+      const padLen = files.length >= 100 ? 3 : 2;
+      const numStr = String(i + 1).padStart(padLen, '0');
+      const prefix = [namePrefix, chapterTitle].filter(Boolean).join(' ');
+      customName = `${prefix} ${numStr}`;
+    }
+
+    if (onProgress) onProgress(i, files.length, customName || file.name);
 
     try {
-      const result = await uploadToImgBB(file, apiKey, true);
+      const result = await uploadToImgBB(file, apiKey, customName, true);
       urls.push(result.url);
     } catch (err) {
       console.error(`Failed to upload ${file.name}:`, err);

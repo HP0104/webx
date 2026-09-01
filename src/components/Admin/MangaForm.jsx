@@ -45,7 +45,8 @@ function MangaForm({
 
     setCoverUploading(true);
     try {
-      const result = await uploadToImgBB(file, imgbbKey);
+      const coverName = `${mangaData.title?.trim() || 'Manga'} - Ảnh bìa`;
+      const result = await uploadToImgBB(file, imgbbKey, coverName);
       setMangaData(prev => ({ ...prev, cover: result.url }));
     } catch (err) {
       alert('Upload ảnh bìa lỗi: ' + err.message);
@@ -55,7 +56,7 @@ function MangaForm({
   };
 
   // Helper to upload a list of parsed chapters to ImgBB
-  const uploadChaptersList = async (chaptersToUpload, currentKey) => {
+  const uploadChaptersList = async (chaptersToUpload, currentKey, customTitle = '') => {
     if (!currentKey?.trim()) {
       alert('Vui lòng nhập ImgBB API Key!');
       return null;
@@ -64,6 +65,7 @@ function MangaForm({
 
     setIsUploading(true);
     const addedChapters = [];
+    const currentMangaTitle = (customTitle || mangaData.title || '').trim();
 
     try {
       for (let ci = 0; ci < chaptersToUpload.length; ci++) {
@@ -79,14 +81,31 @@ function MangaForm({
           chapterName: ch.name
         });
 
-        const urls = await uploadMultipleToImgBB(ch.files, currentKey, (uploaded, total, fileName) => {
-          setUploadProgress(prev => ({
-            ...prev,
-            current: uploaded,
-            total,
-            file: fileName
-          }));
-        });
+        // Format name: e.g. "Tên truyện 01" if 1 chapter, or "Tên truyện Chapter 1 01" if multiple chapters
+        const isSingleChapter = chaptersToUpload.length === 1 && (ch.name === 'Chapter 1' || !ch.name);
+        const chapterLabel = isSingleChapter ? '' : (ch.name || `Chapter ${ci + 1}`);
+        const prefix = [currentMangaTitle, chapterLabel].filter(Boolean).join(' ');
+
+        const urls = await uploadMultipleToImgBB(
+          ch.files,
+          currentKey,
+          (uploaded, total, fileName) => {
+            setUploadProgress(prev => ({
+              ...prev,
+              current: uploaded,
+              total,
+              file: fileName
+            }));
+          },
+          {
+            namePrefix: prefix,
+            nameGenerator: (file, idx) => {
+              const padLen = ch.files.length >= 100 ? 3 : 2;
+              const numStr = String(idx + 1).padStart(padLen, '0');
+              return prefix ? `${prefix} ${numStr}` : `${file.name.replace(/\.[^/.]+$/, '')} ${numStr}`;
+            }
+          }
+        );
 
         addedChapters.push({
           id: `ch-${Date.now()}-${ci}`,
@@ -124,6 +143,7 @@ function MangaForm({
     const { mangaTitle, chapters } = parseFolderStructure(fileList);
     if (chapters.length === 0) return alert('Không tìm thấy tệp ảnh nào trong thư mục đã chọn!');
 
+    const detectedTitle = mangaData.title || mangaTitle || '';
     if (mangaTitle && !mangaData.title) {
       setMangaData(prev => ({ ...prev, title: mangaTitle }));
     }
@@ -132,13 +152,13 @@ function MangaForm({
 
     // Auto-upload immediately so the user doesn't miss the upload step!
     const key = imgbbKey.trim() || DEFAULT_IMGBB_KEY;
-    await uploadChaptersList(chapters, key);
+    await uploadChaptersList(chapters, key, detectedTitle);
   };
 
   // Manual trigger if needed
   const handleUploadAll = async () => {
     const key = imgbbKey.trim() || DEFAULT_IMGBB_KEY;
-    await uploadChaptersList(parsedChapters, key);
+    await uploadChaptersList(parsedChapters, key, mangaData.title);
   };
 
   // Upload single chapter folder
@@ -155,13 +175,28 @@ function MangaForm({
 
     setIsUploading(true);
     const chapterNumber = (mangaData.chapters?.length || 0) + 1;
+    const currentMangaTitle = (mangaData.title || '').trim();
+    const chTitle = manualChapterTitle || `Chapter ${chapterNumber}`;
+    const prefix = [currentMangaTitle, chTitle].filter(Boolean).join(' ');
 
     try {
       setUploadProgress({ current: 0, total: imageFiles.length, file: '', chapterIdx: 1, chapterTotal: 1, chapterName: `Chapter ${chapterNumber}` });
 
-      const urls = await uploadMultipleToImgBB(imageFiles, imgbbKey, (uploaded, total, fileName) => {
-        setUploadProgress(prev => ({ ...prev, current: uploaded, total, file: fileName }));
-      });
+      const urls = await uploadMultipleToImgBB(
+        imageFiles,
+        imgbbKey,
+        (uploaded, total, fileName) => {
+          setUploadProgress(prev => ({ ...prev, current: uploaded, total, file: fileName }));
+        },
+        {
+          namePrefix: prefix,
+          nameGenerator: (file, idx) => {
+            const padLen = imageFiles.length >= 100 ? 3 : 2;
+            const numStr = String(idx + 1).padStart(padLen, '0');
+            return prefix ? `${prefix} ${numStr}` : `${file.name.replace(/\.[^/.]+$/, '')} ${numStr}`;
+          }
+        }
+      );
 
       const newChapter = {
         id: `ch-${Date.now()}`,
