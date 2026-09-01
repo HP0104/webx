@@ -200,6 +200,16 @@ function MangaReader() {
         </div>
       </div>
 
+      {/* Ad-Free Notice */}
+      <div style={{ maxWidth: '900px', margin: '0.8rem auto 0 auto', padding: '0 0.5rem', width: '100%', boxSizing: 'border-box' }}>
+        <div className="video-detail-vpn-notice" style={{ border: '1px solid rgba(235, 172, 38, 0.3)', backgroundColor: 'rgba(235, 172, 38, 0.05)' }}>
+          <span className="vpn-notice-status" style={{ color: '#ebac26' }}>💡 Bạn có thể chưa biết:</span>
+          <span className="vpn-notice-text">
+            Web có tính năng xem dồn quảng cáo để giảm sự khó chịu khi xem <Link to="/profile" style={{ color: '#ebac26', fontWeight: 'bold', textDecoration: 'underline', textShadow: '0 0 8px rgba(235, 172, 38, 0.8), 0 0 15px rgba(235, 172, 38, 0.5)' }}>tại đây</Link>
+          </span>
+        </div>
+      </div>
+
       {/* Image List (Vertical Scroll) */}
       <div className="manga-reader-images">
         {images.length === 0 ? (

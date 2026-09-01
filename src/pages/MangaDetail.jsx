@@ -133,6 +133,14 @@ function MangaDetail() {
         </div>
       </div>
 
+      {/* Ad-Free Notice */}
+      <div className="video-detail-vpn-notice" style={{ marginTop: '1rem', border: '1px solid rgba(235, 172, 38, 0.3)', backgroundColor: 'rgba(235, 172, 38, 0.05)' }}>
+        <span className="vpn-notice-status" style={{ color: '#ebac26' }}>💡 Bạn có thể chưa biết:</span>
+        <span className="vpn-notice-text">
+          Web có tính năng xem dồn quảng cáo để giảm sự khó chịu khi xem <Link to="/profile" style={{ color: '#ebac26', fontWeight: 'bold', textDecoration: 'underline', textShadow: '0 0 8px rgba(235, 172, 38, 0.8), 0 0 15px rgba(235, 172, 38, 0.5)' }}>tại đây</Link>
+        </span>
+      </div>
+
       {/* Chapter List */}
       <div className="manga-chapter-section">
         <h2 className="manga-chapter-section-title">
