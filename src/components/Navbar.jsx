@@ -5,7 +5,7 @@ import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
 
 function Navbar() {
-  const { user, logout, balance, games, videos = [] } = useAppContext();
+  const { user, logout, balance, games, videos = [], manga = [] } = useAppContext();
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -77,6 +77,7 @@ function Navbar() {
         { name: '3D', path: '/videos/3d' }
       ]
     },
+    { name: 'Truyện', path: '/manga' },
     { name: 'Blog', path: '/blog' },
     { name: 'Báo Lỗi', path: '/report' }
   ];
@@ -216,7 +217,12 @@ function Navbar() {
                 v.title?.toLowerCase().includes(navSearch.toLowerCase())
               ).map(v => ({ ...v, itemType: 'video' }));
 
-              const matches = [...gameMatches, ...videoMatches].slice(0, 5);
+              const mangaMatches = manga.filter(m => 
+                m.title?.toLowerCase().includes(navSearch.toLowerCase()) ||
+                m.author?.toLowerCase().includes(navSearch.toLowerCase())
+              ).map(m => ({ ...m, itemType: 'manga' }));
+
+              const matches = [...gameMatches, ...videoMatches, ...mangaMatches].slice(0, 6);
 
               if (matches.length === 0) {
                 return (
@@ -230,7 +236,7 @@ function Navbar() {
                 <Link
                   key={`${item.itemType}-${item.id}`}
                   className="nav-search-suggestion"
-                  to={item.itemType === 'video' ? `/video/${item.id}` : getGamePath(item)}
+                  to={item.itemType === 'video' ? `/video/${item.id}` : item.itemType === 'manga' ? `/manga/${item.id}` : getGamePath(item)}
                   onClick={() => {
                     setNavSearch('');
                     setShowSuggestions(false);
@@ -265,6 +271,8 @@ function Navbar() {
                     <div>
                       {item.itemType === 'video' ? (
                         <span style={{ fontSize: '0.75rem', color: '#ff5353', border: '1px solid #ff5353', padding: '1px 4px', borderRadius: '4px' }}>Phim</span>
+                      ) : item.itemType === 'manga' ? (
+                        <span style={{ fontSize: '0.75rem', color: '#a855f7', border: '1px solid #a855f7', padding: '1px 4px', borderRadius: '4px' }}>Truyện</span>
                       ) : (
                         item.price === 0 ? (
                           <span style={{ fontSize: '0.8rem', color: '#a3a3a3' }}>Game Miễn phí</span>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { Users, Gamepad2, Film, AlertTriangle, BarChart3 } from 'lucide-react';
+import { Users, Gamepad2, Film, AlertTriangle, BarChart3, BookOpen } from 'lucide-react';
 
 import AdminStats from '../components/Admin/AdminStats';
 import UserManager from '../components/Admin/UserManager';
@@ -11,6 +11,8 @@ import GameList from '../components/Admin/GameList';
 import VideoForm from '../components/Admin/VideoForm';
 import VideoList from '../components/Admin/VideoList';
 import ErrorReportManager from '../components/Admin/ErrorReportManager';
+import MangaForm from '../components/Admin/MangaForm';
+import MangaListAdmin from '../components/Admin/MangaListAdmin';
 
 const GEMINI_API_KEY_STORAGE_KEY = 'web18p_gemini_api_key';
 
@@ -40,7 +42,7 @@ const INITIAL_FORM_STATE = {
 };
 
 function Admin() {
-  const { games, addGameToStore, deleteGameFromStore, updateGameInStore, revenue, videos, addVideoToStore, deleteVideoFromStore, updateVideoInStore } = useAppContext();
+  const { games, addGameToStore, deleteGameFromStore, updateGameInStore, revenue, videos, addVideoToStore, deleteVideoFromStore, updateVideoInStore, manga = [], addMangaToStore, deleteMangaFromStore, updateMangaInStore } = useAppContext();
   const [users, setUsers] = useState([]);
   const [editingGameId, setEditingGameId] = useState(null);
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY) || '');
@@ -60,6 +62,20 @@ function Admin() {
   };
   const [videoData, setVideoData] = useState(INITIAL_VIDEO_STATE);
   const [editingVideoId, setEditingVideoId] = useState(null);
+
+  // Manga management state
+  const INITIAL_MANGA_STATE = {
+    title: '',
+    cover: '',
+    author: '',
+    status: 'ongoing',
+    genres: [],
+    description: '',
+    chapters: [],
+    views: 0
+  };
+  const [mangaData, setMangaData] = useState(INITIAL_MANGA_STATE);
+  const [editingMangaId, setEditingMangaId] = useState(null);
 
   useEffect(() => {
     if (geminiApiKey.trim()) {
@@ -163,6 +179,40 @@ function Admin() {
     setVideoData(INITIAL_VIDEO_STATE);
   };
 
+  // Manga handlers
+  const handleSaveManga = (data) => {
+    if (editingMangaId) {
+      updateMangaInStore(editingMangaId, data);
+      alert('Cập nhật truyện thành công!');
+      setEditingMangaId(null);
+    } else {
+      addMangaToStore(data);
+      alert('Thêm truyện thành công!');
+    }
+    setMangaData(INITIAL_MANGA_STATE);
+  };
+
+  const handleEditManga = (mangaItem) => {
+    setActiveTab('manga');
+    setEditingMangaId(mangaItem.id);
+    setMangaData({
+      title: mangaItem.title || '',
+      cover: mangaItem.cover || '',
+      author: mangaItem.author || '',
+      status: mangaItem.status || 'ongoing',
+      genres: Array.isArray(mangaItem.genres) ? mangaItem.genres : [],
+      description: mangaItem.description || '',
+      chapters: mangaItem.chapters || [],
+      views: mangaItem.views || 0
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelMangaEdit = () => {
+    setEditingMangaId(null);
+    setMangaData(INITIAL_MANGA_STATE);
+  };
+
   return (
     <div className="admin-page container" style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       <h1 style={{ color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>
@@ -177,6 +227,7 @@ function Admin() {
             { id: 'users', label: 'Quản lý Người dùng', icon: Users, count: users.length, color: '#3b82f6' },
             { id: 'games', label: 'Quản lý Game', icon: Gamepad2, count: games.length, color: '#f8b319' },
             { id: 'videos', label: 'Quản lý Phim', icon: Film, count: videos?.length || 0, color: '#ec4899' },
+            { id: 'manga', label: 'Quản lý Truyện', icon: BookOpen, count: manga?.length || 0, color: '#a855f7' },
             { id: 'reports', label: 'Báo lỗi', icon: AlertTriangle, color: '#ff4d4f' }
           ].map((tab) => {
             const Icon = tab.icon;
@@ -214,7 +265,7 @@ function Admin() {
           {/* Tab Content */}
           <div style={{ animation: 'fadeIn 0.3s ease' }}>
             {activeTab === 'dashboard' && (
-              <AdminStats usersCount={users.length} gamesCount={games.length} videosCount={videos?.length || 0} />
+              <AdminStats usersCount={users.length} gamesCount={games.length} videosCount={videos?.length || 0} mangaCount={manga?.length || 0} />
             )}
 
             {activeTab === 'users' && (
@@ -259,6 +310,23 @@ function Admin() {
 
             {activeTab === 'reports' && (
               <ErrorReportManager />
+            )}
+
+            {activeTab === 'manga' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <MangaForm
+                  mangaData={mangaData}
+                  setMangaData={setMangaData}
+                  editingMangaId={editingMangaId}
+                  onSaveManga={handleSaveManga}
+                  onCancelEdit={handleCancelMangaEdit}
+                />
+                <MangaListAdmin
+                  mangaList={manga || []}
+                  onEditClick={handleEditManga}
+                  onDeleteClick={deleteMangaFromStore}
+                />
+              </div>
             )}
           </div>
         </main>

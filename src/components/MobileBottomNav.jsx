@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Search, Wallet, User } from 'lucide-react';
+import { Home, Search, Wallet, User, BookOpen } from 'lucide-react';
 import { useAppContext } from '../App';
 
 function MobileBottomNav() {
@@ -10,6 +10,7 @@ function MobileBottomNav() {
   const navItems = [
     { path: '/', label: 'Trang chủ', icon: Home },
     { path: '/games', label: 'Tìm kiếm', icon: Search },
+    { path: '/manga', label: 'Truyện', icon: BookOpen },
     { path: '/wallet', label: 'Ví', icon: Wallet, requireAuth: true },
     { path: '/profile', label: 'Hồ sơ', icon: User, requireAuth: true }
   ];

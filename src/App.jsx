@@ -17,6 +17,9 @@ import Report from './pages/Report';
 import GameSearch from './pages/GameSearch';
 import Videos from './pages/Videos';
 import VideoDetail from './pages/VideoDetail';
+import MangaList from './pages/MangaList';
+import MangaDetail from './pages/MangaDetail';
+import MangaReader from './pages/MangaReader';
 import ExoClickPopunder from './components/ExoClickPopunder';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -98,6 +101,15 @@ function PageTitle({ games }) {
       const catNames = { all: 'Tất Cả Phim', vam: 'Phim VAM', '3d': 'Phim 3D' };
       pageTitle = catNames[videoCat] || 'Phim';
       description = `${pageTitle} trên WEB18P.`;
+    } else if (pathname === '/manga') {
+      pageTitle = 'Kho Truyện Tranh';
+      description = 'Đọc truyện tranh online miễn phí trên WEB18P.';
+    } else if (pathname.startsWith('/manga/') && pathname.includes('/chapter/')) {
+      pageTitle = 'Đọc Truyện';
+      description = 'Đọc truyện tranh online miễn phí trên WEB18P.';
+    } else if (pathname.startsWith('/manga/')) {
+      pageTitle = 'Chi Tiết Truyện';
+      description = 'Thông tin chi tiết truyện tranh trên WEB18P.';
     }
 
     document.title = `${pageTitle} | WEB18P`;
@@ -155,6 +167,10 @@ function App() {
   const [videos, setVideos] = useState([]);
   const [loadingVideos, setLoadingVideos] = useState(true);
 
+  // Manga state
+  const [manga, setManga] = useState([]);
+  const [loadingManga, setLoadingManga] = useState(true);
+
   // Sync games from Firestore in Real-time
   React.useEffect(() => {
     const q = query(collection(db, 'games'));
@@ -189,6 +205,23 @@ function App() {
     }, (error) => {
       console.warn('Firestore videos sub error:', error.message);
       setLoadingVideos(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Sync manga from Firestore in Real-time
+  React.useEffect(() => {
+    const q = query(collection(db, 'manga'));
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const mangaList = [];
+      querySnapshot.forEach((docSnap) => {
+        mangaList.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      setManga(mangaList);
+      setLoadingManga(false);
+    }, (error) => {
+      console.warn('Firestore manga sub error:', error.message);
+      setLoadingManga(false);
     });
     return () => unsubscribe();
   }, []);
@@ -442,11 +475,49 @@ function App() {
     }
   };
 
+  // ---- Manga CRUD ----
+  const addMangaToStore = async (newManga) => {
+    const mangaId = Date.now().toString();
+    const mangaData = { ...newManga, id: mangaId };
+    setManga(prev => [...prev, mangaData]);
+    try {
+      await setDoc(doc(db, 'manga', mangaId), mangaData);
+      return true;
+    } catch (error) {
+      console.warn('Firestore error adding manga:', error);
+      return true;
+    }
+  };
+
+  const deleteMangaFromStore = async (mangaId) => {
+    setManga(prev => prev.filter(m => m.id.toString() !== mangaId.toString()));
+    try {
+      await deleteDoc(doc(db, 'manga', mangaId.toString()));
+      return true;
+    } catch (error) {
+      console.warn('Firestore error deleting manga:', error);
+      return true;
+    }
+  };
+
+  const updateMangaInStore = async (mangaId, updatedData) => {
+    const mangaData = { ...updatedData, id: mangaId };
+    setManga(prev => prev.map(m => m.id.toString() === mangaId.toString() ? mangaData : m));
+    try {
+      await updateDoc(doc(db, 'manga', mangaId.toString()), mangaData);
+      return true;
+    } catch (error) {
+      console.warn('Firestore error updating manga:', error);
+      return true;
+    }
+  };
+
   return (
     <AppContext.Provider value={{
       user, balance, ownedGames, logout, buyGame, updateUserInfo, claimAdFreeTime,
       games, loadingGames, addGameToStore, deleteGameFromStore, updateGameInStore,
-      videos, loadingVideos, addVideoToStore, deleteVideoFromStore, updateVideoInStore
+      videos, loadingVideos, addVideoToStore, deleteVideoFromStore, updateVideoInStore,
+      manga, loadingManga, addMangaToStore, deleteMangaFromStore, updateMangaInStore
     }}>
       <Router>
         <ExoClickPopunder />
@@ -477,6 +548,9 @@ function App() {
                 <Route path="/ai-search" element={<GameSearch />} />
                 <Route path="/videos/:category" element={<Videos />} />
                 <Route path="/video/:videoId" element={<VideoDetail />} />
+                <Route path="/manga" element={<MangaList />} />
+                <Route path="/manga/:mangaId" element={<MangaDetail />} />
+                <Route path="/manga/:mangaId/chapter/:chapterId" element={<MangaReader />} />
               </Routes>
 
               <div className="container" style={{ paddingTop: 0, marginTop: '2rem' }}>

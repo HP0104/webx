@@ -1,11 +1,12 @@
 import React from 'react';
-import { Users, Banknote, Gamepad2, Film } from 'lucide-react';
+import { Users, Banknote, Gamepad2, Film, BookOpen } from 'lucide-react';
 
-function AdminStats({ usersCount, revenue, gamesCount, videosCount = 0 }) {
+function AdminStats({ usersCount, revenue, gamesCount, videosCount = 0, mangaCount = 0 }) {
   const stats = [
     { title: 'Tổng Tài khoản', value: usersCount, icon: Users, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
     { title: 'Số lượng Game', value: gamesCount, icon: Gamepad2, color: '#f8b319', bg: 'rgba(248, 179, 25, 0.1)' },
-    { title: 'Số lượng Phim', value: videosCount, icon: Film, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' }
+    { title: 'Số lượng Phim', value: videosCount, icon: Film, color: '#ec4899', bg: 'rgba(236, 72, 153, 0.1)' },
+    { title: 'Số lượng Truyện', value: mangaCount, icon: BookOpen, color: '#a855f7', bg: 'rgba(168, 85, 247, 0.1)' }
   ];
 
   return (
