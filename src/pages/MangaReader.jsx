@@ -1,7 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
-import { ChevronLeft, ChevronRight, ChevronUp, Layers, ArrowLeft, Maximize, Minimize } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronUp, Layers, ArrowLeft, Maximize, Minimize, RotateCw } from 'lucide-react';
+
+// In-memory cache for preloaded image URLs
+const preloadedUrls = new Set();
+
+function preloadImageUrl(url) {
+  if (!url || preloadedUrls.has(url)) return;
+  preloadedUrls.add(url);
+  const img = new window.Image();
+  img.decoding = 'async';
+  img.src = url;
+}
 
 function MangaReader() {
   const { mangaId, chapterId } = useParams();
@@ -22,12 +33,36 @@ function MangaReader() {
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
 
+  const images = currentChapter?.images || [];
+
+  // 1. Preload the first 5 images of current chapter immediately
+  useEffect(() => {
+    if (images.length === 0) return;
+    images.slice(0, 5).forEach(preloadImageUrl);
+  }, [images]);
+
+  // 2. Preload subsequent pages as user scrolls through chapter
+  const handlePageVisible = useCallback((index) => {
+    // Preload next 4 images ahead of current scroll
+    for (let i = 1; i <= 4; i++) {
+      const nextIdx = index + i;
+      if (nextIdx < images.length) {
+        preloadImageUrl(images[nextIdx]);
+      }
+    }
+
+    // If near the end of chapter, preload first 3 images of NEXT chapter
+    if (index >= images.length - 3 && nextChapter?.images?.length) {
+      nextChapter.images.slice(0, 3).forEach(preloadImageUrl);
+    }
+  }, [images, nextChapter]);
+
   // Show/hide scroll-to-top button
   useEffect(() => {
     const handleScroll = () => {
       setShowScrollTop(window.scrollY > 500);
     };
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -41,8 +76,8 @@ function MangaReader() {
   useEffect(() => {
     resetNavTimer();
     const handleMouseMove = () => resetNavTimer();
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('touchstart', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('touchstart', handleMouseMove, { passive: true });
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('touchstart', handleMouseMove);
@@ -104,8 +139,6 @@ function MangaReader() {
       </div>
     );
   }
-
-  const images = currentChapter.images || [];
 
   return (
     <div className={`manga-reader ${isFullscreen ? 'fullscreen' : ''}`} ref={readerRef}>
@@ -181,6 +214,7 @@ function MangaReader() {
               alt={`Trang ${index + 1}`}
               index={index}
               total={images.length}
+              onVisible={() => handlePageVisible(index)}
             />
           ))
         )}
@@ -229,11 +263,13 @@ function MangaReader() {
 }
 
 /**
- * Lazy loading image component with IntersectionObserver
+ * High-performance Lazy loading image component with Preload & Retry
  */
-function LazyImage({ src, alt, index, total }) {
+function LazyImage({ src, alt, index, total, onVisible }) {
   const [loaded, setLoaded] = useState(false);
   const [inView, setInView] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const imgRef = useRef(null);
 
   useEffect(() => {
@@ -241,36 +277,61 @@ function LazyImage({ src, alt, index, total }) {
       ([entry]) => {
         if (entry.isIntersecting) {
           setInView(true);
+          if (onVisible) onVisible();
           observer.disconnect();
         }
       },
-      { rootMargin: '600px' } // Start loading 600px before visible
+      { rootMargin: '1000px' } // Preload 1000px before scrolling into viewport
     );
 
     if (imgRef.current) observer.observe(imgRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [onVisible]);
+
+  const handleRetry = () => {
+    setHasError(false);
+    setLoaded(false);
+    setRetryCount(prev => prev + 1);
+  };
+
+  const imageSrc = retryCount > 0 ? `${src}?retry=${retryCount}` : src;
 
   return (
     <div className="manga-reader-page" ref={imgRef}>
       {inView ? (
         <>
-          {!loaded && (
+          {!loaded && !hasError && (
             <div className="manga-reader-page-loading">
               <div className="manga-reader-spinner" />
               <span>Trang {index + 1}/{total}</span>
             </div>
           )}
-          <img
-            src={src}
-            alt={alt}
-            className={`manga-reader-page-img ${loaded ? 'loaded' : 'loading'}`}
-            onLoad={() => setLoaded(true)}
-            onError={e => {
-              e.target.style.display = 'none';
-              e.target.parentElement.innerHTML = `<div class="manga-reader-page-error">Lỗi tải trang ${index + 1}</div>`;
-            }}
-          />
+
+          {hasError ? (
+            <div className="manga-reader-page-error" style={{ padding: '2rem', textAlign: 'center', backgroundColor: 'rgba(255,77,79,0.06)', borderRadius: '8px', border: '1px solid rgba(255,77,79,0.2)' }}>
+              <p style={{ color: '#ff4d4f', fontSize: '0.9rem', marginBottom: '0.8rem' }}>
+                Không thể tải trang {index + 1}
+              </p>
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="btn"
+                style={{ background: 'var(--color-accent)', color: '#000', border: 'none', padding: '0.4rem 1rem', fontSize: '0.8rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+              >
+                <RotateCw size={14} /> Thử lại
+              </button>
+            </div>
+          ) : (
+            <img
+              src={imageSrc}
+              alt={alt}
+              decoding="async"
+              loading="lazy"
+              className={`manga-reader-page-img ${loaded ? 'loaded' : 'loading'}`}
+              onLoad={() => setLoaded(true)}
+              onError={() => setHasError(true)}
+            />
+          )}
         </>
       ) : (
         <div className="manga-reader-page-placeholder">

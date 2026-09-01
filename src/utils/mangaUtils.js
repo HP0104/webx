@@ -21,17 +21,105 @@ export const MANGA_STATUS = {
 
 export const IMGBB_API_KEY_STORAGE = 'web18p_imgbb_api_key';
 
+// ============ IMAGE OPTIMIZATION & COMPRESSION ============
+
+/**
+ * Compress and convert image to WebP format for fast upload and lightweight viewing
+ * @param {File} file - Original image file
+ * @param {object} options - Compression options
+ * @returns {Promise<File>} Compressed WebP file
+ */
+export async function optimizeMangaImage(file, options = {}) {
+  const {
+    maxWidth = 1600,
+    maxHeight = 2500,
+    quality = 0.82,
+    outputType = 'image/webp'
+  } = options;
+
+  // If not an image or SVG/GIF, return original file without modifying
+  if (!file.type?.startsWith('image/') || file.type === 'image/gif' || file.type === 'image/svg+xml') {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        let { width, height } = img;
+
+        // Calculate scaled dimensions keeping aspect ratio
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          return resolve(file); // Fallback to original
+        }
+
+        // Draw image smoothly
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convert canvas to Blob
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              return resolve(file);
+            }
+
+            const newName = file.name.replace(/\.[^/.]+$/, "") + '.webp';
+            const optimizedFile = new File([blob], newName, { type: outputType, lastModified: Date.now() });
+            resolve(optimizedFile);
+          },
+          outputType,
+          quality
+        );
+      };
+
+      img.onerror = () => resolve(file); // Fallback on error
+      img.src = e.target.result;
+    };
+
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
+
 // ============ IMGBB UPLOAD ============
 
 /**
- * Upload a single image file to ImgBB
+ * Upload a single image file to ImgBB (automatically optimized to WebP)
  * @param {File} file - Image file to upload
  * @param {string} apiKey - ImgBB API key
+ * @param {boolean} shouldOptimize - Whether to auto-compress to WebP
  * @returns {Promise<{url: string, thumb: string, deleteUrl: string}>}
  */
-export async function uploadToImgBB(file, apiKey) {
+export async function uploadToImgBB(file, apiKey, shouldOptimize = true) {
+  let fileToUpload = file;
+  if (shouldOptimize) {
+    try {
+      fileToUpload = await optimizeMangaImage(file);
+    } catch (e) {
+      console.warn('Image optimization skipped:', e);
+      fileToUpload = file;
+    }
+  }
+
   const formData = new FormData();
-  formData.append('image', file);
+  formData.append('image', fileToUpload);
   formData.append('key', apiKey);
 
   const response = await fetch('https://api.imgbb.com/1/upload', {
@@ -57,7 +145,7 @@ export async function uploadToImgBB(file, apiKey) {
 }
 
 /**
- * Upload multiple image files to ImgBB with progress tracking
+ * Upload multiple image files to ImgBB with automatic WebP compression & progress tracking
  * @param {File[]} files - Array of image files
  * @param {string} apiKey - ImgBB API key
  * @param {function} onProgress - Callback(uploaded, total, currentFileName)
@@ -70,7 +158,7 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress) {
     if (onProgress) onProgress(i, files.length, file.name);
 
     try {
-      const result = await uploadToImgBB(file, apiKey);
+      const result = await uploadToImgBB(file, apiKey, true);
       urls.push(result.url);
     } catch (err) {
       console.error(`Failed to upload ${file.name}:`, err);
@@ -79,7 +167,7 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress) {
 
     // Small delay to avoid rate limiting
     if (i < files.length - 1) {
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 150));
     }
   }
   if (onProgress) onProgress(files.length, files.length, 'Done');
