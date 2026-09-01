@@ -119,48 +119,55 @@ function naturalSort(a, b) {
  * @returns {{ mangaTitle: string, chapters: Array<{name: string, files: File[]}> }}
  */
 export function parseFolderStructure(fileList) {
-  const files = Array.from(fileList).filter(isImageFile);
+  const allFiles = Array.from(fileList || []);
+  const files = allFiles.filter(isImageFile);
 
   if (files.length === 0) {
     return { mangaTitle: '', chapters: [] };
   }
 
-  // webkitRelativePath gives us paths like "MangaName/Chapter1/page1.jpg"
-  // or "MangaName/page1.jpg" (flat structure)
-  const pathParts = files.map(f => ({
-    file: f,
-    parts: f.webkitRelativePath.split('/')
-  }));
+  // Normalize path separators (both / and \)
+  const pathParts = files.map(f => {
+    const rawPath = f.webkitRelativePath || f.name || '';
+    const normalized = rawPath.replace(/\\/g, '/');
+    const parts = normalized.split('/').filter(Boolean);
+    return { file: f, parts };
+  });
 
-  // Detect manga title from root folder name
-  const mangaTitle = pathParts[0]?.parts[0] || '';
+  // Detect manga title from root folder name (if available)
+  let mangaTitle = '';
+  if (pathParts[0]?.parts.length >= 2) {
+    mangaTitle = pathParts[0].parts[0];
+  }
 
-  // Group files by their subfolder (chapter)
+  // Group files by chapter
   const chapterMap = new Map();
 
   for (const { file, parts } of pathParts) {
+    let chapterName = 'Chapter 1';
+
     if (parts.length >= 3) {
-      // Has subfolder structure: MangaName/ChapterFolder/image.jpg
-      const chapterName = parts[1];
-      if (!chapterMap.has(chapterName)) {
-        chapterMap.set(chapterName, []);
-      }
-      chapterMap.get(chapterName).push(file);
+      // MangaName/ChapterFolder/image.jpg
+      chapterName = parts[1];
     } else if (parts.length === 2) {
-      // Flat structure: MangaName/image.jpg → single chapter
-      const chapterName = 'Chapter 1';
-      if (!chapterMap.has(chapterName)) {
-        chapterMap.set(chapterName, []);
-      }
-      chapterMap.get(chapterName).push(file);
+      // MangaName/image.jpg or ChapterFolder/image.jpg
+      chapterName = 'Chapter 1';
+    } else {
+      // Direct image file
+      chapterName = 'Chapter 1';
     }
+
+    if (!chapterMap.has(chapterName)) {
+      chapterMap.set(chapterName, []);
+    }
+    chapterMap.get(chapterName).push(file);
   }
 
   // Sort chapter names naturally, and sort files within each chapter
   const chapterNames = [...chapterMap.keys()].sort(naturalSort);
   const chapters = chapterNames.map(name => ({
     name,
-    files: chapterMap.get(name).sort((a, b) => naturalSort(a.name, b.name))
+    files: (chapterMap.get(name) || []).sort((a, b) => naturalSort(a.name, b.name))
   }));
 
   return { mangaTitle, chapters };
