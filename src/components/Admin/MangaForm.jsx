@@ -54,42 +54,32 @@ function MangaForm({
     }
   };
 
-  // Handle folder selection
-  const handleFolderSelect = (e) => {
-    const fileList = e.target.files;
-    if (!fileList || fileList.length === 0) return;
-
-    const { mangaTitle, chapters } = parseFolderStructure(fileList);
-    setParsedChapters(chapters);
-
-    if (mangaTitle && !mangaData.title) {
-      setMangaData(prev => ({ ...prev, title: mangaTitle }));
+  // Helper to upload a list of parsed chapters to ImgBB
+  const uploadChaptersList = async (chaptersToUpload, currentKey) => {
+    if (!currentKey?.trim()) {
+      alert('Vui lòng nhập ImgBB API Key!');
+      return null;
     }
-  };
-
-  // Upload all parsed chapters to ImgBB
-  const handleUploadAll = async () => {
-    if (!imgbbKey.trim()) return alert('Vui lòng nhập ImgBB API Key!');
-    if (parsedChapters.length === 0) return alert('Chưa có chapter nào!');
+    if (!chaptersToUpload || chaptersToUpload.length === 0) return null;
 
     setIsUploading(true);
-    const newChapters = [...(mangaData.chapters || [])];
+    const addedChapters = [];
 
     try {
-      for (let ci = 0; ci < parsedChapters.length; ci++) {
-        const ch = parsedChapters[ci];
-        const chapterNumber = newChapters.length + 1;
+      for (let ci = 0; ci < chaptersToUpload.length; ci++) {
+        const ch = chaptersToUpload[ci];
+        const chapterNumber = (mangaData.chapters?.length || 0) + addedChapters.length + 1;
 
         setUploadProgress({
           current: 0,
           total: ch.files.length,
           file: '',
           chapterIdx: ci + 1,
-          chapterTotal: parsedChapters.length,
+          chapterTotal: chaptersToUpload.length,
           chapterName: ch.name
         });
 
-        const urls = await uploadMultipleToImgBB(ch.files, imgbbKey, (uploaded, total, fileName) => {
+        const urls = await uploadMultipleToImgBB(ch.files, currentKey, (uploaded, total, fileName) => {
           setUploadProgress(prev => ({
             ...prev,
             current: uploaded,
@@ -98,7 +88,7 @@ function MangaForm({
           }));
         });
 
-        newChapters.push({
+        addedChapters.push({
           id: `ch-${Date.now()}-${ci}`,
           number: chapterNumber,
           title: ch.name,
@@ -108,17 +98,47 @@ function MangaForm({
       }
 
       setMangaData(prev => {
-        const firstImg = !prev.cover && newChapters[0]?.images?.[0] ? newChapters[0].images[0] : prev.cover;
-        return { ...prev, chapters: newChapters, cover: firstImg };
+        const merged = [...(prev.chapters || []), ...addedChapters];
+        const firstImg = !prev.cover && merged[0]?.images?.[0] ? merged[0].images[0] : prev.cover;
+        return { ...prev, chapters: merged, cover: firstImg };
       });
+
       setParsedChapters([]);
       setUploadProgress(null);
-      alert(`Upload thành công ${parsedChapters.length} chapter!`);
+      alert(`Đã upload thành công ${addedChapters.length} chapter lên ImgBB!`);
+      return addedChapters;
     } catch (err) {
       alert('Upload lỗi: ' + err.message);
+      return null;
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
     }
+  };
+
+  // Handle folder selection (auto starts upload)
+  const handleFolderSelect = async (e) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    const { mangaTitle, chapters } = parseFolderStructure(fileList);
+    if (chapters.length === 0) return alert('Không tìm thấy tệp ảnh nào trong thư mục đã chọn!');
+
+    if (mangaTitle && !mangaData.title) {
+      setMangaData(prev => ({ ...prev, title: mangaTitle }));
+    }
+
+    setParsedChapters(chapters);
+
+    // Auto-upload immediately so the user doesn't miss the upload step!
+    const key = imgbbKey.trim() || DEFAULT_IMGBB_KEY;
+    await uploadChaptersList(chapters, key);
+  };
+
+  // Manual trigger if needed
+  const handleUploadAll = async () => {
+    const key = imgbbKey.trim() || DEFAULT_IMGBB_KEY;
+    await uploadChaptersList(parsedChapters, key);
   };
 
   // Upload single chapter folder
@@ -220,12 +240,33 @@ function MangaForm({
   };
 
   // Submit form
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!mangaData.title?.trim()) return alert('Vui lòng nhập tên truyện!');
 
+    let currentChapters = [...(mangaData.chapters || [])];
+
+    // If there are still pending parsed chapters that haven't uploaded yet
+    if (parsedChapters.length > 0) {
+      const key = imgbbKey.trim() || DEFAULT_IMGBB_KEY;
+      const uploaded = await uploadChaptersList(parsedChapters, key);
+      if (uploaded) {
+        currentChapters = [...currentChapters, ...uploaded];
+      }
+    }
+
+    if (currentChapters.length === 0) {
+      if (!confirm('⚠️ Truyện này chưa có chapter nào được đăng. Bạn có chắc chắn muốn lưu không?')) {
+        return;
+      }
+    }
+
+    const firstCover = !mangaData.cover && currentChapters[0]?.images?.[0] ? currentChapters[0].images[0] : mangaData.cover;
+
     const data = {
       ...mangaData,
+      cover: firstCover,
+      chapters: currentChapters,
       views: Number(mangaData.views) || 0,
       updatedAt: new Date().toISOString()
     };
