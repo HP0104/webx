@@ -7,7 +7,7 @@ const ADBLOCK_DETECT_DELAY = 3000;
 
 // ─── Ad Blocker Detection ───────────────────────────────────────────
 
-function checkScriptLoad(src) {
+function checkScriptLoad(src, validationFn = null) {
   return new Promise((resolve) => {
     const script = document.createElement('script');
     script.src = src;
@@ -23,7 +23,15 @@ function checkScriptLoad(src) {
     };
 
     script.onerror = () => done(true);
-    script.onload = () => done(false);
+    script.onload = () => {
+      if (validationFn) {
+        // If validation fails, it means the script loaded but didn't execute properly
+        // (likely a spoofed empty 200 OK response from the adblocker)
+        done(!validationFn());
+      } else {
+        done(false);
+      }
+    };
 
     document.head.appendChild(script);
     setTimeout(() => done(true), ADBLOCK_DETECT_DELAY);
@@ -101,11 +109,15 @@ async function detectAdBlocker() {
   if (isPopupBlockerActive()) return true;
 
   // 4. Network Check (Fallback)
-  const [exoBlocked, googleBlocked] = await Promise.all([
+  // Cốc Cốc and some advanced blockers return empty 200 OK responses to spoof script loading.
+  // We use a first-party bait script (/ads.js) that sets window.__adblockerBait = true.
+  // If it's spoofed, onload fires but the variable remains undefined!
+  const [exoBlocked, googleBlocked, baitBlocked] = await Promise.all([
     checkScriptLoad(EXOCLICK_PROVIDER_SRC),
-    checkScriptLoad('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js')
+    checkScriptLoad('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'),
+    checkScriptLoad('/ads.js', () => window.__adblockerBait === true)
   ]);
-  return exoBlocked || googleBlocked;
+  return exoBlocked || googleBlocked || baitBlocked;
 }
 
 let _adBlockDetected = null;
