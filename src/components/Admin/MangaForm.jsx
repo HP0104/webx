@@ -131,7 +131,12 @@ function MangaForm({
       alert(`Đã upload thành công ${addedChapters.length} chapter lên ImgBB!`);
       return addedChapters;
     } catch (err) {
-      alert('Upload lỗi: ' + err.message);
+      console.error('Upload chapters error:', err);
+      if (err.message.includes('Rate limit')) {
+        alert(`⚠️ LỖI IMGBB RATE LIMIT:\n\n${err.message}\n\n👉 Cách xử lý nhanh:\n1. Mở trang https://api.imgbb.com/ (miễn phí, không cần thẻ).\n2. Bấm "Get API Key" và copy key 32 ký tự.\n3. Dán key mới vào ô "ImgBB API Key" ở phía trên.\n4. Bấm lại nút "Upload tất cả lên ImgBB" màu vàng phía dưới để tiếp tục!`);
+      } else {
+        alert('Upload lỗi: ' + err.message);
+      }
       return null;
     } finally {
       setIsUploading(false);
@@ -145,7 +150,7 @@ function MangaForm({
     if (!fileList || fileList.length === 0) return;
 
     setIsExtracting(true);
-    setExtractProgress({ message: 'Bắt đầu đọc file...' });
+    setExtractProgress({ message: 'Bắt đầu giải nén file...' });
 
     try {
       const { mangaTitle, chapters } = await parseArchiveFiles(fileList, (p) => {
@@ -168,9 +173,19 @@ function MangaForm({
       setIsExtracting(false);
       setExtractProgress(null);
 
-      // Auto-upload immediately to ImgBB
-      const key = imgbbKey.trim() || DEFAULT_IMGBB_KEY;
-      await uploadChaptersList(chapters, key, detectedTitle);
+      const key = imgbbKey.trim();
+      const isDefaultKey = !key || key === DEFAULT_IMGBB_KEY;
+
+      if (isDefaultKey) {
+        alert(
+          `✓ ĐÃ GIẢI NÉN THÀNH CÔNG ${chapters.length} chapter (tổng ${countTotalImages(chapters)} trang ảnh)!\n\n` +
+          `⚠️ LƯU Ý QUAN TRỌNG: API Key ImgBB mặc định hiện đang bị hết hạn ngạch (Rate limit reached).\n` +
+          `👉 Bạn hãy lấy API Key miễn phí tại https://api.imgbb.com/ dán vào ô "ImgBB API Key" ở phía trên, sau đó bấm nút "Upload tất cả lên ImgBB" màu vàng phía dưới!`
+        );
+      } else {
+        // User has configured custom API key, proceed with upload
+        await uploadChaptersList(chapters, key, detectedTitle);
+      }
     } catch (err) {
       console.error('Archive extraction error:', err);
       alert('Lỗi khi đọc file EPUB/ZIP: ' + err.message);
@@ -183,7 +198,6 @@ function MangaForm({
   const handleSingleChapterArchive = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!imgbbKey.trim()) return alert('Vui lòng nhập ImgBB API Key!');
 
     setIsExtracting(true);
     setExtractProgress({ message: `Đang giải nén ${file.name}...` });
@@ -215,7 +229,18 @@ function MangaForm({
         chapters[0].name = manualChapterTitle.trim();
       }
 
-      const key = imgbbKey.trim() || DEFAULT_IMGBB_KEY;
+      const key = imgbbKey.trim();
+      const isDefaultKey = !key || key === DEFAULT_IMGBB_KEY;
+
+      if (isDefaultKey) {
+        setParsedChapters(chapters);
+        alert(
+          `✓ Đã giải nén thành công chapter "${chapters[0].name}" (${chapters[0].files.length} ảnh)!\n\n` +
+          `⚠️ Vui lòng nhập API Key ImgBB của bạn vào ô phía trên, rồi bấm nút "Upload tất cả lên ImgBB" phía dưới!`
+        );
+        return;
+      }
+
       await uploadChaptersList(chapters, key, mangaData.title || mangaTitle);
       setManualChapterTitle('');
     } catch (err) {
@@ -423,20 +448,41 @@ function MangaForm({
       </h2>
 
       {/* ImgBB API Key */}
-      <div style={{ marginBottom: '1.5rem', padding: '1rem', borderRadius: '8px', backgroundColor: 'rgba(102, 192, 244, 0.06)', border: '1px solid rgba(102, 192, 244, 0.15)' }}>
-        <label style={{ color: 'var(--color-accent)', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: '0.5rem' }}>
-          <ImageIcon size={14} /> ImgBB API Key (để upload ảnh)
-        </label>
+      <div style={{
+        marginBottom: '1.5rem',
+        padding: '1rem',
+        borderRadius: '8px',
+        backgroundColor: (!imgbbKey || imgbbKey === DEFAULT_IMGBB_KEY) ? 'rgba(234, 179, 8, 0.08)' : 'rgba(102, 192, 244, 0.06)',
+        border: `1px solid ${(!imgbbKey || imgbbKey === DEFAULT_IMGBB_KEY) ? 'rgba(234, 179, 8, 0.3)' : 'rgba(102, 192, 244, 0.15)'}`
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <label style={{ color: (!imgbbKey || imgbbKey === DEFAULT_IMGBB_KEY) ? '#fbbf24' : 'var(--color-accent)', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0 }}>
+            <ImageIcon size={14} /> ImgBB API Key (Upload ảnh lên cloud)
+            {(!imgbbKey || imgbbKey === DEFAULT_IMGBB_KEY) && (
+              <span style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'rgba(234, 179, 8, 0.2)', color: '#facc15' }}>
+                Key mặc định (dễ bị Rate Limit)
+              </span>
+            )}
+          </label>
+          <a
+            href="https://api.imgbb.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: '0.75rem', color: 'var(--color-accent)', textDecoration: 'underline', fontWeight: 600 }}
+          >
+            + Lấy API Key miễn phí tại api.imgbb.com ↗
+          </a>
+        </div>
         <input
           type="text"
           className="input-field"
-          placeholder="Nhập ImgBB API Key..."
+          placeholder="Dán ImgBB API Key vào đây (ví dụ: 25212dbe... hoặc nhiều key cách nhau bằng dấu phẩy)"
           value={imgbbKey}
           onChange={e => handleImgbbKeyChange(e.target.value)}
           style={{ margin: 0, fontSize: '0.85rem' }}
         />
-        <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '0.3rem', display: 'block' }}>
-          Lấy key miễn phí tại api.imgbb.com — Key được lưu trên trình duyệt
+        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.4rem', display: 'block', lineHeight: 1.4 }}>
+          💡 <strong>Khuyên dùng:</strong> Đăng ký tài khoản miễn phí tại <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)' }}>api.imgbb.com</a> để lấy key riêng. Có thể nhập nhiều key cách nhau bằng dấu phẩy (vd: <code>key1, key2</code>) để tự động luân phiên khi tải truyện nhiều trăm trang!
         </span>
       </div>
 
@@ -692,8 +738,13 @@ function MangaForm({
               {parsedChapters.length > 0 && (
                 <div style={{ marginTop: '1.2rem', padding: '0.8rem', borderRadius: '6px', backgroundColor: 'rgba(0, 0, 0, 0.2)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div style={{ fontSize: '0.85rem', color: 'var(--color-success)', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Check size={16} /> Đã chuẩn bị {parsedChapters.length} chapter, tổng {countTotalImages(parsedChapters)} ảnh
+                    <Check size={16} /> Đã giải nén sẵn sàng: {parsedChapters.length} chapter (tổng {countTotalImages(parsedChapters)} trang ảnh)
                   </div>
+                  {(!imgbbKey || imgbbKey === DEFAULT_IMGBB_KEY) && (
+                    <div style={{ padding: '0.6rem 0.8rem', borderRadius: '6px', backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', color: '#fbbf24', fontSize: '0.78rem', marginBottom: '0.8rem', lineHeight: 1.4 }}>
+                      ⚠️ <strong>Lưu ý:</strong> API Key ImgBB mặc định hiện tại đang bị chạm trần giới hạn lượt tải (Rate limit reached). Nếu bấm Upload bị lỗi, bạn hãy lấy API Key cá nhân miễn phí tại <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>api.imgbb.com</a> rồi dán vào ô "ImgBB API Key" ở phía trên.
+                    </div>
+                  )}
                   <div style={{ maxHeight: '180px', overflowY: 'auto', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
                     {parsedChapters.map((ch, i) => (
                       <div key={i} style={{ padding: '0.35rem 0', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between' }}>
@@ -720,7 +771,7 @@ function MangaForm({
                       cursor: isUploading ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    <Upload size={16} /> {isUploading ? 'Đang upload...' : `Upload tất cả lên ImgBB`}
+                    <Upload size={16} /> {isUploading ? 'Đang upload...' : `Bắt đầu Upload lên ImgBB (${countTotalImages(parsedChapters)} ảnh)`}
                   </button>
                 </div>
               )}

@@ -46,6 +46,11 @@ export async function optimizeMangaImage(file, options = {}) {
     return file;
   }
 
+  // If already WebP and lightweight (< 900KB), return as-is to save time and memory
+  if (file.type === 'image/webp' && file.size < 900 * 1024) {
+    return file;
+  }
+
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -129,21 +134,26 @@ export async function uploadToImgBB(file, apiKey, customName = '', shouldOptimiz
     formData.append('name', customName);
   }
   formData.append('image', fileToUpload, customName ? (customName.endsWith('.webp') ? customName : customName + '.webp') : fileToUpload.name);
-  formData.append('key', apiKey);
+  formData.append('key', apiKey.trim());
 
   const response = await fetch('https://api.imgbb.com/1/upload', {
     method: 'POST',
     body: formData
   });
 
-  if (!response.ok) {
-    throw new Error(`ImgBB upload failed: ${response.status} ${response.statusText}`);
+  let result = null;
+  try {
+    result = await response.json();
+  } catch (e) {
+    // If not JSON response
   }
 
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error('ImgBB upload failed: ' + JSON.stringify(result));
+  if (!response.ok || !result?.success) {
+    const errorMsg = result?.error?.message || result?.error || `HTTP ${response.status} ${response.statusText}`;
+    if (typeof errorMsg === 'string' && errorMsg.toLowerCase().includes('rate limit')) {
+      throw new Error(`Rate limit reached: API Key ImgBB (${apiKey.slice(0, 6)}...) đã hết lượt tải. Vui lòng nhập API Key mới tại api.imgbb.com!`);
+    }
+    throw new Error(`ImgBB upload thất bại: ${errorMsg}`);
   }
 
   return {
@@ -155,8 +165,10 @@ export async function uploadToImgBB(file, apiKey, customName = '', shouldOptimiz
 
 /**
  * Upload multiple image files to ImgBB with automatic WebP compression, custom naming & progress tracking
+ * Supports multiple comma-separated keys for automatic rotation if rate limited.
+ *
  * @param {File[]} files - Array of image files
- * @param {string} apiKey - ImgBB API key
+ * @param {string} apiKey - ImgBB API key (single or comma-separated)
  * @param {function} onProgress - Callback(uploaded, total, currentFileName)
  * @param {object} options - Optional naming options: { namePrefix, chapterTitle, nameGenerator }
  * @returns {Promise<string[]>} Array of image URLs
@@ -164,6 +176,17 @@ export async function uploadToImgBB(file, apiKey, customName = '', shouldOptimiz
 export async function uploadMultipleToImgBB(files, apiKey, onProgress, options = {}) {
   const urls = [];
   const { namePrefix = '', chapterTitle = '', nameGenerator = null } = options;
+
+  // Support multiple comma-separated keys: key1, key2, key3
+  const keyList = (typeof apiKey === 'string' ? apiKey.split(',') : [apiKey])
+    .map(k => k.trim())
+    .filter(Boolean);
+
+  if (keyList.length === 0) {
+    throw new Error('Chưa cung cấp ImgBB API Key!');
+  }
+
+  let activeKeyIndex = 0;
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -180,19 +203,46 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
 
     if (onProgress) onProgress(i, files.length, customName || file.name);
 
-    try {
-      const result = await uploadToImgBB(file, apiKey, customName, true);
-      urls.push(result.url);
-    } catch (err) {
-      console.error(`Failed to upload ${file.name}:`, err);
-      throw new Error(`Upload lỗi tại file "${file.name}": ${err.message}`);
+    let uploaded = false;
+    let lastError = null;
+    let attempts = 0;
+
+    while (!uploaded && attempts < Math.max(3, keyList.length)) {
+      attempts++;
+      const currentKey = keyList[activeKeyIndex % keyList.length];
+
+      try {
+        const result = await uploadToImgBB(file, currentKey, customName, true);
+        urls.push(result.url);
+        uploaded = true;
+      } catch (err) {
+        lastError = err;
+        console.warn(`Lần thử ${attempts} tải ${file.name} với key ${currentKey.slice(0, 6)}... thất bại:`, err.message);
+
+        // If rate limit error and multiple keys exist, switch to next key immediately
+        if (err.message.includes('Rate limit') && keyList.length > 1) {
+          activeKeyIndex = (activeKeyIndex + 1) % keyList.length;
+          console.log(`Đổi sang ImgBB Key tiếp theo: ${keyList[activeKeyIndex].slice(0, 6)}...`);
+          await new Promise(r => setTimeout(r, 200));
+          continue;
+        }
+
+        if (attempts < 3) {
+          await new Promise(r => setTimeout(r, 1000 * attempts));
+        }
+      }
+    }
+
+    if (!uploaded) {
+      throw new Error(`Upload lỗi tại file "${file.name}": ${lastError?.message || 'Không rõ nguyên nhân'}`);
     }
 
     // Small delay to avoid rate limiting
     if (i < files.length - 1) {
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 200));
     }
   }
+
   if (onProgress) onProgress(files.length, files.length, 'Done');
   return urls;
 }
