@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { BookOpen, Upload, Link as LinkIcon, Trash2, Plus, FolderOpen, ImageIcon, ChevronDown, ChevronUp, Eye, X, Loader, Layers, Check } from 'lucide-react';
-import { MANGA_GENRES, MANGA_STATUS, IMGBB_API_KEY_STORAGE, uploadMultipleToImgBB, uploadToImgBB, parseFolderStructure, countTotalImages } from '../../utils/mangaUtils';
+import { BookOpen, Upload, Link as LinkIcon, Trash2, Plus, FolderOpen, ImageIcon, ChevronDown, ChevronUp, Eye, X, Loader, Layers, Check, FileArchive, Sparkles } from 'lucide-react';
+import { MANGA_GENRES, MANGA_STATUS, IMGBB_API_KEY_STORAGE, uploadMultipleToImgBB, uploadToImgBB, parseFolderStructure, countTotalImages, parseArchiveFiles, extractArchiveToChapters } from '../../utils/mangaUtils';
 
 function MangaForm({
   mangaData,
@@ -11,10 +11,12 @@ function MangaForm({
 }) {
   const DEFAULT_IMGBB_KEY = '25212dbe2483e698d28894d12bd4d166';
   const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem(IMGBB_API_KEY_STORAGE) || DEFAULT_IMGBB_KEY);
-  const [uploadMode, setUploadMode] = useState('folder'); // 'folder' or 'url'
+  const [uploadMode, setUploadMode] = useState('epub'); // 'epub', 'folder', 'single' or 'url'
   const [parsedChapters, setParsedChapters] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(null); // { current, total, file, chapterIdx, chapterTotal }
   const [isUploading, setIsUploading] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractProgress, setExtractProgress] = useState(null); // { currentFile, totalFiles, currentImage, totalImages, filename, archiveName, message }
   const [expandedChapters, setExpandedChapters] = useState({});
   const [coverUploading, setCoverUploading] = useState(false);
   const [showCoverSelector, setShowCoverSelector] = useState(false);
@@ -26,6 +28,8 @@ function MangaForm({
   const folderInputRef = useRef(null);
   const coverInputRef = useRef(null);
   const chapterFolderInputRef = useRef(null);
+  const archiveInputRef = useRef(null);
+  const chapterArchiveInputRef = useRef(null);
 
   // Save ImgBB key
   const handleImgbbKeyChange = (val) => {
@@ -132,6 +136,93 @@ function MangaForm({
     } finally {
       setIsUploading(false);
       setUploadProgress(null);
+    }
+  };
+
+  // Handle EPUB / CBZ / ZIP files selection
+  const handleArchiveSelect = async (e) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    setIsExtracting(true);
+    setExtractProgress({ message: 'Bắt đầu đọc file...' });
+
+    try {
+      const { mangaTitle, chapters } = await parseArchiveFiles(fileList, (p) => {
+        setExtractProgress(p);
+      });
+
+      if (!chapters || chapters.length === 0) {
+        alert('Không tìm thấy hình ảnh nào trong file EPUB/ZIP/CBZ đã chọn!');
+        setIsExtracting(false);
+        setExtractProgress(null);
+        return;
+      }
+
+      const detectedTitle = mangaData.title || mangaTitle || '';
+      if (mangaTitle && !mangaData.title) {
+        setMangaData(prev => ({ ...prev, title: mangaTitle }));
+      }
+
+      setParsedChapters(chapters);
+      setIsExtracting(false);
+      setExtractProgress(null);
+
+      // Auto-upload immediately to ImgBB
+      const key = imgbbKey.trim() || DEFAULT_IMGBB_KEY;
+      await uploadChaptersList(chapters, key, detectedTitle);
+    } catch (err) {
+      console.error('Archive extraction error:', err);
+      alert('Lỗi khi đọc file EPUB/ZIP: ' + err.message);
+      setIsExtracting(false);
+      setExtractProgress(null);
+    }
+  };
+
+  // Upload single chapter archive (EPUB / CBZ / ZIP)
+  const handleSingleChapterArchive = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!imgbbKey.trim()) return alert('Vui lòng nhập ImgBB API Key!');
+
+    setIsExtracting(true);
+    setExtractProgress({ message: `Đang giải nén ${file.name}...` });
+
+    try {
+      const { mangaTitle, chapters } = await extractArchiveToChapters(file, (curr, tot, imgName) => {
+        setExtractProgress({
+          currentImage: curr,
+          totalImages: tot,
+          filename: imgName,
+          archiveName: file.name
+        });
+      });
+
+      setIsExtracting(false);
+      setExtractProgress(null);
+
+      if (!chapters || chapters.length === 0 || chapters[0].files.length === 0) {
+        return alert('Không tìm thấy file ảnh trong tệp EPUB/ZIP đã chọn!');
+      }
+
+      // If user hasn't typed title, auto fill
+      if (!mangaData.title && mangaTitle) {
+        setMangaData(prev => ({ ...prev, title: mangaTitle }));
+      }
+
+      // If user typed a custom chapter title in the manual input, override chapter name
+      if (manualChapterTitle.trim() && chapters.length === 1) {
+        chapters[0].name = manualChapterTitle.trim();
+      }
+
+      const key = imgbbKey.trim() || DEFAULT_IMGBB_KEY;
+      await uploadChaptersList(chapters, key, mangaData.title || mangaTitle);
+      setManualChapterTitle('');
+    } catch (err) {
+      console.error('Single archive error:', err);
+      alert('Lỗi đọc file: ' + err.message);
+      setIsExtracting(false);
+      setExtractProgress(null);
     }
   };
 
@@ -502,7 +593,18 @@ function MangaForm({
           </h3>
 
           {/* Upload mode tabs */}
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => setUploadMode('epub')}
+              style={{
+                padding: '0.4rem 1rem', borderRadius: '6px', border: '1px solid',
+                borderColor: uploadMode === 'epub' ? '#c084fc' : 'var(--color-border)',
+                backgroundColor: uploadMode === 'epub' ? 'rgba(168, 85, 247, 0.15)' : 'transparent',
+                color: uploadMode === 'epub' ? '#c084fc' : 'var(--color-text-muted)',
+                cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                fontWeight: uploadMode === 'epub' ? 600 : 400
+              }}>
+              <FileArchive size={14} /> Upload File EPUB / CBZ / ZIP
+            </button>
             <button type="button" onClick={() => setUploadMode('folder')}
               style={{
                 padding: '0.4rem 1rem', borderRadius: '6px', border: '1px solid',
@@ -534,6 +636,96 @@ function MangaForm({
               <LinkIcon size={14} /> Paste URL
             </button>
           </div>
+
+          {/* EPUB / CBZ / ZIP Upload Mode */}
+          {uploadMode === 'epub' && (
+            <div style={{ padding: '1.25rem', borderRadius: '8px', backgroundColor: 'rgba(168, 85, 247, 0.05)', border: '1px dashed rgba(168, 85, 247, 0.35)' }}>
+              <div style={{ marginBottom: '0.8rem' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-light)', fontWeight: 600, margin: '0 0 0.3rem 0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Sparkles size={16} color="#c084fc" /> Tải lên trực tiếp từ file .EPUB, .CBZ hoặc .ZIP
+                </p>
+                <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: 0 }}>
+                  Hệ thống tự động giải nén client-side, sắp xếp trang ảnh, trích xuất tên truyện / chapter và nén WebP trước khi upload lên ImgBB.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.8rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => archiveInputRef.current?.click()}
+                  disabled={isUploading || isExtracting}
+                  className="btn"
+                  style={{
+                    background: 'linear-gradient(135deg, #a855f7, #6366f1)',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '0.65rem 1.4rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    fontWeight: 600,
+                    cursor: isUploading || isExtracting ? 'not-allowed' : 'pointer',
+                    borderRadius: '6px',
+                    boxShadow: '0 4px 12px rgba(168, 85, 247, 0.25)'
+                  }}
+                >
+                  <FileArchive size={17} />
+                  {isExtracting ? 'Đang giải nén...' : 'Chọn file .EPUB / .CBZ / .ZIP'}
+                </button>
+
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  (Hỗ trợ chọn 1 hoặc nhiều file cùng lúc, mỗi file sẽ tạo thành 1 chapter)
+                </span>
+              </div>
+
+              <input
+                ref={archiveInputRef}
+                type="file"
+                hidden
+                multiple
+                accept=".epub,.cbz,.zip"
+                onClick={(e) => { e.target.value = ''; }}
+                onChange={handleArchiveSelect}
+              />
+
+              {/* Parsed Preview */}
+              {parsedChapters.length > 0 && (
+                <div style={{ marginTop: '1.2rem', padding: '0.8rem', borderRadius: '6px', backgroundColor: 'rgba(0, 0, 0, 0.2)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--color-success)', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Check size={16} /> Đã chuẩn bị {parsedChapters.length} chapter, tổng {countTotalImages(parsedChapters)} ảnh
+                  </div>
+                  <div style={{ maxHeight: '180px', overflowY: 'auto', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                    {parsedChapters.map((ch, i) => (
+                      <div key={i} style={{ padding: '0.35rem 0', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>📖 {ch.name}</span>
+                        <span style={{ color: 'var(--color-accent)' }}>{ch.files.length} ảnh</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleUploadAll}
+                    disabled={isUploading || isExtracting}
+                    className="btn"
+                    style={{
+                      marginTop: '0.8rem',
+                      background: 'var(--color-accent)',
+                      color: '#000',
+                      border: 'none',
+                      padding: '0.6rem 1.5rem',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      cursor: isUploading ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <Upload size={16} /> {isUploading ? 'Đang upload...' : `Upload tất cả lên ImgBB`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Folder Upload Mode */}
           {uploadMode === 'folder' && (
@@ -598,20 +790,39 @@ function MangaForm({
               <input
                 type="text"
                 className="input-field"
-                placeholder="Tên chapter (ví dụ: Chapter 5)"
+                placeholder="Tên chapter (ví dụ: Chapter 5 hoặc để trống để tự nhận diện)"
                 value={manualChapterTitle}
                 onChange={e => setManualChapterTitle(e.target.value)}
                 style={{ margin: '0 0 0.8rem 0' }}
               />
-              <button
-                type="button"
-                onClick={() => chapterFolderInputRef.current?.click()}
-                disabled={isUploading}
-                className="btn"
-                style={{ background: 'var(--color-accent)', color: '#000', border: 'none', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, cursor: 'pointer' }}
-              >
-                <FolderOpen size={14} /> Chọn folder ảnh chapter
-              </button>
+              <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => chapterArchiveInputRef.current?.click()}
+                  disabled={isUploading || isExtracting}
+                  className="btn"
+                  style={{ background: 'linear-gradient(135deg, #a855f7, #6366f1)', color: '#fff', border: 'none', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  <FileArchive size={14} /> Chọn 1 file .EPUB / .CBZ / .ZIP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => chapterFolderInputRef.current?.click()}
+                  disabled={isUploading || isExtracting}
+                  className="btn"
+                  style={{ background: 'var(--color-accent)', color: '#000', border: 'none', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  <FolderOpen size={14} /> Chọn folder ảnh chapter
+                </button>
+              </div>
+              <input
+                ref={chapterArchiveInputRef}
+                type="file"
+                hidden
+                accept=".epub,.cbz,.zip"
+                onClick={(e) => { e.target.value = ''; }}
+                onChange={handleSingleChapterArchive}
+              />
               <input
                 ref={el => {
                   chapterFolderInputRef.current = el;
@@ -656,6 +867,34 @@ function MangaForm({
               >
                 <Plus size={14} /> Thêm chapter
               </button>
+            </div>
+          )}
+
+          {/* Extraction Progress */}
+          {isExtracting && (
+            <div style={{ marginTop: '1rem', padding: '1rem', borderRadius: '8px', backgroundColor: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.25)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.85rem', color: '#c084fc', fontWeight: 600, marginBottom: '0.5rem' }}>
+                <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                {extractProgress?.totalFiles > 1
+                  ? `Đang giải nén file ${extractProgress.currentFile}/${extractProgress.totalFiles} (${extractProgress.archiveName})...`
+                  : `Đang giải nén ${extractProgress?.archiveName || 'file EPUB / ZIP'}...`}
+              </div>
+              {extractProgress?.totalImages > 0 && (
+                <div style={{ width: '100%', height: '8px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${(extractProgress.currentImage / extractProgress.totalImages) * 100}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #c084fc, #66c0f4)',
+                    borderRadius: '4px',
+                    transition: 'width 0.2s ease'
+                  }} />
+                </div>
+              )}
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.4rem' }}>
+                {extractProgress?.totalImages
+                  ? `Đang trích xuất ${extractProgress.currentImage}/${extractProgress.totalImages} ảnh — ${extractProgress.filename}`
+                  : (extractProgress?.message || 'Đang chuẩn bị đọc tệp...')}
+              </div>
             </div>
           )}
 

@@ -2,8 +2,11 @@
  * Manga Utilities
  * - ImgBB upload API integration
  * - Folder structure parsing for bulk chapter upload
+ * - EPUB / CBZ / ZIP extraction
  * - Genre and status constants
  */
+import JSZip from 'jszip';
+
 
 // ============ CONSTANTS ============
 
@@ -300,3 +303,267 @@ export function slugify(text) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 }
+
+// ============ ARCHIVE (EPUB / CBZ / ZIP) EXTRACTION ============
+
+/**
+ * Check if a file is an archive (.epub, .cbz, .zip)
+ */
+export function isArchiveFile(file) {
+  if (!file) return false;
+  const fileName = (file.name || '').toLowerCase();
+  return fileName.endsWith('.epub') || fileName.endsWith('.cbz') || fileName.endsWith('.zip');
+}
+
+/**
+ * Smart extraction of manga title and chapter name from archive filename
+ * E.g. "VỢ-TÔI-NHIỄM-NHIỄM-CHƯƠNG-1.epub" -> { title: "VỢ TÔI NHIỄM NHIỄM", chapterName: "Chương 1" }
+ * "One Piece Chap 1000.cbz" -> { title: "One Piece", chapterName: "Chap 1000" }
+ */
+export function parseMangaTitleAndChapter(filename) {
+  if (!filename) return { title: '', chapterName: 'Chapter 1' };
+  const nameWithoutExt = filename.replace(/\.(epub|cbz|zip)$/i, '').trim();
+
+  // Look for chapter keyword and number
+  const chRegex = /(?:[-_\s]+)?(?:\b|_|-)(chương|chuong|chapter|chap|ch|tập|tap|vol)[\s._-]*(\d+(?:\.\d+)?)/i;
+  const match = nameWithoutExt.match(chRegex);
+
+  if (match) {
+    const rawWord = match[1];
+    // Capitalize first letter: "chương" -> "Chương", "chap" -> "Chap"
+    const prefixWord = rawWord.charAt(0).toUpperCase() + rawWord.slice(1);
+    const chapterNum = match[2];
+    const chapterName = `${prefixWord} ${chapterNum}`;
+    const rawTitle = nameWithoutExt.slice(0, match.index).trim();
+    const title = rawTitle.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return { title, chapterName };
+  }
+
+  const title = nameWithoutExt.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return { title, chapterName: 'Chapter 1' };
+}
+
+/**
+ * Extract images from a single .epub, .cbz or .zip archive file.
+ * Returns chapter list and detected title.
+ *
+ * @param {File} file - The .epub, .cbz or .zip file
+ * @param {function} onProgress - Callback (current, total, filename)
+ * @returns {Promise<{ mangaTitle: string, chapters: Array<{ name: string, files: File[] }> }>}
+ */
+export async function extractArchiveToChapters(file, onProgress) {
+  const zip = await JSZip.loadAsync(file);
+  const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif'];
+
+  const imageEntries = [];
+  let opfEntry = null;
+
+  zip.forEach((relativePath, entry) => {
+    if (entry.dir) return;
+    const lower = relativePath.toLowerCase();
+    if (imageExts.some(ext => lower.endsWith(ext))) {
+      imageEntries.push({ path: relativePath, entry });
+    } else if (lower.endsWith('.opf')) {
+      opfEntry = entry;
+    }
+  });
+
+  if (imageEntries.length === 0) {
+    throw new Error(`Không tìm thấy hình ảnh nào trong file "${file.name}"`);
+  }
+
+  // Check if EPUB has OPF metadata
+  let metaTitle = '';
+  const orderedManifestPaths = [];
+
+  if (opfEntry) {
+    try {
+      const opfXml = await opfEntry.async('string');
+      const titleMatch = opfXml.match(/<dc:title[^>]*>([^<]+)<\/dc:title>/i);
+      if (titleMatch && titleMatch[1].trim() && titleMatch[1].trim().toLowerCase() !== 'unknown') {
+        metaTitle = titleMatch[1].trim();
+      }
+
+      // Read manifest order
+      const itemRegex = /<item\s+[^>]*href=["']([^"']+)["'][^>]*>/gi;
+      let m;
+      while ((m = itemRegex.exec(opfXml)) !== null) {
+        const href = decodeURIComponent(m[1]);
+        if (imageExts.some(ext => href.toLowerCase().endsWith(ext))) {
+          orderedManifestPaths.push(href);
+        }
+      }
+    } catch (e) {
+      console.warn('Cannot parse OPF metadata:', e);
+    }
+  }
+
+  // Sort images
+  let sortedEntries;
+  if (orderedManifestPaths.length === imageEntries.length && orderedManifestPaths.length > 0) {
+    const pathToEntryMap = new Map();
+    imageEntries.forEach(ie => {
+      pathToEntryMap.set(ie.path, ie);
+      pathToEntryMap.set(ie.path.split('/').pop(), ie);
+    });
+    const mapped = [];
+    for (const p of orderedManifestPaths) {
+      const found = pathToEntryMap.get(p) || pathToEntryMap.get(p.split('/').pop());
+      if (found && !mapped.includes(found)) {
+        mapped.push(found);
+      }
+    }
+    if (mapped.length === imageEntries.length) {
+      sortedEntries = mapped;
+    }
+  }
+
+  if (!sortedEntries) {
+    sortedEntries = [...imageEntries].sort((a, b) =>
+      a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' })
+    );
+  }
+
+  // Mime types
+  const mimeMap = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    avif: 'image/avif'
+  };
+
+  // Convert entries to File objects
+  const { title: parsedTitle, chapterName } = parseMangaTitleAndChapter(file.name);
+  const detectedTitle = metaTitle || parsedTitle;
+
+  // Check if archive has subdirectories that represent distinct chapters (e.g. Chapter 1/..., Chapter 2/...)
+  // If it's a standard EPUB or flat zip, all images belong to one chapter.
+  const pathPartsList = sortedEntries.map(e => ({
+    entry: e,
+    parts: e.path.replace(/\\/g, '/').split('/').filter(Boolean)
+  }));
+
+  // Detect if there are multiple chapter subdirectories
+  const subfolders = new Set();
+  pathPartsList.forEach(({ parts }) => {
+    if (parts.length >= 2) {
+      const parentDir = parts[0].toLowerCase();
+      // Exclude common epub directories like 'oebps', 'images', 'ops', 'meta-inf'
+      if (!['images', 'img', 'oebps', 'ops', 'meta-inf'].includes(parentDir)) {
+        subfolders.add(parts[0]);
+      }
+    }
+  });
+
+  const chapters = [];
+
+  if (subfolders.size > 1) {
+    // Multi-chapter archive
+    const chapterMap = new Map();
+    for (let i = 0; i < pathPartsList.length; i++) {
+      const { entry, parts } = pathPartsList[i];
+      const chKey = parts.length >= 2 ? parts[0] : (chapterName || 'Chapter 1');
+      if (!chapterMap.has(chKey)) chapterMap.set(chKey, []);
+      
+      const blob = await entry.entry.async('blob');
+      const ext = entry.path.split('.').pop().toLowerCase();
+      const type = mimeMap[ext] || 'image/jpeg';
+      const fileName = entry.path.split('/').pop() || `page_${i + 1}.${ext}`;
+      const imgFile = new File([blob], fileName, { type, lastModified: Date.now() });
+
+      chapterMap.get(chKey).push(imgFile);
+      if (onProgress) onProgress(i + 1, pathPartsList.length, fileName);
+    }
+
+    const sortedChNames = [...chapterMap.keys()].sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    );
+
+    sortedChNames.forEach(name => {
+      chapters.push({
+        name,
+        files: chapterMap.get(name)
+      });
+    });
+  } else {
+    // Single chapter archive (e.g., VỢ-TÔI-NHIỄM-NHIỄM-CHƯƠNG-1.epub)
+    const fileObjects = [];
+    for (let i = 0; i < sortedEntries.length; i++) {
+      const { path, entry } = sortedEntries[i];
+      const blob = await entry.async('blob');
+      const ext = path.split('.').pop().toLowerCase();
+      const type = mimeMap[ext] || 'image/jpeg';
+      const fileName = path.split('/').pop() || `page_${i + 1}.${ext}`;
+      const imgFile = new File([blob], fileName, { type, lastModified: Date.now() });
+      fileObjects.push(imgFile);
+
+      if (onProgress) onProgress(i + 1, sortedEntries.length, fileName);
+    }
+
+    chapters.push({
+      name: chapterName || 'Chapter 1',
+      files: fileObjects
+    });
+  }
+
+  return {
+    mangaTitle: detectedTitle,
+    chapters
+  };
+}
+
+/**
+ * Parse one or multiple .epub, .cbz or .zip files into chapters.
+ *
+ * @param {FileList|File[]} files - Selected archive files
+ * @param {function} onProgress - Callback ({ currentFile, totalFiles, currentImage, totalImages, filename, archiveName })
+ * @returns {Promise<{ mangaTitle: string, chapters: Array<{ name: string, files: File[] }> }>}
+ */
+export async function parseArchiveFiles(files, onProgress) {
+  const archiveList = Array.from(files || []).filter(isArchiveFile);
+  if (archiveList.length === 0) {
+    return { mangaTitle: '', chapters: [] };
+  }
+
+  let finalMangaTitle = '';
+  const allChapters = [];
+
+  for (let fi = 0; fi < archiveList.length; fi++) {
+    const archFile = archiveList[fi];
+    const { mangaTitle, chapters } = await extractArchiveToChapters(
+      archFile,
+      (currentImg, totalImgs, imgName) => {
+        if (onProgress) {
+          onProgress({
+            currentFile: fi + 1,
+            totalFiles: archiveList.length,
+            currentImage: currentImg,
+            totalImages: totalImgs,
+            filename: imgName,
+            archiveName: archFile.name
+          });
+        }
+      }
+    );
+
+    if (mangaTitle && !finalMangaTitle) {
+      finalMangaTitle = mangaTitle;
+    }
+
+    allChapters.push(...chapters);
+  }
+
+  // Sort chapters naturally by name
+  allChapters.sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+  );
+
+  return {
+    mangaTitle: finalMangaTitle,
+    chapters: allChapters
+  };
+}
+
