@@ -55,6 +55,17 @@ export const ADS_CONFIG = {
     altText: 'Quảng cáo ExoClick sidebar dưới',
   },
 
+  // Vị trí Sidebar Video: Ngay dưới chatbox (Outstream VAST Video Player)
+  sidebar_video: {
+    provider: 'vast',
+    zoneId: '6022002',
+    vastUrl: 'https://s.magsrv.com/v1/vast.php?idz=6022002',
+    width: '100%',
+    aspectRatio: '16/9',
+    minHeight: '230px',
+    altText: 'Video quảng cáo tài trợ',
+  },
+
   // Vị trí 3: Ở cuối trang (dự phòng cho banner ảnh tĩnh nếu dùng)
   slot3: {
     imageUrl: '', // Link ảnh banner (ví dụ: 'https://example.com/banner3.png')

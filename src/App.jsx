@@ -5,6 +5,7 @@ import Navbar from './components/Navbar';
 import NotificationBanner from './components/NotificationBanner';
 import ChatBox from './components/ChatBox';
 import AdBanner, { AdBlockWall } from './components/AdBanner';
+import VideoAdBanner from './components/VideoAdBanner';
 import Home from './pages/Home';
 import Auth from './pages/Auth';
 import Wallet from './pages/Wallet';
@@ -560,7 +561,10 @@ function App() {
 
             <aside className="sidebar">
               <ChatBox />
-              <div style={{ marginTop: '2rem' }}>
+              <div style={{ marginTop: '1.5rem' }}>
+                <VideoAdBanner config={ADS_CONFIG.sidebar_video} />
+              </div>
+              <div style={{ marginTop: '1.5rem' }}>
                 <AdBanner config={ADS_CONFIG.sidebar} />
               </div>
             </aside>
