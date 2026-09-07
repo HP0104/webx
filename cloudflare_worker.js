@@ -31,6 +31,47 @@ export default {
     }
 
     const url = new URL(request.url);
+
+    // Proxy endpoint for FreeImage.host manga uploads (bypasses browser CORS)
+    if (url.pathname === "/api/upload-freeimage") {
+      const uploadCorsHeaders = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      };
+
+      if (request.method === "OPTIONS") {
+        return new Response(null, { headers: uploadCorsHeaders });
+      }
+
+      if (request.method === "POST") {
+        try {
+          const formData = await request.formData();
+          if (!formData.has("key") || !formData.get("key")) {
+            formData.set("key", "6d207e02198a847aa98d0a2a901485a5");
+          }
+          formData.set("action", "upload");
+          formData.set("format", "json");
+
+          const response = await fetch("https://freeimage.host/api/1/upload", {
+            method: "POST",
+            body: formData
+          });
+
+          const data = await response.json();
+          return new Response(JSON.stringify(data), {
+            status: response.status,
+            headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+          });
+        } catch (err) {
+          return new Response(JSON.stringify({ status_code: 500, error: { message: err.message } }), {
+            status: 500,
+            headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+    }
+
     if (url.pathname === "/check-payment" && request.method === "POST") {
       try {
         const payload = await request.json();

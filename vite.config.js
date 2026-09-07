@@ -5,4 +5,13 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/',
+  server: {
+    proxy: {
+      '/api/upload-freeimage': {
+        target: 'https://freeimage.host',
+        changeOrigin: true,
+        rewrite: () => '/api/1/upload'
+      }
+    }
+  }
 })

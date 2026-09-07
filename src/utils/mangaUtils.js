@@ -23,6 +23,22 @@ export const MANGA_STATUS = {
 };
 
 export const IMGBB_API_KEY_STORAGE = 'web18p_imgbb_api_key';
+export const MANGA_STORAGE_PROVIDER_KEY = 'web18p_manga_storage_provider';
+
+export const FREEIMAGE_API_KEY = '6d207e02198a847aa98d0a2a901485a5';
+
+export const MANGA_STORAGE_PROVIDERS = {
+  freeimage: {
+    id: 'freeimage',
+    name: 'FreeImage.host',
+    description: 'Miễn phí, không giới hạn số lượng ảnh, không cần API Key (Khuyên dùng)'
+  },
+  imgbb: {
+    id: 'imgbb',
+    name: 'ImgBB',
+    description: 'Cần nhập API Key riêng (dễ bị Rate Limit nếu key hết lượt)'
+  }
+};
 
 // ============ IMAGE OPTIMIZATION & COMPRESSION ============
 
@@ -245,6 +261,163 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
 
   if (onProgress) onProgress(files.length, files.length, 'Done');
   return urls;
+}
+
+// ============ FREEIMAGE.HOST UPLOAD ============
+
+/**
+ * Upload a single image file to FreeImage.host via proxy endpoint
+ * @param {File} file - Image file to upload
+ * @param {string} customName - Optional custom title/filename
+ * @param {boolean} shouldOptimize - Whether to auto-compress to WebP
+ * @returns {Promise<{url: string, thumb: string, deleteUrl: string}>}
+ */
+export async function uploadToFreeImage(file, customName = '', shouldOptimize = true) {
+  let fileToUpload = file;
+  if (shouldOptimize) {
+    try {
+      fileToUpload = await optimizeMangaImage(file, { customName });
+    } catch (e) {
+      console.warn('Image optimization skipped:', e);
+      fileToUpload = file;
+    }
+  }
+
+  const formData = new FormData();
+  formData.append('key', FREEIMAGE_API_KEY);
+  formData.append('action', 'upload');
+  const fileName = customName
+    ? (customName.endsWith('.webp') ? customName : `${customName}.webp`)
+    : fileToUpload.name;
+  formData.append('source', fileToUpload, fileName);
+  formData.append('format', 'json');
+
+  // Try endpoints: local dev / same-domain proxy first, fallback to Cloudflare Worker proxy
+  const endpoints = [
+    '/api/upload-freeimage',
+    'https://web18p-deloy.takarvn.workers.dev/api/upload-freeimage'
+  ];
+
+  let lastError = null;
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok && response.status === 404) {
+        // Not found on this domain/endpoint, attempt next endpoint
+        continue;
+      }
+
+      let result = null;
+      try {
+        result = await response.json();
+      } catch (e) {
+        // Response wasn't JSON
+      }
+
+      if (response.ok && result?.status_code === 200 && result?.image) {
+        return {
+          url: result.image.url || result.image.display_url,
+          thumb: result.image.thumb?.url || result.image.display_url || result.image.url,
+          deleteUrl: result.image.delete_url || ''
+        };
+      }
+
+      const errorMsg = result?.error?.message || result?.error || `HTTP ${response.status} ${response.statusText}`;
+      throw new Error(errorMsg);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw new Error(`FreeImage.host upload thất bại: ${lastError?.message || 'Không thể kết nối máy chủ upload'}`);
+}
+
+/**
+ * Upload multiple images to FreeImage.host with progress tracking and retry logic
+ *
+ * @param {File[]} files - Array of image files
+ * @param {function} onProgress - Callback(uploaded, total, currentFileName)
+ * @param {object} options - Optional naming options: { namePrefix, chapterTitle, nameGenerator }
+ * @returns {Promise<string[]>} Array of image URLs
+ */
+export async function uploadMultipleToFreeImage(files, onProgress, options = {}) {
+  const urls = [];
+  const { namePrefix = '', chapterTitle = '', nameGenerator = null } = options;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    let customName = '';
+
+    if (typeof nameGenerator === 'function') {
+      customName = nameGenerator(file, i, files.length);
+    } else if (namePrefix) {
+      const padLen = files.length >= 100 ? 3 : 2;
+      const numStr = String(i + 1).padStart(padLen, '0');
+      const prefix = [namePrefix, chapterTitle].filter(Boolean).join(' ');
+      customName = `${prefix} ${numStr}`;
+    }
+
+    if (onProgress) onProgress(i, files.length, customName || file.name);
+
+    let uploaded = false;
+    let lastError = null;
+    let attempts = 0;
+
+    while (!uploaded && attempts < 3) {
+      attempts++;
+      try {
+        const result = await uploadToFreeImage(file, customName, true);
+        urls.push(result.url);
+        uploaded = true;
+      } catch (err) {
+        lastError = err;
+        console.warn(`Lần thử ${attempts} tải ${file.name} lên FreeImage thất bại:`, err.message);
+        if (attempts < 3) {
+          await new Promise(r => setTimeout(r, 1000 * attempts));
+        }
+      }
+    }
+
+    if (!uploaded) {
+      throw new Error(`FreeImage upload lỗi tại file "${file.name}": ${lastError?.message || 'Không rõ nguyên nhân'}`);
+    }
+
+    // Polite delay between requests
+    if (i < files.length - 1) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
+
+  if (onProgress) onProgress(files.length, files.length, 'Done');
+  return urls;
+}
+
+// ============ UNIFIED UPLOAD HELPERS ============
+
+/**
+ * Upload a single image file using the selected provider
+ */
+export async function uploadSingleMangaImage(file, options = {}) {
+  const { provider = 'freeimage', apiKey = '', customName = '', shouldOptimize = true } = options;
+  if (provider === 'imgbb') {
+    return uploadToImgBB(file, apiKey, customName, shouldOptimize);
+  }
+  return uploadToFreeImage(file, customName, shouldOptimize);
+}
+
+/**
+ * Upload multiple images using the selected provider
+ */
+export async function uploadMultipleMangaImages(files, onProgress, options = {}) {
+  const { provider = 'freeimage', apiKey = '', ...restOptions } = options;
+  if (provider === 'imgbb') {
+    return uploadMultipleToImgBB(files, apiKey, onProgress, restOptions);
+  }
+  return uploadMultipleToFreeImage(files, onProgress, restOptions);
 }
 
 // ============ FOLDER PARSING ============
