@@ -292,11 +292,12 @@ export async function uploadToFreeImage(file, customName = '', shouldOptimize = 
   formData.append('source', fileToUpload, fileName);
   formData.append('format', 'json');
 
-  // Try endpoints: local dev / same-domain proxy first, fallback to Cloudflare Worker proxy
-  const endpoints = [
-    '/api/upload-freeimage',
-    'https://web18p-deloy.takarvn.workers.dev/api/upload-freeimage'
-  ];
+  // On localhost: use Vite proxy /api/upload-freeimage
+  // On production (web18p.xyz / GitHub Pages): directly call Cloudflare Worker proxy
+  const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const endpoints = isLocalhost
+    ? ['/api/upload-freeimage', 'https://web18p-deloy.takarvn.workers.dev/api/upload-freeimage']
+    : ['https://web18p-deloy.takarvn.workers.dev/api/upload-freeimage', '/api/upload-freeimage'];
 
   let lastError = null;
   for (const endpoint of endpoints) {
@@ -306,8 +307,8 @@ export async function uploadToFreeImage(file, customName = '', shouldOptimize = 
         body: formData
       });
 
-      if (!response.ok && response.status === 404) {
-        // Not found on this domain/endpoint, attempt next endpoint
+      if (!response.ok && (response.status === 404 || response.status === 405)) {
+        // Not found / Method Not Allowed on this domain, attempt next endpoint
         continue;
       }
 
@@ -331,6 +332,13 @@ export async function uploadToFreeImage(file, customName = '', shouldOptimize = 
     } catch (err) {
       lastError = err;
     }
+  }
+
+  const isNetworkOrCors = lastError?.message?.includes('Failed to fetch') || lastError?.message?.includes('NetworkError');
+  if (isNetworkOrCors && !isLocalhost) {
+    throw new Error(
+      'Worker proxy chưa được cập nhật trên Cloudflare. Vui lòng mở Cloudflare Worker "web18p-deloy", dán nội dung file cloudflare_worker.js và bấm "Save and Deploy"!'
+    );
   }
 
   throw new Error(`FreeImage.host upload thất bại: ${lastError?.message || 'Không thể kết nối máy chủ upload'}`);
