@@ -23,6 +23,7 @@ export const MANGA_STATUS = {
 };
 
 export const IMGBB_API_KEY_STORAGE = 'web18p_imgbb_api_key';
+export const FREEIMAGE_API_KEY_STORAGE = 'web18p_freeimage_api_key';
 export const MANGA_STORAGE_PROVIDER_KEY = 'web18p_manga_storage_provider';
 
 export const FREEIMAGE_API_KEY = '6d207e02198a847aa98d0a2a901485a5';
@@ -31,7 +32,7 @@ export const MANGA_STORAGE_PROVIDERS = {
   freeimage: {
     id: 'freeimage',
     name: 'FreeImage.host',
-    description: 'Miễn phí, không giới hạn số lượng ảnh, không cần API Key (Khuyên dùng)'
+    description: 'Miễn phí, không giới hạn dung lượng, CDN iili.io siêu nhanh. Hỗ trợ ảnh 18+ khi nhập API Key cá nhân'
   },
   imgbb: {
     id: 'imgbb',
@@ -267,12 +268,16 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
 
 /**
  * Upload a single image file to FreeImage.host via proxy endpoint
+ * Supports personal registered API key and NSFW flagging for adult manga.
+ * 
  * @param {File} file - Image file to upload
  * @param {string} customName - Optional custom title/filename
  * @param {boolean} shouldOptimize - Whether to auto-compress to WebP
+ * @param {string} apiKey - Optional custom FreeImage API key (from free registration at freeimage.host/settings/api)
+ * @param {boolean} isNsfw - Flag image as adult content (requires registered account to avoid 403)
  * @returns {Promise<{url: string, thumb: string, deleteUrl: string}>}
  */
-export async function uploadToFreeImage(file, customName = '', shouldOptimize = true) {
+export async function uploadToFreeImage(file, customName = '', shouldOptimize = true, apiKey = '', isNsfw = true) {
   let fileToUpload = file;
   if (shouldOptimize) {
     try {
@@ -283,14 +288,19 @@ export async function uploadToFreeImage(file, customName = '', shouldOptimize = 
     }
   }
 
+  const effectiveKey = apiKey?.trim() || (typeof window !== 'undefined' && localStorage.getItem(FREEIMAGE_API_KEY_STORAGE)?.trim()) || FREEIMAGE_API_KEY;
+
   const formData = new FormData();
-  formData.append('key', FREEIMAGE_API_KEY);
+  formData.append('key', effectiveKey);
   formData.append('action', 'upload');
   const fileName = customName
     ? (customName.endsWith('.webp') ? customName : `${customName}.webp`)
     : fileToUpload.name;
   formData.append('source', fileToUpload, fileName);
   formData.append('format', 'json');
+  if (isNsfw) {
+    formData.append('nsfw', '1');
+  }
 
   // On localhost: use Vite proxy /api/upload-freeimage
   // On production (web18p.xyz / GitHub Pages): directly call Cloudflare Worker proxy
@@ -349,12 +359,12 @@ export async function uploadToFreeImage(file, customName = '', shouldOptimize = 
  *
  * @param {File[]} files - Array of image files
  * @param {function} onProgress - Callback(uploaded, total, currentFileName)
- * @param {object} options - Optional naming options: { namePrefix, chapterTitle, nameGenerator }
+ * @param {object} options - Optional naming options: { namePrefix, chapterTitle, nameGenerator, apiKey, isNsfw }
  * @returns {Promise<string[]>} Array of image URLs
  */
 export async function uploadMultipleToFreeImage(files, onProgress, options = {}) {
   const urls = [];
-  const { namePrefix = '', chapterTitle = '', nameGenerator = null } = options;
+  const { namePrefix = '', chapterTitle = '', nameGenerator = null, apiKey = '', isNsfw = true } = options;
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -378,7 +388,7 @@ export async function uploadMultipleToFreeImage(files, onProgress, options = {})
     while (!uploaded && attempts < 3) {
       attempts++;
       try {
-        const result = await uploadToFreeImage(file, customName, true);
+        const result = await uploadToFreeImage(file, customName, true, apiKey, isNsfw);
         urls.push(result.url);
         uploaded = true;
       } catch (err) {
@@ -410,22 +420,22 @@ export async function uploadMultipleToFreeImage(files, onProgress, options = {})
  * Upload a single image file using the selected provider
  */
 export async function uploadSingleMangaImage(file, options = {}) {
-  const { provider = 'freeimage', apiKey = '', customName = '', shouldOptimize = true } = options;
+  const { provider = 'freeimage', apiKey = '', customName = '', shouldOptimize = true, isNsfw = true } = options;
   if (provider === 'imgbb') {
     return uploadToImgBB(file, apiKey, customName, shouldOptimize);
   }
-  return uploadToFreeImage(file, customName, shouldOptimize);
+  return uploadToFreeImage(file, customName, shouldOptimize, apiKey, isNsfw);
 }
 
 /**
  * Upload multiple images using the selected provider
  */
 export async function uploadMultipleMangaImages(files, onProgress, options = {}) {
-  const { provider = 'freeimage', apiKey = '', ...restOptions } = options;
+  const { provider = 'freeimage', apiKey = '', isNsfw = true, ...restOptions } = options;
   if (provider === 'imgbb') {
     return uploadMultipleToImgBB(files, apiKey, onProgress, restOptions);
   }
-  return uploadMultipleToFreeImage(files, onProgress, restOptions);
+  return uploadMultipleToFreeImage(files, onProgress, { apiKey, isNsfw, ...restOptions });
 }
 
 // ============ FOLDER PARSING ============

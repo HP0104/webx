@@ -4,6 +4,7 @@ import {
   MANGA_GENRES,
   MANGA_STATUS,
   IMGBB_API_KEY_STORAGE,
+  FREEIMAGE_API_KEY_STORAGE,
   MANGA_STORAGE_PROVIDER_KEY,
   MANGA_STORAGE_PROVIDERS,
   uploadMultipleToImgBB,
@@ -28,6 +29,7 @@ function MangaForm({
   const DEFAULT_IMGBB_KEY = '25212dbe2483e698d28894d12bd4d166';
   const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'freeimage');
   const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem(IMGBB_API_KEY_STORAGE) || DEFAULT_IMGBB_KEY);
+  const [freeimageKey, setFreeimageKey] = useState(() => localStorage.getItem(FREEIMAGE_API_KEY_STORAGE) || '');
   const [uploadMode, setUploadMode] = useState('epub'); // 'epub', 'folder', 'single' or 'url'
   const [parsedChapters, setParsedChapters] = useState([]);
   const [uploadProgress, setUploadProgress] = useState(null); // { current, total, file, chapterIdx, chapterTotal }
@@ -64,6 +66,16 @@ function MangaForm({
     }
   };
 
+  // Save FreeImage key
+  const handleFreeimageKeyChange = (val) => {
+    setFreeimageKey(val);
+    if (val.trim()) {
+      localStorage.setItem(FREEIMAGE_API_KEY_STORAGE, val.trim());
+    } else {
+      localStorage.removeItem(FREEIMAGE_API_KEY_STORAGE);
+    }
+  };
+
   // Handle cover upload
   const handleCoverUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -75,10 +87,12 @@ function MangaForm({
     setCoverUploading(true);
     try {
       const coverName = `${mangaData.title?.trim() || 'Manga'} - Ảnh bìa`;
+      const currentApiKey = storageProvider === 'freeimage' ? freeimageKey : imgbbKey;
       const result = await uploadSingleMangaImage(file, {
         provider: storageProvider,
-        apiKey: imgbbKey,
-        customName: coverName
+        apiKey: currentApiKey,
+        customName: coverName,
+        isNsfw: false
       });
       setMangaData(prev => ({ ...prev, cover: result.url }));
     } catch (err) {
@@ -94,11 +108,22 @@ function MangaForm({
       alert('Vui lòng nhập ImgBB API Key!');
       return null;
     }
+    if (storageProvider === 'freeimage' && !freeimageKey.trim()) {
+      const proceedWithoutKey = window.confirm(
+        '⚠️ LƯU Ý QUAN TRỌNG: Bạn chưa nhập FreeImage API Key!\n\n' +
+        'Nếu truyện này có hình ảnh 18+ (khoả thân, ecchi), FreeImage.host sẽ tự động chặn và thay ảnh bằng thông báo lỗi:\n' +
+        '"FREE IMAGE HOST 403 - Registration is required to upload adult content".\n\n' +
+        '• Để tránh lỗi 403: Bấm [Cancel] (Hủy), tạo tài khoản miễn phí tại freeimage.host và dán API Key vào ô bên dưới (chỉ mất 15 giây).\n' +
+        '• Nếu truyện này không có ảnh 18+: Bấm [OK] để tiếp tục tải.'
+      );
+      if (!proceedWithoutKey) return null;
+    }
     if (!chaptersToUpload || chaptersToUpload.length === 0) return null;
 
     setIsUploading(true);
     const addedChapters = [];
     const currentMangaTitle = (customTitle || mangaData.title || '').trim();
+    const currentApiKey = storageProvider === 'freeimage' ? freeimageKey : imgbbKey;
 
     try {
       for (let ci = 0; ci < chaptersToUpload.length; ci++) {
@@ -131,7 +156,8 @@ function MangaForm({
           },
           {
             provider: storageProvider,
-            apiKey: imgbbKey,
+            apiKey: currentApiKey,
+            isNsfw: true,
             namePrefix: prefix,
             nameGenerator: (file, idx) => {
               const padLen = ch.files.length >= 100 ? 3 : 2;
@@ -315,6 +341,12 @@ function MangaForm({
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
     if (storageProvider === 'imgbb' && !imgbbKey.trim()) return alert('Vui lòng nhập ImgBB API Key!');
+    if (storageProvider === 'freeimage' && !freeimageKey.trim()) {
+      const proceed = window.confirm(
+        '⚠️ Bạn chưa nhập FreeImage API Key. Nếu truyện có ảnh 18+, ảnh sẽ bị lỗi 403. Tiếp tục?'
+      );
+      if (!proceed) return;
+    }
 
     const imageFiles = Array.from(fileList)
       .filter(f => f.type?.startsWith('image/'))
@@ -327,6 +359,7 @@ function MangaForm({
     const currentMangaTitle = (mangaData.title || '').trim();
     const chTitle = manualChapterTitle || `Chapter ${chapterNumber}`;
     const prefix = [currentMangaTitle, chTitle].filter(Boolean).join(' ');
+    const currentApiKey = storageProvider === 'freeimage' ? freeimageKey : imgbbKey;
 
     try {
       setUploadProgress({ current: 0, total: imageFiles.length, file: '', chapterIdx: 1, chapterTotal: 1, chapterName: `Chapter ${chapterNumber}` });
@@ -338,7 +371,8 @@ function MangaForm({
         },
         {
           provider: storageProvider,
-          apiKey: imgbbKey,
+          apiKey: currentApiKey,
+          isNsfw: true,
           namePrefix: prefix,
           nameGenerator: (file, idx) => {
             const padLen = imageFiles.length >= 100 ? 3 : 2;
@@ -560,20 +594,80 @@ function MangaForm({
 
         {storageProvider === 'freeimage' ? (
           <div style={{
-            padding: '0.6rem 0.8rem',
-            borderRadius: '6px',
-            backgroundColor: 'rgba(16, 185, 129, 0.08)',
-            border: '1px solid rgba(16, 185, 129, 0.2)',
+            padding: '0.9rem',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(16, 185, 129, 0.05)',
+            border: '1px solid rgba(16, 185, 129, 0.25)',
             display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            fontSize: '0.75rem',
-            color: '#34d399'
+            flexDirection: 'column',
+            gap: '0.75rem'
           }}>
-            <Check size={16} style={{ flexShrink: 0 }} />
-            <span>
-              Hệ thống đã chọn sẵn <strong>FreeImage.host</strong>. Bạn chỉ cần chọn file EPUB/ZIP/Folder, ảnh sẽ tự động được trích xuất, nén WebP và upload lên CDN không giới hạn!
-            </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#34d399' }}>
+                  🔑 FreeImage API Key:
+                </span>
+                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: freeimageKey.trim() ? '#10b981' : '#f59e0b', color: '#000', fontWeight: 700 }}>
+                  {freeimageKey.trim() ? '✓ Đã kích hoạt Key cá nhân' : '⚠️ Bắt buộc đối với truyện 18+'}
+                </span>
+              </div>
+              <a
+                href="https://freeimage.host/settings/api"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: '0.75rem', color: '#34d399', textDecoration: 'underline', fontWeight: 600 }}
+              >
+                + Lấy API Key tại freeimage.host/settings/api ↗
+              </a>
+            </div>
+
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Dán FreeImage API Key của bạn vào đây (ví dụ: 6d207...)"
+              value={freeimageKey}
+              onChange={e => handleFreeimageKeyChange(e.target.value)}
+              style={{ margin: 0, fontSize: '0.85rem' }}
+            />
+
+            {!freeimageKey.trim() ? (
+              <div style={{
+                padding: '0.65rem 0.8rem',
+                borderRadius: '6px',
+                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                fontSize: '0.75rem',
+                color: '#fca5a5',
+                lineHeight: 1.55
+              }}>
+                <strong style={{ color: '#ef4444' }}>⚠️ Vì sao cần nhập API Key để tránh lỗi 403?</strong>
+                <br />
+                FreeImage.host <strong>cho phép đăng ảnh 18+ không giới hạn</strong>, nhưng bắt buộc phải có tài khoản cá nhân. Nếu dùng key mặc định vô danh (khách), hệ thống AI của FreeImage sẽ tự động chặn các ảnh người lớn và trả về ảnh lỗi:
+                <div style={{ margin: '0.4rem 0', padding: '0.3rem 0.6rem', borderRadius: '4px', backgroundColor: '#000', color: '#fff', fontFamily: 'monospace', fontSize: '0.72rem', border: '1px solid #333' }}>
+                  FREE IMAGE HOST 403 - Registration is required to upload adult content
+                </div>
+                👉 <strong>Cách lấy API Key miễn phí (mất 15 giây):</strong>
+                <ol style={{ margin: '0.3rem 0 0 1.2rem', padding: 0 }}>
+                  <li>Đăng ký tài khoản miễn phí tại <a href="https://freeimage.host/signup" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>freeimage.host/signup</a></li>
+                  <li>Truy cập <a href="https://freeimage.host/settings/api" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>freeimage.host/settings/api</a> và copy mã <strong>API v1 key</strong>.</li>
+                  <li>Dán vào ô trên (hệ thống sẽ tự lưu vĩnh viễn trên máy bạn).</li>
+                </ol>
+              </div>
+            ) : (
+              <div style={{
+                padding: '0.5rem 0.75rem',
+                borderRadius: '6px',
+                backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                fontSize: '0.75rem',
+                color: '#34d399',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem'
+              }}>
+                <Check size={16} style={{ flexShrink: 0 }} />
+                <span>API Key tài khoản đã được kích hoạt! Bạn có thể thoải mái upload toàn bộ ảnh truyện 18+, không bao giờ bị lỗi 403.</span>
+              </div>
+            )}
           </div>
         ) : (
           <div style={{
@@ -864,6 +958,11 @@ function MangaForm({
                   {storageProvider === 'imgbb' && (!imgbbKey || imgbbKey === DEFAULT_IMGBB_KEY) && (
                     <div style={{ padding: '0.6rem 0.8rem', borderRadius: '6px', backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', color: '#fbbf24', fontSize: '0.78rem', marginBottom: '0.8rem', lineHeight: 1.4 }}>
                       ⚠️ <strong>Lưu ý:</strong> API Key ImgBB mặc định hiện tại đang bị chạm trần giới hạn lượt tải (Rate limit reached). Hãy chuyển sang "FreeImage.host" hoặc lấy API Key cá nhân tại <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>api.imgbb.com</a>.
+                    </div>
+                  )}
+                  {storageProvider === 'freeimage' && !freeimageKey.trim() && (
+                    <div style={{ padding: '0.6rem 0.8rem', borderRadius: '6px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.78rem', marginBottom: '0.8rem', lineHeight: 1.4 }}>
+                      ⚠️ <strong>Truyện 18+:</strong> Bạn chưa nhập FreeImage API Key. Nếu truyện có hình ảnh người lớn, ảnh sẽ bị lỗi <i>"403 Registration is required to upload adult content"</i>. Hãy nhập API Key phía trên để tải toàn bộ ảnh sắc nét.
                     </div>
                   )}
                   <div style={{ maxHeight: '180px', overflowY: 'auto', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>

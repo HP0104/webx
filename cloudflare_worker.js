@@ -52,6 +52,9 @@ export default {
           }
           formData.set("action", "upload");
           formData.set("format", "json");
+          if (!formData.has("nsfw")) {
+            formData.set("nsfw", "1");
+          }
 
           const response = await fetch("https://freeimage.host/api/1/upload", {
             method: "POST",

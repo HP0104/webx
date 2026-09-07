@@ -31,3 +31,4 @@ node_modules
 KEY/
 check_*.js
 check_*.mjs
+scratch/
