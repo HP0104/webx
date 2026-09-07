@@ -812,7 +812,7 @@ function MangaForm({
                   <Sparkles size={16} color="#c084fc" /> Tải lên trực tiếp từ file .EPUB, .CBZ hoặc .ZIP
                 </p>
                 <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: 0 }}>
-                  Hệ thống tự động giải nén client-side, sắp xếp trang ảnh, trích xuất tên truyện / chapter và nén WebP trước khi upload lên ImgBB.
+                  Hệ thống tự động giải nén client-side, sắp xếp trang ảnh, trích xuất tên truyện / chapter và nén WebP trước khi upload lên FreeImage.host.
                 </p>
               </div>
 
