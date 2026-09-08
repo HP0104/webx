@@ -26,9 +26,8 @@ function MangaForm({
   onSaveManga,
   onCancelEdit
 }) {
-  const DEFAULT_IMGBB_KEY = '25212dbe2483e698d28894d12bd4d166';
-  const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'freeimage');
-  const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem(IMGBB_API_KEY_STORAGE) || DEFAULT_IMGBB_KEY);
+  const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'imgbb');
+  const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem(IMGBB_API_KEY_STORAGE) || '');
   const [freeimageKey, setFreeimageKey] = useState(() => localStorage.getItem(FREEIMAGE_API_KEY_STORAGE) || '');
   const [uploadMode, setUploadMode] = useState('epub'); // 'epub', 'folder', 'single' or 'url'
   const [parsedChapters, setParsedChapters] = useState([]);
@@ -105,18 +104,23 @@ function MangaForm({
   // Helper to upload a list of parsed chapters
   const uploadChaptersList = async (chaptersToUpload, customTitle = '') => {
     if (storageProvider === 'imgbb' && !imgbbKey.trim()) {
-      alert('Vui lòng nhập ImgBB API Key!');
+      alert(
+        '⚠️ BẠN CHƯA NHẬP IMGBB API KEY:\n\n' +
+        'Để upload ảnh không giới hạn và không bị chặn IP:\n' +
+        '1. Vào https://api.imgbb.com (miễn phí 100%)\n' +
+        '2. Bấm "Get API Key" và copy mã key\n' +
+        '3. Dán vào ô "ImgBB API Key" ở phía trên rồi bấm Upload lại!'
+      );
       return null;
     }
-    if (storageProvider === 'freeimage' && !freeimageKey.trim()) {
-      const proceedWithoutKey = window.confirm(
-        '⚠️ LƯU Ý QUAN TRỌNG: Bạn chưa nhập FreeImage API Key!\n\n' +
-        'Nếu truyện này có hình ảnh 18+ (khoả thân, ecchi), FreeImage.host sẽ tự động chặn và thay ảnh bằng thông báo lỗi:\n' +
-        '"FREE IMAGE HOST 403 - Registration is required to upload adult content".\n\n' +
-        '• Để tránh lỗi 403: Bấm [Cancel] (Hủy), tạo tài khoản miễn phí tại freeimage.host và dán API Key vào ô bên dưới (chỉ mất 15 giây).\n' +
-        '• Nếu truyện này không có ảnh 18+: Bấm [OK] để tiếp tục tải.'
+    if (storageProvider === 'freeimage') {
+      const proceed = window.confirm(
+        '⚠️ CẢNH BÁO SERVER FREEIMAGE:\n\n' +
+        'FreeImage.host hiện đã chặn dải IP của Cloudflare Worker proxy trên trang online web18p.xyz ("You have been forbidden to use this website").\n\n' +
+        '👉 Khuyên bạn: Bấm [Cancel] (Hủy) và chuyển sang tab "ImgBB" để upload trực tiếp mượt mà.\n\n' +
+        'Bạn có vẫn muốn thử tiếp tục không?'
       );
-      if (!proceedWithoutKey) return null;
+      if (!proceed) return null;
     }
     if (!chaptersToUpload || chaptersToUpload.length === 0) return null;
 
@@ -190,7 +194,15 @@ function MangaForm({
     } catch (err) {
       console.error('Upload chapters error:', err);
       if (err.message.includes('Rate limit')) {
-        alert(`⚠️ LỖI RATE LIMIT:\n\n${err.message}\n\n👉 Mẹo: Hãy chuyển sang server "FreeImage.host" (không giới hạn lượt) để upload thoải mái không lo bị lỗi!`);
+        alert(
+          `⚠️ LỖI RATE LIMIT (ImgBB):\n\n${err.message}\n\n` +
+          `👉 Mẹo: Tài khoản ImgBB của key này tạm hết lượt trong giờ này. Bạn có thể lấy thêm 1 key miễn phí tại api.imgbb.com hoặc dán nhiều key cách nhau bằng dấu phẩy (key1, key2) để tự động luân phiên!`
+        );
+      } else if (err.message.includes('forbidden') || err.message.includes('FreeImage')) {
+        alert(
+          `❌ LỖI PROXY FREEIMAGE:\n\n${err.message}\n\n` +
+          `👉 GIẢI PHÁP: Vui lòng chuyển sang chọn server "ImgBB", dán API Key (lấy miễn phí tại api.imgbb.com) rồi bấm Upload lại!`
+        );
       } else {
         alert('Upload lỗi: ' + err.message);
       }
@@ -232,13 +244,11 @@ function MangaForm({
 
       if (storageProvider === 'imgbb') {
         const key = imgbbKey.trim();
-        const isDefaultKey = !key || key === DEFAULT_IMGBB_KEY;
-
-        if (isDefaultKey) {
+        if (!key) {
           alert(
             `✓ ĐÃ GIẢI NÉN THÀNH CÔNG ${chapters.length} chapter (tổng ${countTotalImages(chapters)} trang ảnh)!\n\n` +
-            `⚠️ LƯU Ý: Bạn đang chọn ImgBB với key mặc định (dễ bị Rate Limit).\n` +
-            `👉 Bạn hãy chuyển sang "FreeImage.host" hoặc dán key riêng vào ô ImgBB API Key, sau đó bấm nút Upload!`
+            `⚠️ BƯỚC TIẾP THEO: Bạn cần nhập ImgBB API Key cá nhân để upload.\n` +
+            `👉 Hãy vào https://api.imgbb.com (miễn phí 100%), bấm "Get API Key", copy và dán vào ô "ImgBB API Key" phía trên rồi bấm nút Upload!`
           );
           return;
         }
@@ -291,13 +301,11 @@ function MangaForm({
 
       if (storageProvider === 'imgbb') {
         const key = imgbbKey.trim();
-        const isDefaultKey = !key || key === DEFAULT_IMGBB_KEY;
-
-        if (isDefaultKey) {
+        if (!key) {
           setParsedChapters(chapters);
           alert(
             `✓ Đã giải nén thành công chapter "${chapters[0].name}" (${chapters[0].files.length} ảnh)!\n\n` +
-            `⚠️ Bạn đang chọn ImgBB với key mặc định. Hãy chuyển sang "FreeImage.host" hoặc nhập key riêng rồi bấm Upload!`
+            `⚠️ Bạn cần nhập ImgBB API Key cá nhân để upload. Hãy dán key vào ô "ImgBB API Key" phía trên rồi bấm Upload!`
           );
           return;
         }
@@ -535,42 +543,13 @@ function MangaForm({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.8rem' }}>
           <button
             type="button"
-            onClick={() => handleProviderChange('freeimage')}
-            style={{
-              padding: '0.75rem 1rem',
-              borderRadius: '8px',
-              border: `2px solid ${storageProvider === 'freeimage' ? '#10b981' : 'rgba(255, 255, 255, 0.1)'}`,
-              backgroundColor: storageProvider === 'freeimage' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.02)',
-              color: storageProvider === 'freeimage' ? '#34d399' : 'var(--color-text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-start',
-              gap: '0.25rem',
-              textAlign: 'left',
-              transition: 'all 0.2s'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.9rem' }}>
-              <Sparkles size={16} /> FreeImage.host
-              <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#10b981', color: '#000', fontWeight: 700 }}>
-                KHUYÊN DÙNG
-              </span>
-            </div>
-            <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>
-              Miễn phí, không giới hạn lượt tải, không cần API Key, CDN iili.io siêu nhanh
-            </span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => handleProviderChange('imgbb')}
             style={{
               padding: '0.75rem 1rem',
               borderRadius: '8px',
-              border: `2px solid ${storageProvider === 'imgbb' ? '#38bdf8' : 'rgba(255, 255, 255, 0.1)'}`,
-              backgroundColor: storageProvider === 'imgbb' ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.02)',
-              color: storageProvider === 'imgbb' ? '#38bdf8' : 'var(--color-text-muted)',
+              border: `2px solid ${storageProvider === 'imgbb' ? '#10b981' : 'rgba(255, 255, 255, 0.1)'}`,
+              backgroundColor: storageProvider === 'imgbb' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+              color: storageProvider === 'imgbb' ? '#34d399' : 'var(--color-text-muted)',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
@@ -582,17 +561,46 @@ function MangaForm({
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.9rem' }}>
               <Layers size={16} /> ImgBB
-              <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8' }}>
-                Cần API Key
+              <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#10b981', color: '#000', fontWeight: 700 }}>
+                KHUYÊN DÙNG
               </span>
             </div>
             <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>
-              Upload qua ImgBB, giới hạn lượt theo tài khoản cá nhân
+              Upload trực tiếp từ trình duyệt, không qua proxy, 100% không bị chặn IP
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleProviderChange('freeimage')}
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: '8px',
+              border: `2px solid ${storageProvider === 'freeimage' ? '#ef4444' : 'rgba(255, 255, 255, 0.1)'}`,
+              backgroundColor: storageProvider === 'freeimage' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+              color: storageProvider === 'freeimage' ? '#f87171' : 'var(--color-text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: '0.25rem',
+              textAlign: 'left',
+              transition: 'all 0.2s'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.9rem' }}>
+              <Sparkles size={16} /> FreeImage.host
+              <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#ef4444', color: '#fff', fontWeight: 700 }}>
+                BỊ CHẶN PROXY
+              </span>
+            </div>
+            <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>
+              Hiện chặn IP Cloudflare Worker (Lỗi: You have been forbidden). Chỉ chạy trên localhost.
             </span>
           </button>
         </div>
 
-        {storageProvider === 'freeimage' ? (
+        {storageProvider === 'imgbb' ? (
           <div style={{
             padding: '0.9rem',
             borderRadius: '8px',
@@ -605,52 +613,47 @@ function MangaForm({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#34d399' }}>
-                  🔑 FreeImage API Key:
+                  🔑 ImgBB API Key:
                 </span>
-                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: freeimageKey.trim() ? '#10b981' : '#f59e0b', color: '#000', fontWeight: 700 }}>
-                  {freeimageKey.trim() ? '✓ Đã kích hoạt Key cá nhân' : '⚠️ Bắt buộc đối với truyện 18+'}
+                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: imgbbKey.trim() ? '#10b981' : '#f59e0b', color: '#000', fontWeight: 700 }}>
+                  {imgbbKey.trim() ? '✓ Đã kích hoạt API Key' : '⚠️ Cần nhập Key để upload'}
                 </span>
               </div>
               <a
-                href="https://freeimage.host/settings/api"
+                href="https://api.imgbb.com/"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ fontSize: '0.75rem', color: '#34d399', textDecoration: 'underline', fontWeight: 600 }}
               >
-                + Lấy API Key tại freeimage.host/settings/api ↗
+                + Lấy API Key miễn phí tại api.imgbb.com ↗
               </a>
             </div>
 
             <input
               type="text"
               className="input-field"
-              placeholder="Dán FreeImage API Key của bạn vào đây (ví dụ: 6d207...)"
-              value={freeimageKey}
-              onChange={e => handleFreeimageKeyChange(e.target.value)}
+              placeholder="Dán ImgBB API Key của bạn vào đây (hỗ trợ nhiều key cách nhau bằng dấu phẩy: key1, key2)"
+              value={imgbbKey}
+              onChange={e => handleImgbbKeyChange(e.target.value)}
               style={{ margin: 0, fontSize: '0.85rem' }}
             />
 
-            {!freeimageKey.trim() ? (
+            {!imgbbKey.trim() ? (
               <div style={{
                 padding: '0.65rem 0.8rem',
                 borderRadius: '6px',
-                backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                border: '1px solid rgba(239, 68, 68, 0.25)',
+                backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                border: '1px solid rgba(56, 189, 248, 0.25)',
                 fontSize: '0.75rem',
-                color: '#fca5a5',
+                color: '#bae6fd',
                 lineHeight: 1.55
               }}>
-                <strong style={{ color: '#ef4444' }}>⚠️ Vì sao cần nhập API Key để tránh lỗi 403?</strong>
-                <br />
-                FreeImage.host <strong>cho phép đăng ảnh 18+ không giới hạn</strong>, nhưng bắt buộc phải có tài khoản cá nhân. Nếu dùng key mặc định vô danh (khách), hệ thống AI của FreeImage sẽ tự động chặn các ảnh người lớn và trả về ảnh lỗi:
-                <div style={{ margin: '0.4rem 0', padding: '0.3rem 0.6rem', borderRadius: '4px', backgroundColor: '#000', color: '#fff', fontFamily: 'monospace', fontSize: '0.72rem', border: '1px solid #333' }}>
-                  FREE IMAGE HOST 403 - Registration is required to upload adult content
-                </div>
-                👉 <strong>Cách lấy API Key miễn phí (mất 15 giây):</strong>
+                <strong style={{ color: '#38bdf8' }}>💡 Hướng dẫn lấy API Key ImgBB (Miễn phí 100%, chỉ mất 10 giây):</strong>
                 <ol style={{ margin: '0.3rem 0 0 1.2rem', padding: 0 }}>
-                  <li>Đăng ký tài khoản miễn phí tại <a href="https://freeimage.host/signup" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>freeimage.host/signup</a></li>
-                  <li>Truy cập <a href="https://freeimage.host/settings/api" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>freeimage.host/settings/api</a> và copy mã <strong>API v1 key</strong>.</li>
-                  <li>Dán vào ô trên (hệ thống sẽ tự lưu vĩnh viễn trên máy bạn).</li>
+                  <li>Truy cập <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline', fontWeight: 600 }}>api.imgbb.com</a>.</li>
+                  <li>Bấm nút <strong>"Get API key"</strong> (Đăng nhập hoặc đăng ký tài khoản miễn phí).</li>
+                  <li>Copy mã API Key (32 ký tự) và dán vào ô trên. Trình duyệt sẽ tự động lưu vĩnh viễn trên máy bạn!</li>
+                  <li><em>Mẹo:</em> Có thể dán nhiều key cách nhau bằng dấu phẩy (<code>key1, key2</code>) để tự động luân phiên nếu 1 key hết lượt.</li>
                 </ol>
               </div>
             ) : (
@@ -665,36 +668,66 @@ function MangaForm({
                 gap: '0.4rem'
               }}>
                 <Check size={16} style={{ flexShrink: 0 }} />
-                <span>API Key tài khoản đã được kích hoạt! Bạn có thể thoải mái upload toàn bộ ảnh truyện 18+, không bao giờ bị lỗi 403.</span>
+                <span>API Key ImgBB đã sẵn sàng! Upload trực tiếp từ máy của bạn, tốc độ cao, không bao giờ bị chặn IP.</span>
               </div>
             )}
           </div>
         ) : (
           <div style={{
-            padding: '0.8rem',
-            borderRadius: '6px',
-            backgroundColor: 'rgba(56, 189, 248, 0.05)',
-            border: '1px solid rgba(56, 189, 248, 0.2)'
+            padding: '0.9rem',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(239, 68, 68, 0.06)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--color-accent)' }}>
-                ImgBB API Key:
-              </span>
-              <a
-                href="https://api.imgbb.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: '0.75rem', color: 'var(--color-accent)', textDecoration: 'underline', fontWeight: 600 }}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f87171' }}>
+                  ⚠️ FreeImage.host (Bị chặn trên Web online):
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleProviderChange('imgbb')}
+                style={{
+                  padding: '3px 10px',
+                  borderRadius: '4px',
+                  backgroundColor: '#10b981',
+                  color: '#000',
+                  fontWeight: 700,
+                  fontSize: '0.75rem',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
               >
-                + Lấy API Key tại api.imgbb.com ↗
-              </a>
+                👉 Chuyển sang dùng ImgBB
+              </button>
             </div>
+
+            <div style={{
+              padding: '0.65rem 0.8rem',
+              borderRadius: '6px',
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              fontSize: '0.75rem',
+              color: '#fca5a5',
+              lineHeight: 1.55
+            }}>
+              <strong>Vì sao FreeImage bị lỗi "You have been forbidden to use this website"?</strong>
+              <br />
+              FreeImage.host hiện đã cấm/chặn toàn bộ dải IP máy chủ của Cloudflare Worker proxy. Khi upload từ trang <strong>web18p.xyz</strong>, FreeImage phát hiện IP datacenter và lập tức từ chối kết nối.
+              <br />
+              👉 <strong>Khuyên bạn:</strong> Bấm nút <strong>"Chuyển sang dùng ImgBB"</strong> ở trên để upload trực tiếp từ trình duyệt của bạn mà không lo bị chặn!
+            </div>
+
             <input
               type="text"
               className="input-field"
-              placeholder="Dán ImgBB API Key vào đây (ví dụ: key1, key2)"
-              value={imgbbKey}
-              onChange={e => handleImgbbKeyChange(e.target.value)}
+              placeholder="FreeImage API Key (chỉ có tác dụng khi test trên localhost)"
+              value={freeimageKey}
+              onChange={e => handleFreeimageKeyChange(e.target.value)}
               style={{ margin: 0, fontSize: '0.85rem' }}
             />
           </div>
@@ -955,14 +988,14 @@ function MangaForm({
                   <div style={{ fontSize: '0.85rem', color: 'var(--color-success)', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <Check size={16} /> Đã giải nén sẵn sàng: {parsedChapters.length} chapter (tổng {countTotalImages(parsedChapters)} trang ảnh)
                   </div>
-                  {storageProvider === 'imgbb' && (!imgbbKey || imgbbKey === DEFAULT_IMGBB_KEY) && (
+                  {storageProvider === 'imgbb' && !imgbbKey.trim() && (
                     <div style={{ padding: '0.6rem 0.8rem', borderRadius: '6px', backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', color: '#fbbf24', fontSize: '0.78rem', marginBottom: '0.8rem', lineHeight: 1.4 }}>
-                      ⚠️ <strong>Lưu ý:</strong> API Key ImgBB mặc định hiện tại đang bị chạm trần giới hạn lượt tải (Rate limit reached). Hãy chuyển sang "FreeImage.host" hoặc lấy API Key cá nhân tại <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>api.imgbb.com</a>.
+                      ⚠️ <strong>Chưa nhập API Key:</strong> Vui lòng dán ImgBB API Key vào ô cài đặt phía trên để upload. (Lấy key miễn phí 10s tại <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>api.imgbb.com</a>).
                     </div>
                   )}
-                  {storageProvider === 'freeimage' && !freeimageKey.trim() && (
+                  {storageProvider === 'freeimage' && (
                     <div style={{ padding: '0.6rem 0.8rem', borderRadius: '6px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', fontSize: '0.78rem', marginBottom: '0.8rem', lineHeight: 1.4 }}>
-                      ⚠️ <strong>Truyện 18+:</strong> Bạn chưa nhập FreeImage API Key. Nếu truyện có hình ảnh người lớn, ảnh sẽ bị lỗi <i>"403 Registration is required to upload adult content"</i>. Hãy nhập API Key phía trên để tải toàn bộ ảnh sắc nét.
+                      ⚠️ <strong>Cảnh báo:</strong> FreeImage.host hiện chặn proxy Cloudflare Worker trên web online (Lỗi <i>"You have been forbidden to use this website"</i>). Khuyên bạn nên chuyển sang server <strong>ImgBB</strong> ở trên để upload thành công 100%!
                     </div>
                   )}
                   <div style={{ maxHeight: '180px', overflowY: 'auto', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>

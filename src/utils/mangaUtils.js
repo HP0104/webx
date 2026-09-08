@@ -29,15 +29,15 @@ export const MANGA_STORAGE_PROVIDER_KEY = 'web18p_manga_storage_provider';
 export const FREEIMAGE_API_KEY = '6d207e02198a847aa98d0a2a901485a5';
 
 export const MANGA_STORAGE_PROVIDERS = {
-  freeimage: {
-    id: 'freeimage',
-    name: 'FreeImage.host',
-    description: 'Miễn phí, không giới hạn dung lượng, CDN iili.io siêu nhanh. Hỗ trợ ảnh 18+ khi nhập API Key cá nhân'
-  },
   imgbb: {
     id: 'imgbb',
     name: 'ImgBB',
-    description: 'Cần nhập API Key riêng (dễ bị Rate Limit nếu key hết lượt)'
+    description: 'Khuyên dùng: Upload trực tiếp từ trình duyệt, không qua proxy, không lo bị chặn IP. Lấy API Key miễn phí tại api.imgbb.com'
+  },
+  freeimage: {
+    id: 'freeimage',
+    name: 'FreeImage.host',
+    description: 'Cảnh báo: Hiện bị FreeImage chặn IP Cloudflare Worker (Lỗi You have been forbidden). Chỉ hoạt động trên localhost'
   }
 };
 
@@ -338,6 +338,12 @@ export async function uploadToFreeImage(file, customName = '', shouldOptimize = 
       }
 
       const errorMsg = result?.error?.message || result?.error || `HTTP ${response.status} ${response.statusText}`;
+      if (typeof errorMsg === 'string' && (errorMsg.toLowerCase().includes('forbidden') || result?.error?.code === 103)) {
+        throw new Error(
+          'FreeImage.host hiện đã chặn dải IP của Cloudflare Worker ("You have been forbidden to use this website"). ' +
+          'Vui lòng chuyển sang dùng server "ImgBB" và dán API Key cá nhân (lấy miễn phí tại api.imgbb.com) để upload trực tiếp từ trình duyệt mà không bị chặn IP!'
+        );
+      }
       throw new Error(errorMsg);
     } catch (err) {
       lastError = err;
