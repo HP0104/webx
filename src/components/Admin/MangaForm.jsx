@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { BookOpen, Upload, Link as LinkIcon, Trash2, Plus, FolderOpen, ImageIcon, ChevronDown, ChevronUp, Eye, X, Loader, Layers, Check, FileArchive, Sparkles } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { BookOpen, Upload, Link as LinkIcon, Trash2, Plus, FolderOpen, ImageIcon, ChevronDown, ChevronUp, Eye, X, Loader, Layers, Check, FileArchive, Sparkles, Clock, AlertCircle } from 'lucide-react';
 import {
   MANGA_GENRES,
   MANGA_STATUS,
@@ -7,6 +7,10 @@ import {
   FREEIMAGE_API_KEY_STORAGE,
   MANGA_STORAGE_PROVIDER_KEY,
   MANGA_STORAGE_PROVIDERS,
+  IMGBB_DEFAULT_KEYS,
+  getImgBBUsageSummary,
+  resetImgBBKeyUsage,
+  formatCountdownTime,
   uploadMultipleToImgBB,
   uploadToImgBB,
   uploadToFreeImage,
@@ -38,6 +42,17 @@ function MangaForm({
   const [expandedChapters, setExpandedChapters] = useState({});
   const [coverUploading, setCoverUploading] = useState(false);
   const [showCoverSelector, setShowCoverSelector] = useState(false);
+  const [imgbbSummary, setImgbbSummary] = useState(() => getImgBBUsageSummary(imgbbKey));
+
+  // Ticking every 1s for live countdown of quotas & cooldowns
+  useEffect(() => {
+    if (storageProvider !== 'imgbb') return;
+    setImgbbSummary(getImgBBUsageSummary(imgbbKey));
+    const timer = setInterval(() => {
+      setImgbbSummary(getImgBBUsageSummary(imgbbKey));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [storageProvider, imgbbKey]);
 
   // Manual chapter addition state
   const [manualChapterTitle, setManualChapterTitle] = useState('');
@@ -79,10 +94,6 @@ function MangaForm({
   const handleCoverUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (storageProvider === 'imgbb' && !imgbbKey.trim()) {
-      return alert('Vui lòng nhập ImgBB API Key trước!');
-    }
-    // Catbox doesn't need an API key
 
     setCoverUploading(true);
     try {
@@ -234,19 +245,6 @@ function MangaForm({
       setIsExtracting(false);
       setExtractProgress(null);
 
-      if (storageProvider === 'imgbb') {
-        const key = imgbbKey.trim();
-        if (!key) {
-          alert(
-            `✓ ĐÃ GIẢI NÉN THÀNH CÔNG ${chapters.length} chapter (tổng ${countTotalImages(chapters)} trang ảnh)!\n\n` +
-            `⚠️ BƯỚC TIẾP THEO: Bạn cần nhập ImgBB API Key cá nhân để upload.\n` +
-            `👉 Hãy vào https://api.imgbb.com (miễn phí 100%), bấm "Get API Key", copy và dán vào ô "ImgBB API Key" phía trên rồi bấm nút Upload!`
-          );
-          return;
-        }
-      }
-      // Catbox: no key needed, proceed immediately
-
       // Automatically proceed to upload
       await uploadChaptersList(chapters, detectedTitle);
     } catch (err) {
@@ -292,18 +290,6 @@ function MangaForm({
         chapters[0].name = manualChapterTitle.trim();
       }
 
-      if (storageProvider === 'imgbb') {
-        const key = imgbbKey.trim();
-        if (!key) {
-          setParsedChapters(chapters);
-          alert(
-            `✓ Đã giải nén thành công chapter "${chapters[0].name}" (${chapters[0].files.length} ảnh)!\n\n` +
-            `⚠️ Bạn cần nhập ImgBB API Key cá nhân để upload. Hãy dán key vào ô "ImgBB API Key" phía trên rồi bấm Upload!`
-          );
-          return;
-        }
-      }
-
       // Automatically upload with selected provider
       await uploadChaptersList(chapters, mangaData.title || mangaTitle);
       setManualChapterTitle('');
@@ -341,7 +327,6 @@ function MangaForm({
   const handleSingleChapterUpload = async (e) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
-    if (storageProvider === 'imgbb' && !imgbbKey.trim()) return alert('Vui lòng nhập ImgBB API Key!');
     if (storageProvider === 'freeimage' && !freeimageKey.trim()) {
       const proceed = window.confirm(
         '⚠️ Bạn chưa nhập FreeImage API Key. Nếu truyện có ảnh 18+, ảnh sẽ bị lỗi 403. Tiếp tục?'
@@ -367,8 +352,14 @@ function MangaForm({
 
       const urls = await uploadMultipleMangaImages(
         imageFiles,
-        (uploaded, total, fileName) => {
-          setUploadProgress(prev => ({ ...prev, current: uploaded, total, file: fileName }));
+        (uploaded, total, fileName, keyStats) => {
+          setUploadProgress(prev => ({
+            ...prev,
+            current: uploaded,
+            total,
+            file: fileName,
+            keyStats: keyStats || null
+          }));
         },
         {
           provider: storageProvider,
@@ -652,13 +643,23 @@ function MangaForm({
             flexDirection: 'column',
             gap: '0.75rem'
           }}>
+            {/* Header & Status */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#34d399' }}>
-                  🔑 ImgBB API Key:
+                  🔑 Quản lý API Key ImgBB & Đếm ngược hồi phục:
                 </span>
-                <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', backgroundColor: imgbbKey.trim() ? '#10b981' : '#f59e0b', color: '#000', fontWeight: 700 }}>
-                  {imgbbKey.trim() ? '✓ Đã kích hoạt API Key' : '⚠️ Cần nhập Key để upload'}
+                <span style={{
+                  fontSize: '0.72rem',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  backgroundColor: imgbbSummary.allRateLimited ? '#ef4444' : '#10b981',
+                  color: '#fff',
+                  fontWeight: 700
+                }}>
+                  {imgbbSummary.allRateLimited
+                    ? `⏳ Tất cả key đang hồi lượt (sau ${formatCountdownTime(imgbbSummary.nearestResetSeconds)})`
+                    : `⚡ Khả dụng ${imgbbSummary.totalRemaining}/${imgbbSummary.totalLimit} lượt`}
                 </span>
               </div>
               <a
@@ -667,52 +668,137 @@ function MangaForm({
                 rel="noopener noreferrer"
                 style={{ fontSize: '0.75rem', color: '#34d399', textDecoration: 'underline', fontWeight: 600 }}
               >
-                + Lấy API Key miễn phí tại api.imgbb.com ↗
+                + Lấy thêm Key tại api.imgbb.com ↗
               </a>
             </div>
 
-            <input
-              type="text"
-              className="input-field"
-              placeholder="Dán ImgBB API Key của bạn vào đây (hỗ trợ nhiều key cách nhau bằng dấu phẩy: key1, key2)"
-              value={imgbbKey}
-              onChange={e => handleImgbbKeyChange(e.target.value)}
-              style={{ margin: 0, fontSize: '0.85rem' }}
-            />
+            {/* Custom key input */}
+            <div>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Thêm API Key riêng của bạn (tùy chọn, hỗ trợ nhiều key: key1, key2) — Để trống sẽ dùng 5 key mặc định"
+                value={imgbbKey}
+                onChange={e => handleImgbbKeyChange(e.target.value)}
+                style={{ margin: 0, fontSize: '0.82rem' }}
+              />
+              <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>
+                {imgbbKey.trim()
+                  ? `✓ Đang kích hoạt ${imgbbSummary.totalKeys} key (gồm key tùy chỉnh + 5 key hệ thống).`
+                  : '⚡ Đang dùng 5 API Key ImgBB tích hợp sẵn (tự động luân phiên, không cần cấu hình).'}
+              </div>
+            </div>
 
-            {!imgbbKey.trim() ? (
-              <div style={{
-                padding: '0.65rem 0.8rem',
-                borderRadius: '6px',
-                backgroundColor: 'rgba(56, 189, 248, 0.08)',
-                border: '1px solid rgba(56, 189, 248, 0.25)',
-                fontSize: '0.75rem',
-                color: '#bae6fd',
-                lineHeight: 1.55
-              }}>
-                <strong style={{ color: '#38bdf8' }}>💡 Hướng dẫn lấy API Key ImgBB (Miễn phí 100%, chỉ mất 10 giây):</strong>
-                <ol style={{ margin: '0.3rem 0 0 1.2rem', padding: 0 }}>
-                  <li>Truy cập <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline', fontWeight: 600 }}>api.imgbb.com</a>.</li>
-                  <li>Bấm nút <strong>"Get API key"</strong> (Đăng nhập hoặc đăng ký tài khoản miễn phí).</li>
-                  <li>Copy mã API Key (32 ký tự) và dán vào ô trên. Trình duyệt sẽ tự động lưu vĩnh viễn trên máy bạn!</li>
-                  <li><em>Mẹo:</em> Có thể dán nhiều key cách nhau bằng dấu phẩy (<code>key1, key2</code>) để tự động luân phiên nếu 1 key hết lượt.</li>
-                </ol>
+            {/* Live Key Status & Cooldown Countdown Dashboard */}
+            <div style={{
+              backgroundColor: 'rgba(0, 0, 0, 0.25)',
+              borderRadius: '6px',
+              padding: '0.65rem 0.8rem',
+              border: '1px solid rgba(255, 255, 255, 0.08)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6ee7b7', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Clock size={13} />
+                  <span>TRẠNG THÁI & ĐẾM NGƯỢC HỒI LƯỢT TỪNG KEY ({imgbbSummary.totalKeys} KEY):</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetImgBBKeyUsage();
+                    setImgbbSummary(getImgBBUsageSummary(imgbbKey));
+                  }}
+                  title="Đặt lại bộ đếm trên trình duyệt nếu bạn biết ImgBB đã reset quota"
+                  style={{
+                    fontSize: '0.68rem',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: 'var(--color-text-muted)',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🔄 Đặt lại bộ đếm
+                </button>
               </div>
-            ) : (
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                {imgbbSummary.keys.map((k) => (
+                  <div
+                    key={k.prefix}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.35rem 0.6rem',
+                      borderRadius: '4px',
+                      backgroundColor: k.isRateLimited
+                        ? 'rgba(239, 68, 68, 0.12)'
+                        : (k.used > 0 ? 'rgba(59, 130, 246, 0.08)' : 'rgba(255, 255, 255, 0.03)'),
+                      border: `1px solid ${k.isRateLimited ? 'rgba(239, 68, 68, 0.3)' : 'rgba(255, 255, 255, 0.06)'}`,
+                      fontSize: '0.75rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '120px' }}>
+                      <span style={{ fontWeight: 700, color: k.isRateLimited ? '#f87171' : '#e2e8f0' }}>
+                        Key #{k.index}
+                      </span>
+                      <code style={{ fontSize: '0.7rem', opacity: 0.7 }}>{k.keyMasked}</code>
+                    </div>
+
+                    <div style={{ flex: 1, margin: '0 0.8rem', maxWidth: '140px' }}>
+                      <div style={{ width: '100%', height: '4px', borderRadius: '2px', backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${(k.used / k.limit) * 100}%`,
+                          height: '100%',
+                          background: k.isRateLimited
+                            ? '#ef4444'
+                            : (k.used > 75 ? '#f59e0b' : 'linear-gradient(90deg, #10b981, #06b6d4)'),
+                          borderRadius: '2px',
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right', minWidth: '170px' }}>
+                      {k.isRateLimited || k.remaining === 0 ? (
+                        <span style={{ color: '#f87171', fontWeight: 600 }}>
+                          ⏳ Hết lượt • Hồi sau: <strong>{formatCountdownTime(k.resetSeconds)}</strong>
+                        </span>
+                      ) : k.used > 0 ? (
+                        <span style={{ color: '#38bdf8' }}>
+                          ⚡ Còn <strong>{k.remaining}</strong>/100 • Hồi sau {formatCountdownTime(k.resetSeconds)}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#4ade80', fontWeight: 600 }}>
+                          ✓ Sẵn sàng 100/100
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Summary line */}
               <div style={{
-                padding: '0.5rem 0.75rem',
-                borderRadius: '6px',
-                backgroundColor: 'rgba(16, 185, 129, 0.12)',
-                fontSize: '0.75rem',
-                color: '#34d399',
+                marginTop: '0.5rem',
+                paddingTop: '0.4rem',
+                borderTop: '1px solid rgba(255, 255, 255, 0.08)',
                 display: 'flex',
-                alignItems: 'center',
-                gap: '0.4rem'
+                justifyContent: 'space-between',
+                fontSize: '0.72rem',
+                color: 'var(--color-text-muted)'
               }}>
-                <Check size={16} style={{ flexShrink: 0 }} />
-                <span>API Key ImgBB đã sẵn sàng! Upload trực tiếp từ máy của bạn, tốc độ cao, không bao giờ bị chặn IP.</span>
+                <span>Tổng đã dùng: <strong>{imgbbSummary.totalUsed}</strong>/{imgbbSummary.totalLimit} ảnh</span>
+                {imgbbSummary.nearestResetSeconds > 0 ? (
+                  <span style={{ color: '#fbbf24', fontWeight: 600 }}>
+                    ⏱️ Key #{imgbbSummary.nearestResetKey} sẽ hồi sau: {formatCountdownTime(imgbbSummary.nearestResetSeconds)}
+                  </span>
+                ) : (
+                  <span style={{ color: '#4ade80' }}>✓ Tất cả các key đều sẵn sàng</span>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -1032,9 +1118,25 @@ function MangaForm({
                   <div style={{ fontSize: '0.85rem', color: 'var(--color-success)', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <Check size={16} /> Đã giải nén sẵn sàng: {parsedChapters.length} chapter (tổng {countTotalImages(parsedChapters)} trang ảnh)
                   </div>
-                  {storageProvider === 'imgbb' && !imgbbKey.trim() && (
-                    <div style={{ padding: '0.6rem 0.8rem', borderRadius: '6px', backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)', color: '#fbbf24', fontSize: '0.78rem', marginBottom: '0.8rem', lineHeight: 1.4 }}>
-                      ⚠️ <strong>Chưa nhập API Key:</strong> Vui lòng dán ImgBB API Key vào ô cài đặt phía trên để upload. (Lấy key miễn phí 10s tại <a href="https://api.imgbb.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>api.imgbb.com</a>).
+                  {storageProvider === 'imgbb' && (
+                    <div style={{
+                      padding: '0.5rem 0.8rem',
+                      borderRadius: '6px',
+                      backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      color: '#34d399',
+                      fontSize: '0.78rem',
+                      marginBottom: '0.8rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}>
+                      <span>⚡ Sẵn sàng upload với {imgbbSummary.totalKeys} Key ImgBB ({imgbbSummary.totalRemaining} lượt còn lại).</span>
+                      {imgbbSummary.nearestResetSeconds > 0 && (
+                        <span style={{ fontSize: '0.72rem', color: '#fbbf24' }}>
+                          ⏱️ Hồi lượt gần nhất sau: {formatCountdownTime(imgbbSummary.nearestResetSeconds)}
+                        </span>
+                      )}
                     </div>
                   )}
                   {storageProvider === 'freeimage' && (
@@ -1275,24 +1377,59 @@ function MangaForm({
                 {uploadProgress.current}/{uploadProgress.total} ảnh — {uploadProgress.file}
               </div>
 
-              {/* Key usage stats */}
+              {/* Key usage stats with live countdown */}
               {uploadProgress.keyStats && storageProvider === 'imgbb' && (
                 <div style={{
                   marginTop: '0.6rem',
-                  padding: '0.5rem 0.7rem',
+                  padding: '0.6rem 0.8rem',
                   borderRadius: '6px',
-                  backgroundColor: 'rgba(167, 139, 250, 0.08)',
-                  border: '1px solid rgba(167, 139, 250, 0.2)',
+                  backgroundColor: uploadProgress.keyStats.isWaitingCooldown
+                    ? 'rgba(239, 68, 68, 0.12)'
+                    : 'rgba(167, 139, 250, 0.08)',
+                  border: `1px solid ${uploadProgress.keyStats.isWaitingCooldown ? 'rgba(239, 68, 68, 0.4)' : 'rgba(167, 139, 250, 0.25)'}`,
                   fontSize: '0.75rem'
                 }}>
+                  {/* If waiting in cooldown */}
+                  {uploadProgress.keyStats.isWaitingCooldown && (
+                    <div style={{
+                      padding: '0.5rem 0.7rem',
+                      marginBottom: '0.5rem',
+                      borderRadius: '4px',
+                      backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                      color: '#fecaca',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}>
+                      <Clock size={16} style={{ color: '#ef4444', animation: 'spin 2s linear infinite' }} />
+                      <div>
+                        <strong>⏳ Đang tạm dừng chờ hồi lượt tải!</strong>
+                        <div style={{ fontSize: '0.72rem', marginTop: '2px' }}>
+                          Tất cả key đã chạm giới hạn. Tự động tiếp tục sau:{' '}
+                          <strong style={{ color: '#fef08a', fontSize: '0.85rem' }}>
+                            {formatCountdownTime(uploadProgress.keyStats.waitSeconds || uploadProgress.keyStats.nearestResetSeconds)}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
                     <span style={{ color: '#a78bfa', fontWeight: 600 }}>
-                      🔑 Key {uploadProgress.keyStats.activeKeyIndex}/{uploadProgress.keyStats.totalKeys}
+                      🔑 Key {uploadProgress.keyStats.activeKeyIndex}/{uploadProgress.keyStats.totalKeys} ({uploadProgress.keyStats.activeKeyPrefix}...)
                     </span>
-                    <span style={{ color: uploadProgress.keyStats.keyRemaining < 20 ? '#f87171' : '#4ade80', fontWeight: 600 }}>
-                      Còn {uploadProgress.keyStats.keyRemaining} lượt
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ color: uploadProgress.keyStats.keyRemaining < 20 ? '#f87171' : '#4ade80', fontWeight: 600 }}>
+                        Còn {uploadProgress.keyStats.keyRemaining} lượt
+                      </span>
+                      {uploadProgress.keyStats.keyResetSeconds > 0 && (
+                        <span style={{ color: '#fbbf24', fontSize: '0.7rem', padding: '1px 5px', borderRadius: '3px', backgroundColor: 'rgba(251, 191, 36, 0.12)' }}>
+                          ⏱️ Hồi sau: {formatCountdownTime(uploadProgress.keyStats.keyResetSeconds)}
+                        </span>
+                      )}
+                    </div>
                   </div>
+
                   <div style={{ width: '100%', height: '4px', borderRadius: '2px', backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: '0.3rem' }}>
                     <div style={{
                       width: `${(uploadProgress.keyStats.keyUploaded / uploadProgress.keyStats.keyLimit) * 100}%`,
@@ -1304,10 +1441,11 @@ function MangaForm({
                       transition: 'width 0.3s ease'
                     }} />
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-muted)' }}>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>
                     <span>Đã dùng: {uploadProgress.keyStats.totalUsed}/{uploadProgress.keyStats.totalLimit} tổng lượt</span>
                     <span style={{ color: uploadProgress.keyStats.totalRemaining < 50 ? '#fbbf24' : '#4ade80' }}>
-                      📊 Tổng còn: {uploadProgress.keyStats.totalRemaining}
+                      📊 Tổng còn: {uploadProgress.keyStats.totalRemaining} lượt
                     </span>
                   </div>
                 </div>

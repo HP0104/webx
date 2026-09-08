@@ -184,8 +184,8 @@ export async function uploadToImgBB(file, apiKey, customName = '', shouldOptimiz
 
   if (!response.ok || !result?.success) {
     const errorMsg = result?.error?.message || result?.error || `HTTP ${response.status} ${response.statusText}`;
-    if (typeof errorMsg === 'string' && errorMsg.toLowerCase().includes('rate limit')) {
-      throw new Error(`Rate limit reached: API Key ImgBB (${apiKey.slice(0, 6)}...) đã hết lượt tải. Vui lòng nhập API Key mới tại api.imgbb.com!`);
+    if (response.status === 429 || (typeof errorMsg === 'string' && errorMsg.toLowerCase().includes('rate limit'))) {
+      throw new Error(`Rate limit reached: API Key ImgBB (${effectiveKey.slice(0, 6)}...) đã hết lượt tải.`);
     }
     throw new Error(`ImgBB upload thất bại: ${errorMsg}`);
   }
@@ -197,56 +197,281 @@ export async function uploadToImgBB(file, apiKey, customName = '', shouldOptimiz
   };
 }
 
+// ============ IMGBB KEY USAGE & COOLDOWN TRACKING ============
+
+export const IMGBB_KEY_STATE_STORAGE = 'web18p_imgbb_keys_state';
+export const IMGBB_RATE_LIMIT_PER_KEY = 100; // ~100 uploads per key per 1 hour rolling window
+export const IMGBB_COOLDOWN_WINDOW_MS = 60 * 60 * 1000; // 1 hour (3600 seconds)
+
+/**
+ * Format remaining seconds into MM:SS or Xh Ym
+ * @param {number} seconds
+ * @returns {string}
+ */
+export function formatCountdownTime(seconds) {
+  if (!seconds || seconds <= 0) return '00:00';
+  const totalSec = Math.floor(seconds);
+  const mins = Math.floor(totalSec / 60);
+  const secs = totalSec % 60;
+  if (mins >= 60) {
+    const hours = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hours}h ${String(remMins).padStart(2, '0')}m`;
+  }
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+/**
+ * Resolve list of ImgBB API keys (custom keys + default 5 keys)
+ * @param {string} customApiKey
+ * @returns {string[]}
+ */
+export function resolveImgBBKeys(customApiKey = '') {
+  const customList = (typeof customApiKey === 'string' ? customApiKey.split(',') : [customApiKey])
+    .map(k => k?.trim())
+    .filter(Boolean);
+
+  if (customList.length === 0) {
+    return [...IMGBB_DEFAULT_KEYS];
+  }
+  // Include custom keys first, then add default keys without duplicates
+  const combined = [...customList];
+  for (const defKey of IMGBB_DEFAULT_KEYS) {
+    if (!combined.includes(defKey)) {
+      combined.push(defKey);
+    }
+  }
+  return combined;
+}
+
+/**
+ * Retrieve persistent key state from localStorage, auto-resetting any expired cooldowns
+ * @returns {Record<string, { count: number, windowStart: number|null, resetAt: number|null, isRateLimited: boolean, lastUsedAt: number|null }>}
+ */
+export function getStoredImgBBKeyState() {
+  if (typeof window === 'undefined' || !window.localStorage) return {};
+  try {
+    const raw = localStorage.getItem(IMGBB_KEY_STATE_STORAGE);
+    if (!raw) return {};
+    const state = JSON.parse(raw);
+    const now = Date.now();
+    let changed = false;
+
+    for (const prefix of Object.keys(state)) {
+      const item = state[prefix];
+      if (!item) continue;
+      // If 1-hour cooldown window expired, restore quota!
+      if (item.resetAt && now >= item.resetAt) {
+        item.count = 0;
+        item.windowStart = null;
+        item.resetAt = null;
+        item.isRateLimited = false;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      localStorage.setItem(IMGBB_KEY_STATE_STORAGE, JSON.stringify(state));
+    }
+    return state;
+  } catch (e) {
+    return {};
+  }
+}
+
+/**
+ * Save persistent key state to localStorage
+ */
+export function saveStoredImgBBKeyState(state) {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    localStorage.setItem(IMGBB_KEY_STATE_STORAGE, JSON.stringify(state));
+  } catch (e) {}
+}
+
+/**
+ * Reset stored usage for all keys or a specific key prefix
+ */
+export function resetImgBBKeyUsage(targetPrefix = null) {
+  const state = getStoredImgBBKeyState();
+  if (targetPrefix) {
+    delete state[targetPrefix];
+  } else {
+    for (const k of Object.keys(state)) delete state[k];
+  }
+  saveStoredImgBBKeyState(state);
+}
+
+/**
+ * Record an upload attempt (success or rate-limit) for a key
+ */
+export function recordImgBBKeyUsage(key, isSuccess, isRateLimit = false) {
+  const prefix = key.slice(0, 8);
+  const state = getStoredImgBBKeyState();
+  const now = Date.now();
+
+  let item = state[prefix] || {
+    count: 0,
+    windowStart: null,
+    resetAt: null,
+    isRateLimited: false,
+    lastUsedAt: null
+  };
+
+  // If previous cooldown has passed, start fresh
+  if (item.resetAt && now >= item.resetAt) {
+    item = {
+      count: 0,
+      windowStart: null,
+      resetAt: null,
+      isRateLimited: false,
+      lastUsedAt: null
+    };
+  }
+
+  // If first usage in this window, set windowStart and resetAt (1 hour from now)
+  if (!item.windowStart) {
+    item.windowStart = now;
+    item.resetAt = now + IMGBB_COOLDOWN_WINDOW_MS;
+  }
+
+  item.count = (item.count || 0) + 1;
+  item.lastUsedAt = now;
+
+  if (isRateLimit || item.count >= IMGBB_RATE_LIMIT_PER_KEY) {
+    item.isRateLimited = true;
+    if (!item.resetAt || item.resetAt <= now) {
+      item.resetAt = now + IMGBB_COOLDOWN_WINDOW_MS;
+    }
+  }
+
+  state[prefix] = item;
+  saveStoredImgBBKeyState(state);
+  return item;
+}
+
+/**
+ * Get detailed usage breakdown and countdown timers for all keys
+ */
+export function getImgBBUsageSummary(apiKey = '') {
+  const keyList = resolveImgBBKeys(apiKey);
+  const state = getStoredImgBBKeyState();
+  const now = Date.now();
+
+  let totalUsed = 0;
+  let totalRateLimited = 0;
+  let nearestResetMs = null;
+  let nearestResetKey = null;
+
+  const keys = keyList.map((key, idx) => {
+    const prefix = key.slice(0, 8);
+    let item = state[prefix] || {
+      count: 0,
+      windowStart: null,
+      resetAt: null,
+      isRateLimited: false,
+      lastUsedAt: null
+    };
+
+    if (item.resetAt && now >= item.resetAt) {
+      item = {
+        count: 0,
+        windowStart: null,
+        resetAt: null,
+        isRateLimited: false,
+        lastUsedAt: null
+      };
+    }
+
+    const count = Math.min(IMGBB_RATE_LIMIT_PER_KEY, item.count || 0);
+    const remaining = Math.max(0, IMGBB_RATE_LIMIT_PER_KEY - count);
+    const isRateLimited = Boolean(item.isRateLimited || remaining === 0);
+
+    let resetSeconds = 0;
+    if (item.resetAt && item.resetAt > now) {
+      resetSeconds = Math.ceil((item.resetAt - now) / 1000);
+      if (nearestResetMs === null || (item.resetAt - now) < nearestResetMs) {
+        nearestResetMs = item.resetAt - now;
+        nearestResetKey = idx + 1;
+      }
+    }
+
+    totalUsed += count;
+    if (isRateLimited) totalRateLimited++;
+
+    return {
+      index: idx + 1,
+      prefix,
+      keyMasked: `${key.slice(0, 4)}...${key.slice(-4)}`,
+      fullKey: key,
+      used: count,
+      limit: IMGBB_RATE_LIMIT_PER_KEY,
+      remaining,
+      isRateLimited,
+      resetAt: item.resetAt,
+      resetSeconds,
+      status: isRateLimited ? 'exhausted' : (count > 0 ? 'cooling' : 'ready')
+    };
+  });
+
+  const totalLimit = keyList.length * IMGBB_RATE_LIMIT_PER_KEY;
+  const totalRemaining = Math.max(0, totalLimit - totalUsed);
+  const nearestResetSeconds = nearestResetMs !== null ? Math.ceil(nearestResetMs / 1000) : 0;
+
+  return {
+    keys,
+    totalKeys: keyList.length,
+    totalUsed,
+    totalLimit,
+    totalRemaining,
+    totalRateLimited,
+    allRateLimited: totalRateLimited >= keyList.length && keyList.length > 0,
+    nearestResetSeconds,
+    nearestResetKey
+  };
+}
+
 /**
  * Upload multiple image files to ImgBB with automatic WebP compression, custom naming & progress tracking
- * Supports multiple comma-separated keys for automatic rotation if rate limited.
+ * Supports multiple comma-separated keys for automatic rotation and countdown cooldown recovery.
  *
  * @param {File[]} files - Array of image files
  * @param {string} apiKey - ImgBB API key (single or comma-separated)
- * @param {function} onProgress - Callback(uploaded, total, currentFileName)
- * @param {object} options - Optional naming options: { namePrefix, chapterTitle, nameGenerator }
+ * @param {function} onProgress - Callback(uploaded, total, currentFileName, keyStats)
+ * @param {object} options - Optional naming options: { namePrefix, chapterTitle, nameGenerator, autoWaitOnRateLimit }
  * @returns {Promise<string[]>} Array of image URLs
  */
 export async function uploadMultipleToImgBB(files, apiKey, onProgress, options = {}) {
   const urls = [];
-  const { namePrefix = '', chapterTitle = '', nameGenerator = null } = options;
+  const { namePrefix = '', chapterTitle = '', nameGenerator = null, autoWaitOnRateLimit = true } = options;
 
-  // Support multiple comma-separated keys: key1, key2, key3
-  // Falls back to built-in default keys if none provided
-  let keyList = (typeof apiKey === 'string' ? apiKey.split(',') : [apiKey])
-    .map(k => k.trim())
-    .filter(Boolean);
-
-  if (keyList.length === 0) {
-    keyList = [...IMGBB_DEFAULT_KEYS];
-  }
-
-  // Track uploads per key per hour (estimated limit: ~100/hr/key)
-  const RATE_LIMIT_PER_KEY = 100;
-  const keyUsage = {}; // { keyPrefix: { count, firstUsedAt } }
-  for (const k of keyList) {
-    const prefix = k.slice(0, 8);
-    keyUsage[prefix] = { count: 0, firstUsedAt: null, key: k };
-  }
-
-  // Round-robin: distribute uploads evenly across keys
+  const keyList = resolveImgBBKeys(apiKey);
   let activeKeyIndex = 0;
 
-  const getKeyStats = () => {
+  const getKeyStats = (customExtra = {}) => {
+    const summary = getImgBBUsageSummary(apiKey);
     const currentKey = keyList[activeKeyIndex % keyList.length];
     const prefix = currentKey.slice(0, 8);
-    const usage = keyUsage[prefix];
-    const totalUsed = Object.values(keyUsage).reduce((sum, u) => sum + u.count, 0);
-    const totalRemaining = keyList.length * RATE_LIMIT_PER_KEY - totalUsed;
+    const activeKeyData = summary.keys.find(k => k.prefix === prefix) || summary.keys[0];
+
     return {
-      activeKeyIndex: activeKeyIndex % keyList.length + 1,
+      activeKeyIndex: (activeKeyIndex % keyList.length) + 1,
       totalKeys: keyList.length,
-      keyUploaded: usage.count,
-      keyLimit: RATE_LIMIT_PER_KEY,
-      keyRemaining: Math.max(0, RATE_LIMIT_PER_KEY - usage.count),
-      totalUsed,
-      totalRemaining: Math.max(0, totalRemaining),
-      totalLimit: keyList.length * RATE_LIMIT_PER_KEY
+      activeKeyPrefix: prefix,
+      activeKeyMasked: activeKeyData?.keyMasked || '',
+      keyUploaded: activeKeyData?.used || 0,
+      keyLimit: IMGBB_RATE_LIMIT_PER_KEY,
+      keyRemaining: activeKeyData?.remaining || 0,
+      keyResetSeconds: activeKeyData?.resetSeconds || 0,
+      totalUsed: summary.totalUsed,
+      totalRemaining: summary.totalRemaining,
+      totalLimit: summary.totalLimit,
+      nearestResetSeconds: summary.nearestResetSeconds,
+      nearestResetKey: summary.nearestResetKey,
+      allRateLimited: summary.allRateLimited,
+      keys: summary.keys,
+      isWaitingCooldown: false,
+      ...customExtra
     };
   };
 
@@ -263,6 +488,29 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
       customName = `${prefix} ${numStr}`;
     }
 
+    // Check if all keys are currently rate limited / out of quota
+    let summary = getImgBBUsageSummary(apiKey);
+    let availableKey = summary.keys.find(k => !k.isRateLimited && k.remaining > 0);
+
+    // If all keys are exhausted, wait in cooldown countdown loop
+    if (!availableKey && autoWaitOnRateLimit) {
+      console.warn('Tất cả API Key ImgBB đang trong thời gian chờ hồi phục lượt tải...');
+      while (!availableKey) {
+        summary = getImgBBUsageSummary(apiKey);
+        availableKey = summary.keys.find(k => !k.isRateLimited && k.remaining > 0);
+        if (availableKey) break;
+
+        const waitSec = summary.nearestResetSeconds || 60;
+        if (onProgress) {
+          onProgress(i, files.length, `Chờ hồi lượt tải (${formatCountdownTime(waitSec)})...`, getKeyStats({
+            isWaitingCooldown: true,
+            waitSeconds: waitSec
+          }));
+        }
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
     if (onProgress) onProgress(i, files.length, customName || file.name, getKeyStats());
 
     let uploaded = false;
@@ -271,7 +519,23 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
 
     while (!uploaded && attempts < Math.max(3, keyList.length)) {
       attempts++;
-      const currentKey = keyList[activeKeyIndex % keyList.length];
+
+      // Pick available key or advance round-robin
+      summary = getImgBBUsageSummary(apiKey);
+      const readyKeys = summary.keys.filter(k => !k.isRateLimited && k.remaining > 0);
+      let currentKey = keyList[activeKeyIndex % keyList.length];
+
+      if (readyKeys.length > 0) {
+        const found = readyKeys.find(k => k.prefix === currentKey.slice(0, 8));
+        if (!found) {
+          const readyKeyIndex = keyList.findIndex(k => k.slice(0, 8) === readyKeys[0].prefix);
+          if (readyKeyIndex !== -1) {
+            activeKeyIndex = readyKeyIndex;
+            currentKey = keyList[activeKeyIndex];
+          }
+        }
+      }
+
       const keyPrefix = currentKey.slice(0, 8);
 
       try {
@@ -279,27 +543,27 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
         urls.push(result.url);
         uploaded = true;
 
-        // Track usage
-        keyUsage[keyPrefix].count++;
-        if (!keyUsage[keyPrefix].firstUsedAt) keyUsage[keyPrefix].firstUsedAt = Date.now();
+        // Record successful usage
+        recordImgBBKeyUsage(currentKey, true, false);
 
-        // Proactive rotation: switch to next key every ~(LIMIT/keyCount) uploads
-        // to distribute load evenly
-        const rotateEvery = Math.floor(RATE_LIMIT_PER_KEY / keyList.length);
-        if (keyList.length > 1 && keyUsage[keyPrefix].count % rotateEvery === 0) {
+        // Proactive rotation: switch key every ~20 uploads to spread load
+        const rotateEvery = Math.max(10, Math.floor(IMGBB_RATE_LIMIT_PER_KEY / keyList.length));
+        const currentUsage = getStoredImgBBKeyState()[keyPrefix]?.count || 0;
+        if (keyList.length > 1 && currentUsage % rotateEvery === 0) {
           activeKeyIndex = (activeKeyIndex + 1) % keyList.length;
         }
       } catch (err) {
         lastError = err;
         console.warn(`Lần thử ${attempts} tải ${file.name} với key ${keyPrefix}... thất bại:`, err.message);
 
-        // Track failed attempt too
-        keyUsage[keyPrefix].count++;
+        // Check if rate limited
+        const isRateLimit = err.message.includes('Rate limit') || err.message.includes('429');
+        recordImgBBKeyUsage(currentKey, false, isRateLimit);
 
-        // If rate limit error, switch to next key immediately
-        if (err.message.includes('Rate limit') && keyList.length > 1) {
+        // If rate limited, rotate immediately to next key
+        if (isRateLimit && keyList.length > 1) {
           activeKeyIndex = (activeKeyIndex + 1) % keyList.length;
-          console.log(`Đổi sang ImgBB Key tiếp theo: key #${activeKeyIndex % keyList.length + 1}`);
+          console.log(`Key ${keyPrefix} đạt giới hạn! Đổi sang Key #${(activeKeyIndex % keyList.length) + 1}`);
           await new Promise(r => setTimeout(r, 200));
           continue;
         }
@@ -314,13 +578,13 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
       throw new Error(`Upload lỗi tại file "${file.name}": ${lastError?.message || 'Không rõ nguyên nhân'}`);
     }
 
-    // Small delay to avoid rate limiting
+    // Small delay between uploads
     if (i < files.length - 1) {
       await new Promise(r => setTimeout(r, 200));
     }
   }
 
-  if (onProgress) onProgress(files.length, files.length, 'Done', getKeyStats());
+  if (onProgress) onProgress(files.length, files.length, 'Hoàn thành!', getKeyStats());
   return urls;
 }
 
