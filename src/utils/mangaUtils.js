@@ -28,21 +28,30 @@ export const MANGA_STORAGE_PROVIDER_KEY = 'web18p_manga_storage_provider';
 
 export const FREEIMAGE_API_KEY = '6d207e02198a847aa98d0a2a901485a5';
 
+// Built-in ImgBB API keys for automatic rotation (bypasses rate limits)
+export const IMGBB_DEFAULT_KEYS = [
+  '25212dbe2483e698d28894d12bd4d166',
+  'be9cdc33d246da2bd729274a6e23e67b',
+  '9e60abf5cfb402639db6f621c1ec006a',
+  'b6e2d2c5bea4ac5fc20063de50e5f370',
+  '1808feec63ae10b325c569773e9b60b6'
+];
+
 export const MANGA_STORAGE_PROVIDERS = {
+  imgbb: {
+    id: 'imgbb',
+    name: 'ImgBB (Khuyên dùng)',
+    description: 'Upload trực tiếp từ trình duyệt, đã tích hợp sẵn 5 API Key xoay vòng tự động. Ảnh lưu vĩnh viễn.'
+  },
   catbox: {
     id: 'catbox',
     name: 'Catbox.moe',
-    description: 'Khuyên dùng: Miễn phí, không cần API Key, không giới hạn lượt tải. Ảnh lưu vĩnh viễn trên CDN files.catbox.moe'
-  },
-  imgbb: {
-    id: 'imgbb',
-    name: 'ImgBB',
-    description: 'Upload trực tiếp từ trình duyệt, cần API Key miễn phí tại api.imgbb.com. Có giới hạn lượt tải (dùng nhiều key để bypass)'
+    description: '⚠️ Hiện bị Catbox chặn IP Cloudflare Worker (Lỗi Invalid uploader). Tạm thời không khả dụng.'
   },
   freeimage: {
     id: 'freeimage',
     name: 'FreeImage.host',
-    description: 'Cảnh báo: Hiện bị FreeImage chặn IP Cloudflare Worker (Lỗi You have been forbidden). Chỉ hoạt động trên localhost'
+    description: '⚠️ Hiện bị FreeImage chặn IP Cloudflare Worker (Lỗi You have been forbidden). Chỉ hoạt động trên localhost'
   }
 };
 
@@ -151,12 +160,15 @@ export async function uploadToImgBB(file, apiKey, customName = '', shouldOptimiz
     }
   }
 
+  // Use default key if none provided
+  const effectiveKey = apiKey?.trim() || IMGBB_DEFAULT_KEYS[Math.floor(Math.random() * IMGBB_DEFAULT_KEYS.length)];
+
   const formData = new FormData();
   if (customName) {
     formData.append('name', customName);
   }
   formData.append('image', fileToUpload, customName ? (customName.endsWith('.webp') ? customName : customName + '.webp') : fileToUpload.name);
-  formData.append('key', apiKey.trim());
+  formData.append('key', effectiveKey);
 
   const response = await fetch('https://api.imgbb.com/1/upload', {
     method: 'POST',
@@ -200,12 +212,13 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
   const { namePrefix = '', chapterTitle = '', nameGenerator = null } = options;
 
   // Support multiple comma-separated keys: key1, key2, key3
-  const keyList = (typeof apiKey === 'string' ? apiKey.split(',') : [apiKey])
+  // Falls back to built-in default keys if none provided
+  let keyList = (typeof apiKey === 'string' ? apiKey.split(',') : [apiKey])
     .map(k => k.trim())
     .filter(Boolean);
 
   if (keyList.length === 0) {
-    throw new Error('Chưa cung cấp ImgBB API Key!');
+    keyList = [...IMGBB_DEFAULT_KEYS];
   }
 
   let activeKeyIndex = 0;
@@ -582,7 +595,7 @@ export async function uploadMultipleToCatbox(files, onProgress, options = {}) {
  * Upload a single image file using the selected provider
  */
 export async function uploadSingleMangaImage(file, options = {}) {
-  const { provider = 'catbox', apiKey = '', customName = '', shouldOptimize = true, isNsfw = true } = options;
+  const { provider = 'imgbb', apiKey = '', customName = '', shouldOptimize = true, isNsfw = true } = options;
   if (provider === 'catbox') {
     return uploadToCatbox(file, customName, shouldOptimize);
   }
@@ -596,7 +609,7 @@ export async function uploadSingleMangaImage(file, options = {}) {
  * Upload multiple images using the selected provider
  */
 export async function uploadMultipleMangaImages(files, onProgress, options = {}) {
-  const { provider = 'catbox', apiKey = '', isNsfw = true, ...restOptions } = options;
+  const { provider = 'imgbb', apiKey = '', isNsfw = true, ...restOptions } = options;
   if (provider === 'catbox') {
     return uploadMultipleToCatbox(files, onProgress, restOptions);
   }

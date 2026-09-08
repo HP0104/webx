@@ -26,7 +26,7 @@ function MangaForm({
   onSaveManga,
   onCancelEdit
 }) {
-  const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'catbox');
+  const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'imgbb');
   const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem(IMGBB_API_KEY_STORAGE) || '');
   const [freeimageKey, setFreeimageKey] = useState(() => localStorage.getItem(FREEIMAGE_API_KEY_STORAGE) || '');
   const [uploadMode, setUploadMode] = useState('epub'); // 'epub', 'folder', 'single' or 'url'
