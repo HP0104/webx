@@ -99,10 +99,6 @@ export default {
         try {
           const incomingFormData = await request.formData();
           
-          // Build new FormData for Catbox API
-          const catboxForm = new FormData();
-          catboxForm.set("reqtype", "fileupload");
-          
           // Get the file from incoming form - support both 'source' and 'fileToUpload' field names
           const file = incomingFormData.get("source") || incomingFormData.get("fileToUpload");
           if (!file) {
@@ -111,51 +107,87 @@ export default {
               headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
             });
           }
-          catboxForm.set("fileToUpload", file, file.name || "image.webp");
 
-          // Workaround for Cloudflare Worker fetch sending FormData as chunked encoding
-          // PHP servers (like Catbox) often reject chunked uploads with a 520 error.
-          // We serialize the FormData into an ArrayBuffer and send it with a Content-Length.
-          const fakeReq = new Request("https://catbox.moe/user/api.php", {
-            method: "POST",
-            body: catboxForm
-          });
-          
-          const serializedBody = await fakeReq.arrayBuffer();
-          const contentType = fakeReq.headers.get("Content-Type");
+          // Retry logic: up to 3 attempts with 1s delay between retries
+          const MAX_ATTEMPTS = 3;
+          let lastError = null;
 
-          const response = await fetch("https://catbox.moe/user/api.php", {
-            method: "POST",
-            body: serializedBody,
-            headers: {
-              "Content-Type": contentType,
-              "Content-Length": serializedBody.byteLength.toString(),
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-              "Accept": "*/*"
+          for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+              // Build new FormData for Catbox API (must rebuild each attempt)
+              const catboxForm = new FormData();
+              catboxForm.set("reqtype", "fileupload");
+              catboxForm.set("fileToUpload", file, file.name || "image.webp");
+
+              // Workaround for Cloudflare Worker fetch sending FormData as chunked encoding
+              // PHP servers (like Catbox) often reject chunked uploads with a 520 error.
+              // We serialize the FormData into an ArrayBuffer and send it with a Content-Length.
+              const fakeReq = new Request("https://catbox.moe/user/api.php", {
+                method: "POST",
+                body: catboxForm
+              });
+              
+              const serializedBody = await fakeReq.arrayBuffer();
+              const contentType = fakeReq.headers.get("Content-Type");
+
+              const response = await fetch("https://catbox.moe/user/api.php", {
+                method: "POST",
+                body: serializedBody,
+                headers: {
+                  "Content-Type": contentType,
+                  "Content-Length": serializedBody.byteLength.toString(),
+                  // Full browser-like headers to avoid "Invalid uploader" rejection
+                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                  "Accept-Language": "en-US,en;q=0.9",
+                  "Origin": "https://catbox.moe",
+                  "Referer": "https://catbox.moe/",
+                  "Sec-Fetch-Dest": "document",
+                  "Sec-Fetch-Mode": "navigate",
+                  "Sec-Fetch-Site": "same-origin",
+                  "Sec-Fetch-User": "?1",
+                  "Cache-Control": "no-cache",
+                  "Pragma": "no-cache"
+                }
+              });
+
+              const responseText = await response.text();
+              
+              if (response.ok && responseText.startsWith("https://")) {
+                // Success - Catbox returns plain text URL
+                return new Response(JSON.stringify({
+                  success: true,
+                  url: responseText.trim(),
+                  thumb: responseText.trim()
+                }), {
+                  status: 200,
+                  headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+                });
+              } else {
+                lastError = responseText || `HTTP ${response.status}`;
+                // If "Invalid uploader" or server error, retry
+                if (attempt < MAX_ATTEMPTS) {
+                  await new Promise(r => setTimeout(r, 1000 * attempt));
+                  continue;
+                }
+              }
+            } catch (fetchErr) {
+              lastError = fetchErr.message;
+              if (attempt < MAX_ATTEMPTS) {
+                await new Promise(r => setTimeout(r, 1000 * attempt));
+                continue;
+              }
             }
-          });
-
-          const responseText = await response.text();
-          
-          if (response.ok && responseText.startsWith("https://")) {
-            // Success - Catbox returns plain text URL
-            return new Response(JSON.stringify({
-              success: true,
-              url: responseText.trim(),
-              thumb: responseText.trim()
-            }), {
-              status: 200,
-              headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
-            });
-          } else {
-            return new Response(JSON.stringify({
-              success: false,
-              error: responseText || `HTTP ${response.status}`
-            }), {
-              status: response.status || 500,
-              headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
-            });
           }
+
+          // All attempts failed
+          return new Response(JSON.stringify({
+            success: false,
+            error: lastError || "Upload failed after retries"
+          }), {
+            status: 500,
+            headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+          });
         } catch (err) {
           return new Response(JSON.stringify({ success: false, error: err.message }), {
             status: 500,
