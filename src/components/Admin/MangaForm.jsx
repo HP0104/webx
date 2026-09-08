@@ -104,16 +104,6 @@ function MangaForm({
 
   // Helper to upload a list of parsed chapters
   const uploadChaptersList = async (chaptersToUpload, customTitle = '') => {
-    if (storageProvider === 'imgbb' && !imgbbKey.trim()) {
-      alert(
-        '⚠️ BẠN CHƯA NHẬP IMGBB API KEY:\n\n' +
-        'Để upload ảnh không giới hạn và không bị chặn IP:\n' +
-        '1. Vào https://api.imgbb.com (miễn phí 100%)\n' +
-        '2. Bấm "Get API Key" và copy mã key\n' +
-        '3. Dán vào ô "ImgBB API Key" ở phía trên rồi bấm Upload lại!'
-      );
-      return null;
-    }
     if (storageProvider === 'freeimage') {
       const proceed = window.confirm(
         '⚠️ CẢNH BÁO SERVER FREEIMAGE:\n\n' +
@@ -151,12 +141,13 @@ function MangaForm({
 
         const urls = await uploadMultipleMangaImages(
           ch.files,
-          (uploaded, total, fileName) => {
+          (uploaded, total, fileName, keyStats) => {
             setUploadProgress(prev => ({
               ...prev,
               current: uploaded,
               total,
-              file: fileName
+              file: fileName,
+              keyStats: keyStats || null
             }));
           },
           {
@@ -1283,6 +1274,44 @@ function MangaForm({
               <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>
                 {uploadProgress.current}/{uploadProgress.total} ảnh — {uploadProgress.file}
               </div>
+
+              {/* Key usage stats */}
+              {uploadProgress.keyStats && storageProvider === 'imgbb' && (
+                <div style={{
+                  marginTop: '0.6rem',
+                  padding: '0.5rem 0.7rem',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(167, 139, 250, 0.08)',
+                  border: '1px solid rgba(167, 139, 250, 0.2)',
+                  fontSize: '0.75rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                    <span style={{ color: '#a78bfa', fontWeight: 600 }}>
+                      🔑 Key {uploadProgress.keyStats.activeKeyIndex}/{uploadProgress.keyStats.totalKeys}
+                    </span>
+                    <span style={{ color: uploadProgress.keyStats.keyRemaining < 20 ? '#f87171' : '#4ade80', fontWeight: 600 }}>
+                      Còn {uploadProgress.keyStats.keyRemaining} lượt
+                    </span>
+                  </div>
+                  <div style={{ width: '100%', height: '4px', borderRadius: '2px', backgroundColor: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: '0.3rem' }}>
+                    <div style={{
+                      width: `${(uploadProgress.keyStats.keyUploaded / uploadProgress.keyStats.keyLimit) * 100}%`,
+                      height: '100%',
+                      background: uploadProgress.keyStats.keyRemaining < 20
+                        ? 'linear-gradient(90deg, #f87171, #ef4444)'
+                        : 'linear-gradient(90deg, #a78bfa, #8b5cf6)',
+                      borderRadius: '2px',
+                      transition: 'width 0.3s ease'
+                    }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--color-text-muted)' }}>
+                    <span>Đã dùng: {uploadProgress.keyStats.totalUsed}/{uploadProgress.keyStats.totalLimit} tổng lượt</span>
+                    <span style={{ color: uploadProgress.keyStats.totalRemaining < 50 ? '#fbbf24' : '#4ade80' }}>
+                      📊 Tổng còn: {uploadProgress.keyStats.totalRemaining}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

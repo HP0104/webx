@@ -221,7 +221,34 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
     keyList = [...IMGBB_DEFAULT_KEYS];
   }
 
+  // Track uploads per key per hour (estimated limit: ~100/hr/key)
+  const RATE_LIMIT_PER_KEY = 100;
+  const keyUsage = {}; // { keyPrefix: { count, firstUsedAt } }
+  for (const k of keyList) {
+    const prefix = k.slice(0, 8);
+    keyUsage[prefix] = { count: 0, firstUsedAt: null, key: k };
+  }
+
+  // Round-robin: distribute uploads evenly across keys
   let activeKeyIndex = 0;
+
+  const getKeyStats = () => {
+    const currentKey = keyList[activeKeyIndex % keyList.length];
+    const prefix = currentKey.slice(0, 8);
+    const usage = keyUsage[prefix];
+    const totalUsed = Object.values(keyUsage).reduce((sum, u) => sum + u.count, 0);
+    const totalRemaining = keyList.length * RATE_LIMIT_PER_KEY - totalUsed;
+    return {
+      activeKeyIndex: activeKeyIndex % keyList.length + 1,
+      totalKeys: keyList.length,
+      keyUploaded: usage.count,
+      keyLimit: RATE_LIMIT_PER_KEY,
+      keyRemaining: Math.max(0, RATE_LIMIT_PER_KEY - usage.count),
+      totalUsed,
+      totalRemaining: Math.max(0, totalRemaining),
+      totalLimit: keyList.length * RATE_LIMIT_PER_KEY
+    };
+  };
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -236,7 +263,7 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
       customName = `${prefix} ${numStr}`;
     }
 
-    if (onProgress) onProgress(i, files.length, customName || file.name);
+    if (onProgress) onProgress(i, files.length, customName || file.name, getKeyStats());
 
     let uploaded = false;
     let lastError = null;
@@ -245,19 +272,34 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
     while (!uploaded && attempts < Math.max(3, keyList.length)) {
       attempts++;
       const currentKey = keyList[activeKeyIndex % keyList.length];
+      const keyPrefix = currentKey.slice(0, 8);
 
       try {
         const result = await uploadToImgBB(file, currentKey, customName, true);
         urls.push(result.url);
         uploaded = true;
+
+        // Track usage
+        keyUsage[keyPrefix].count++;
+        if (!keyUsage[keyPrefix].firstUsedAt) keyUsage[keyPrefix].firstUsedAt = Date.now();
+
+        // Proactive rotation: switch to next key every ~(LIMIT/keyCount) uploads
+        // to distribute load evenly
+        const rotateEvery = Math.floor(RATE_LIMIT_PER_KEY / keyList.length);
+        if (keyList.length > 1 && keyUsage[keyPrefix].count % rotateEvery === 0) {
+          activeKeyIndex = (activeKeyIndex + 1) % keyList.length;
+        }
       } catch (err) {
         lastError = err;
-        console.warn(`Lần thử ${attempts} tải ${file.name} với key ${currentKey.slice(0, 6)}... thất bại:`, err.message);
+        console.warn(`Lần thử ${attempts} tải ${file.name} với key ${keyPrefix}... thất bại:`, err.message);
 
-        // If rate limit error and multiple keys exist, switch to next key immediately
+        // Track failed attempt too
+        keyUsage[keyPrefix].count++;
+
+        // If rate limit error, switch to next key immediately
         if (err.message.includes('Rate limit') && keyList.length > 1) {
           activeKeyIndex = (activeKeyIndex + 1) % keyList.length;
-          console.log(`Đổi sang ImgBB Key tiếp theo: ${keyList[activeKeyIndex].slice(0, 6)}...`);
+          console.log(`Đổi sang ImgBB Key tiếp theo: key #${activeKeyIndex % keyList.length + 1}`);
           await new Promise(r => setTimeout(r, 200));
           continue;
         }
@@ -278,7 +320,7 @@ export async function uploadMultipleToImgBB(files, apiKey, onProgress, options =
     }
   }
 
-  if (onProgress) onProgress(files.length, files.length, 'Done');
+  if (onProgress) onProgress(files.length, files.length, 'Done', getKeyStats());
   return urls;
 }
 
