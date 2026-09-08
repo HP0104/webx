@@ -113,9 +113,26 @@ export default {
           }
           catboxForm.set("fileToUpload", file, file.name || "image.webp");
 
-          const response = await fetch("https://catbox.moe/user/api.php", {
+          // Workaround for Cloudflare Worker fetch sending FormData as chunked encoding
+          // PHP servers (like Catbox) often reject chunked uploads with a 520 error.
+          // We serialize the FormData into an ArrayBuffer and send it with a Content-Length.
+          const fakeReq = new Request("https://catbox.moe/user/api.php", {
             method: "POST",
             body: catboxForm
+          });
+          
+          const serializedBody = await fakeReq.arrayBuffer();
+          const contentType = fakeReq.headers.get("Content-Type");
+
+          const response = await fetch("https://catbox.moe/user/api.php", {
+            method: "POST",
+            body: serializedBody,
+            headers: {
+              "Content-Type": contentType,
+              "Content-Length": serializedBody.byteLength.toString(),
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+              "Accept": "*/*"
+            }
           });
 
           const responseText = await response.text();
