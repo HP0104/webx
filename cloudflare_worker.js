@@ -82,6 +82,72 @@ export default {
       }
     }
 
+    // Proxy endpoint for Catbox.moe manga uploads (bypasses browser CORS)
+    // Catbox.moe: free, no API key, no rate limit, permanent storage, CDN files.catbox.moe
+    if (url.pathname === "/api/upload-catbox") {
+      const uploadCorsHeaders = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      };
+
+      if (request.method === "OPTIONS") {
+        return new Response(null, { headers: uploadCorsHeaders });
+      }
+
+      if (request.method === "POST") {
+        try {
+          const incomingFormData = await request.formData();
+          
+          // Build new FormData for Catbox API
+          const catboxForm = new FormData();
+          catboxForm.set("reqtype", "fileupload");
+          
+          // Get the file from incoming form - support both 'source' and 'fileToUpload' field names
+          const file = incomingFormData.get("source") || incomingFormData.get("fileToUpload");
+          if (!file) {
+            return new Response(JSON.stringify({ success: false, error: "No file provided" }), {
+              status: 400,
+              headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+            });
+          }
+          catboxForm.set("fileToUpload", file, file.name || "image.webp");
+
+          const response = await fetch("https://catbox.moe/user/api.php", {
+            method: "POST",
+            body: catboxForm
+          });
+
+          const responseText = await response.text();
+          
+          if (response.ok && responseText.startsWith("https://")) {
+            // Success - Catbox returns plain text URL
+            return new Response(JSON.stringify({
+              success: true,
+              url: responseText.trim(),
+              thumb: responseText.trim()
+            }), {
+              status: 200,
+              headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+            });
+          } else {
+            return new Response(JSON.stringify({
+              success: false,
+              error: responseText || `HTTP ${response.status}`
+            }), {
+              status: response.status || 500,
+              headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+            });
+          }
+        } catch (err) {
+          return new Response(JSON.stringify({ success: false, error: err.message }), {
+            status: 500,
+            headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+          });
+        }
+      }
+    }
+
     if (url.pathname === "/check-payment" && request.method === "POST") {
       try {
         const payload = await request.json();

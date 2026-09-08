@@ -26,7 +26,7 @@ function MangaForm({
   onSaveManga,
   onCancelEdit
 }) {
-  const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'imgbb');
+  const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'catbox');
   const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem(IMGBB_API_KEY_STORAGE) || '');
   const [freeimageKey, setFreeimageKey] = useState(() => localStorage.getItem(FREEIMAGE_API_KEY_STORAGE) || '');
   const [uploadMode, setUploadMode] = useState('epub'); // 'epub', 'folder', 'single' or 'url'
@@ -82,11 +82,12 @@ function MangaForm({
     if (storageProvider === 'imgbb' && !imgbbKey.trim()) {
       return alert('Vui lòng nhập ImgBB API Key trước!');
     }
+    // Catbox doesn't need an API key
 
     setCoverUploading(true);
     try {
       const coverName = `${mangaData.title?.trim() || 'Manga'} - Ảnh bìa`;
-      const currentApiKey = storageProvider === 'freeimage' ? freeimageKey : imgbbKey;
+      const currentApiKey = storageProvider === 'catbox' ? '' : (storageProvider === 'freeimage' ? freeimageKey : imgbbKey);
       const result = await uploadSingleMangaImage(file, {
         provider: storageProvider,
         apiKey: currentApiKey,
@@ -127,7 +128,7 @@ function MangaForm({
     setIsUploading(true);
     const addedChapters = [];
     const currentMangaTitle = (customTitle || mangaData.title || '').trim();
-    const currentApiKey = storageProvider === 'freeimage' ? freeimageKey : imgbbKey;
+    const currentApiKey = storageProvider === 'catbox' ? '' : (storageProvider === 'freeimage' ? freeimageKey : imgbbKey);
 
     try {
       for (let ci = 0; ci < chaptersToUpload.length; ci++) {
@@ -188,7 +189,7 @@ function MangaForm({
 
       setParsedChapters([]);
       setUploadProgress(null);
-      const serverLabel = storageProvider === 'freeimage' ? 'FreeImage.host' : 'ImgBB';
+      const serverLabel = storageProvider === 'catbox' ? 'Catbox.moe' : (storageProvider === 'freeimage' ? 'FreeImage.host' : 'ImgBB');
       alert(`Đã upload thành công ${addedChapters.length} chapter lên ${serverLabel}!`);
       return addedChapters;
     } catch (err) {
@@ -253,6 +254,7 @@ function MangaForm({
           return;
         }
       }
+      // Catbox: no key needed, proceed immediately
 
       // Automatically proceed to upload
       await uploadChaptersList(chapters, detectedTitle);
@@ -367,7 +369,7 @@ function MangaForm({
     const currentMangaTitle = (mangaData.title || '').trim();
     const chTitle = manualChapterTitle || `Chapter ${chapterNumber}`;
     const prefix = [currentMangaTitle, chTitle].filter(Boolean).join(' ');
-    const currentApiKey = storageProvider === 'freeimage' ? freeimageKey : imgbbKey;
+    const currentApiKey = storageProvider === 'catbox' ? '' : (storageProvider === 'freeimage' ? freeimageKey : imgbbKey);
 
     try {
       setUploadProgress({ current: 0, total: imageFiles.length, file: '', chapterIdx: 1, chapterTotal: 1, chapterName: `Chapter ${chapterNumber}` });
@@ -540,12 +542,43 @@ function MangaForm({
         </div>
 
         {/* Provider selection buttons */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.8rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.6rem', marginBottom: '0.8rem' }}>
+          {/* Catbox.moe - Recommended */}
+          <button
+            type="button"
+            onClick={() => handleProviderChange('catbox')}
+            style={{
+              padding: '0.65rem 0.8rem',
+              borderRadius: '8px',
+              border: `2px solid ${storageProvider === 'catbox' ? '#8b5cf6' : 'rgba(255, 255, 255, 0.1)'}`,
+              backgroundColor: storageProvider === 'catbox' ? 'rgba(139, 92, 246, 0.12)' : 'rgba(255, 255, 255, 0.02)',
+              color: storageProvider === 'catbox' ? '#a78bfa' : 'var(--color-text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: '0.2rem',
+              textAlign: 'left',
+              transition: 'all 0.2s'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 700, fontSize: '0.85rem', flexWrap: 'wrap' }}>
+              <Layers size={14} /> Catbox.moe
+              <span style={{ fontSize: '0.62rem', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#8b5cf6', color: '#fff', fontWeight: 700 }}>
+                KHUYÊN DÙNG
+              </span>
+            </div>
+            <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>
+              Miễn phí, không cần API Key, không giới hạn lượt tải
+            </span>
+          </button>
+
+          {/* ImgBB */}
           <button
             type="button"
             onClick={() => handleProviderChange('imgbb')}
             style={{
-              padding: '0.75rem 1rem',
+              padding: '0.65rem 0.8rem',
               borderRadius: '8px',
               border: `2px solid ${storageProvider === 'imgbb' ? '#10b981' : 'rgba(255, 255, 255, 0.1)'}`,
               backgroundColor: storageProvider === 'imgbb' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.02)',
@@ -554,27 +587,25 @@ function MangaForm({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'flex-start',
-              gap: '0.25rem',
+              gap: '0.2rem',
               textAlign: 'left',
               transition: 'all 0.2s'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.9rem' }}>
-              <Layers size={16} /> ImgBB
-              <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#10b981', color: '#000', fontWeight: 700 }}>
-                KHUYÊN DÙNG
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 700, fontSize: '0.85rem' }}>
+              <Layers size={14} /> ImgBB
             </div>
-            <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>
-              Upload trực tiếp từ trình duyệt, không qua proxy, 100% không bị chặn IP
+            <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>
+              Cần API Key, có giới hạn lượt tải
             </span>
           </button>
 
+          {/* FreeImage */}
           <button
             type="button"
             onClick={() => handleProviderChange('freeimage')}
             style={{
-              padding: '0.75rem 1rem',
+              padding: '0.65rem 0.8rem',
               borderRadius: '8px',
               border: `2px solid ${storageProvider === 'freeimage' ? '#ef4444' : 'rgba(255, 255, 255, 0.1)'}`,
               backgroundColor: storageProvider === 'freeimage' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255, 255, 255, 0.02)',
@@ -583,24 +614,44 @@ function MangaForm({
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'flex-start',
-              gap: '0.25rem',
+              gap: '0.2rem',
               textAlign: 'left',
               transition: 'all 0.2s'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.9rem' }}>
-              <Sparkles size={16} /> FreeImage.host
-              <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: '4px', backgroundColor: '#ef4444', color: '#fff', fontWeight: 700 }}>
-                BỊ CHẶN PROXY
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 700, fontSize: '0.85rem', flexWrap: 'wrap' }}>
+              <Sparkles size={14} /> FreeImage
+              <span style={{ fontSize: '0.6rem', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#ef4444', color: '#fff', fontWeight: 700 }}>
+                CHẶN IP
               </span>
             </div>
-            <span style={{ fontSize: '0.72rem', opacity: 0.85 }}>
-              Hiện chặn IP Cloudflare Worker (Lỗi: You have been forbidden). Chỉ chạy trên localhost.
+            <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>
+              Bị chặn trên web online
             </span>
           </button>
         </div>
 
-        {storageProvider === 'imgbb' ? (
+        {/* Provider-specific info panels */}
+        {storageProvider === 'catbox' && (
+          <div style={{
+            padding: '0.75rem 0.9rem',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(139, 92, 246, 0.06)',
+            border: '1px solid rgba(139, 92, 246, 0.25)',
+            fontSize: '0.78rem',
+            color: '#c4b5fd',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <Check size={16} style={{ flexShrink: 0, color: '#a78bfa' }} />
+            <span>
+              <strong style={{ color: '#a78bfa' }}>Catbox.moe sẵn sàng!</strong> Không cần API Key. Upload qua Cloudflare Worker proxy → lưu vĩnh viễn trên CDN <code>files.catbox.moe</code>. Không giới hạn số lượng ảnh.
+            </span>
+          </div>
+        )}
+
+        {storageProvider === 'imgbb' && (
           <div style={{
             padding: '0.9rem',
             borderRadius: '8px',
@@ -672,7 +723,9 @@ function MangaForm({
               </div>
             )}
           </div>
-        ) : (
+        )}
+
+        {storageProvider === 'freeimage' && (
           <div style={{
             padding: '0.9rem',
             borderRadius: '8px',
@@ -690,19 +743,19 @@ function MangaForm({
               </div>
               <button
                 type="button"
-                onClick={() => handleProviderChange('imgbb')}
+                onClick={() => handleProviderChange('catbox')}
                 style={{
                   padding: '3px 10px',
                   borderRadius: '4px',
-                  backgroundColor: '#10b981',
-                  color: '#000',
+                  backgroundColor: '#8b5cf6',
+                  color: '#fff',
                   fontWeight: 700,
                   fontSize: '0.75rem',
                   border: 'none',
                   cursor: 'pointer'
                 }}
               >
-                👉 Chuyển sang dùng ImgBB
+                👉 Chuyển sang dùng Catbox.moe
               </button>
             </div>
 
@@ -717,9 +770,9 @@ function MangaForm({
             }}>
               <strong>Vì sao FreeImage bị lỗi "You have been forbidden to use this website"?</strong>
               <br />
-              FreeImage.host hiện đã cấm/chặn toàn bộ dải IP máy chủ của Cloudflare Worker proxy. Khi upload từ trang <strong>web18p.xyz</strong>, FreeImage phát hiện IP datacenter và lập tức từ chối kết nối.
+              FreeImage.host hiện đã cấm/chặn toàn bộ dải IP máy chủ của Cloudflare Worker proxy.
               <br />
-              👉 <strong>Khuyên bạn:</strong> Bấm nút <strong>"Chuyển sang dùng ImgBB"</strong> ở trên để upload trực tiếp từ trình duyệt của bạn mà không lo bị chặn!
+              👉 <strong>Khuyên bạn:</strong> Bấm nút <strong>"Chuyển sang dùng Catbox.moe"</strong> ở trên.
             </div>
 
             <input

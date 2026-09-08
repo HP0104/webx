@@ -29,10 +29,15 @@ export const MANGA_STORAGE_PROVIDER_KEY = 'web18p_manga_storage_provider';
 export const FREEIMAGE_API_KEY = '6d207e02198a847aa98d0a2a901485a5';
 
 export const MANGA_STORAGE_PROVIDERS = {
+  catbox: {
+    id: 'catbox',
+    name: 'Catbox.moe',
+    description: 'Khuyên dùng: Miễn phí, không cần API Key, không giới hạn lượt tải. Ảnh lưu vĩnh viễn trên CDN files.catbox.moe'
+  },
   imgbb: {
     id: 'imgbb',
     name: 'ImgBB',
-    description: 'Khuyên dùng: Upload trực tiếp từ trình duyệt, không qua proxy, không lo bị chặn IP. Lấy API Key miễn phí tại api.imgbb.com'
+    description: 'Upload trực tiếp từ trình duyệt, cần API Key miễn phí tại api.imgbb.com. Có giới hạn lượt tải (dùng nhiều key để bypass)'
   },
   freeimage: {
     id: 'freeimage',
@@ -420,13 +425,167 @@ export async function uploadMultipleToFreeImage(files, onProgress, options = {})
   return urls;
 }
 
+// ============ CATBOX.MOE UPLOAD ============
+
+/**
+ * Upload a single image file to Catbox.moe via Cloudflare Worker proxy
+ * @param {File} file - Image file to upload
+ * @param {string} customName - Optional custom title/filename
+ * @param {boolean} shouldOptimize - Whether to auto-compress to WebP
+ * @returns {Promise<{url: string, thumb: string}>}
+ */
+export async function uploadToCatbox(file, customName = '', shouldOptimize = true) {
+  let fileToUpload = file;
+  if (shouldOptimize) {
+    try {
+      fileToUpload = await optimizeMangaImage(file, { customName });
+    } catch (e) {
+      console.warn('Image optimization skipped:', e);
+      fileToUpload = file;
+    }
+  }
+
+  const fileName = customName
+    ? (customName.endsWith('.webp') ? customName : `${customName}.webp`)
+    : fileToUpload.name;
+
+  // Use Cloudflare Worker proxy to bypass CORS
+  const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const endpoints = isLocalhost
+    ? ['/api/upload-catbox', 'https://web18p-deloy.takarvn.workers.dev/api/upload-catbox']
+    : ['https://web18p-deloy.takarvn.workers.dev/api/upload-catbox', '/api/upload-catbox'];
+
+  let lastError = null;
+  for (const endpoint of endpoints) {
+    try {
+      // For localhost Vite proxy: send Catbox-native format (reqtype + fileToUpload)
+      // For Worker proxy: send our format (source) - Worker converts it
+      const isDirectCatbox = endpoint.startsWith('/api/upload-catbox');
+      const uploadForm = new FormData();
+      if (isDirectCatbox) {
+        uploadForm.append('reqtype', 'fileupload');
+        uploadForm.append('fileToUpload', fileToUpload, fileName);
+      } else {
+        uploadForm.append('source', fileToUpload, fileName);
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: uploadForm
+      });
+
+      if (!response.ok && (response.status === 404 || response.status === 405)) {
+        continue;
+      }
+
+      const responseText = await response.text();
+
+      // Try parsing as JSON first (Worker proxy response)
+      try {
+        const result = JSON.parse(responseText);
+        if (result?.success && result?.url) {
+          return {
+            url: result.url,
+            thumb: result.thumb || result.url
+          };
+        }
+        if (result?.error) {
+          throw new Error(result.error);
+        }
+      } catch (jsonErr) {
+        // Not JSON - check if it's a direct Catbox URL (Vite proxy response)
+        if (responseText.trim().startsWith('https://files.catbox.moe/')) {
+          const url = responseText.trim();
+          return { url, thumb: url };
+        }
+      }
+
+      throw new Error(responseText || `HTTP ${response.status} ${response.statusText}`);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  const isNetworkOrCors = lastError?.message?.includes('Failed to fetch') || lastError?.message?.includes('NetworkError');
+  if (isNetworkOrCors && !isLocalhost) {
+    throw new Error(
+      'Worker proxy chưa được cập nhật trên Cloudflare. Vui lòng mở Cloudflare Worker "web18p-deloy", dán nội dung file cloudflare_worker.js mới nhất và bấm "Save and Deploy"!'
+    );
+  }
+
+  throw new Error(`Catbox.moe upload thất bại: ${lastError?.message || 'Không thể kết nối máy chủ upload'}`);
+}
+
+/**
+ * Upload multiple images to Catbox.moe with progress tracking and retry logic
+ *
+ * @param {File[]} files - Array of image files
+ * @param {function} onProgress - Callback(uploaded, total, currentFileName)
+ * @param {object} options - Optional naming options: { namePrefix, chapterTitle, nameGenerator }
+ * @returns {Promise<string[]>} Array of image URLs
+ */
+export async function uploadMultipleToCatbox(files, onProgress, options = {}) {
+  const urls = [];
+  const { namePrefix = '', chapterTitle = '', nameGenerator = null } = options;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    let customName = '';
+
+    if (typeof nameGenerator === 'function') {
+      customName = nameGenerator(file, i, files.length);
+    } else if (namePrefix) {
+      const padLen = files.length >= 100 ? 3 : 2;
+      const numStr = String(i + 1).padStart(padLen, '0');
+      const prefix = [namePrefix, chapterTitle].filter(Boolean).join(' ');
+      customName = `${prefix} ${numStr}`;
+    }
+
+    if (onProgress) onProgress(i, files.length, customName || file.name);
+
+    let uploaded = false;
+    let lastError = null;
+    let attempts = 0;
+
+    while (!uploaded && attempts < 3) {
+      attempts++;
+      try {
+        const result = await uploadToCatbox(file, customName, true);
+        urls.push(result.url);
+        uploaded = true;
+      } catch (err) {
+        lastError = err;
+        console.warn(`Lần thử ${attempts} tải ${file.name} lên Catbox thất bại:`, err.message);
+        if (attempts < 3) {
+          await new Promise(r => setTimeout(r, 1000 * attempts));
+        }
+      }
+    }
+
+    if (!uploaded) {
+      throw new Error(`Catbox upload lỗi tại file "${file.name}": ${lastError?.message || 'Không rõ nguyên nhân'}`);
+    }
+
+    // Small delay between requests to be polite
+    if (i < files.length - 1) {
+      await new Promise(r => setTimeout(r, 150));
+    }
+  }
+
+  if (onProgress) onProgress(files.length, files.length, 'Done');
+  return urls;
+}
+
 // ============ UNIFIED UPLOAD HELPERS ============
 
 /**
  * Upload a single image file using the selected provider
  */
 export async function uploadSingleMangaImage(file, options = {}) {
-  const { provider = 'freeimage', apiKey = '', customName = '', shouldOptimize = true, isNsfw = true } = options;
+  const { provider = 'catbox', apiKey = '', customName = '', shouldOptimize = true, isNsfw = true } = options;
+  if (provider === 'catbox') {
+    return uploadToCatbox(file, customName, shouldOptimize);
+  }
   if (provider === 'imgbb') {
     return uploadToImgBB(file, apiKey, customName, shouldOptimize);
   }
@@ -437,7 +596,10 @@ export async function uploadSingleMangaImage(file, options = {}) {
  * Upload multiple images using the selected provider
  */
 export async function uploadMultipleMangaImages(files, onProgress, options = {}) {
-  const { provider = 'freeimage', apiKey = '', isNsfw = true, ...restOptions } = options;
+  const { provider = 'catbox', apiKey = '', isNsfw = true, ...restOptions } = options;
+  if (provider === 'catbox') {
+    return uploadMultipleToCatbox(files, onProgress, restOptions);
+  }
   if (provider === 'imgbb') {
     return uploadMultipleToImgBB(files, apiKey, onProgress, restOptions);
   }

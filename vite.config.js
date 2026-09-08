@@ -11,6 +11,11 @@ export default defineConfig({
         target: 'https://freeimage.host',
         changeOrigin: true,
         rewrite: () => '/api/1/upload'
+      },
+      '/api/upload-catbox': {
+        target: 'https://catbox.moe',
+        changeOrigin: true,
+        rewrite: () => '/user/api.php'
       }
     }
   }
