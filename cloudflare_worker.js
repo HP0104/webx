@@ -82,8 +82,8 @@ export default {
       }
     }
 
-    // Proxy endpoint for Catbox.moe manga uploads (bypasses browser CORS)
-    // Catbox.moe: free, no API key, no rate limit, permanent storage, CDN files.catbox.moe
+    // Proxy endpoint for manga image uploads (bypasses browser CORS)
+    // Strategy: Try Catbox.moe first, fallback to Telegra.ph if Catbox fails
     if (url.pathname === "/api/upload-catbox") {
       const uploadCorsHeaders = {
         "Access-Control-Allow-Origin": "*",
@@ -108,86 +108,94 @@ export default {
             });
           }
 
-          // Retry logic: up to 3 attempts with 1s delay between retries
-          const MAX_ATTEMPTS = 3;
-          let lastError = null;
+          // === ATTEMPT 1: Catbox.moe ===
+          try {
+            const catboxForm = new FormData();
+            catboxForm.set("reqtype", "fileupload");
+            catboxForm.set("fileToUpload", file, file.name || "image.webp");
 
-          for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            try {
-              // Build new FormData for Catbox API (must rebuild each attempt)
-              const catboxForm = new FormData();
-              catboxForm.set("reqtype", "fileupload");
-              catboxForm.set("fileToUpload", file, file.name || "image.webp");
+            const fakeReq = new Request("https://catbox.moe/user/api.php", {
+              method: "POST",
+              body: catboxForm
+            });
+            const serializedBody = await fakeReq.arrayBuffer();
+            const contentType = fakeReq.headers.get("Content-Type");
 
-              // Workaround for Cloudflare Worker fetch sending FormData as chunked encoding
-              // PHP servers (like Catbox) often reject chunked uploads with a 520 error.
-              // We serialize the FormData into an ArrayBuffer and send it with a Content-Length.
-              const fakeReq = new Request("https://catbox.moe/user/api.php", {
-                method: "POST",
-                body: catboxForm
-              });
-              
-              const serializedBody = await fakeReq.arrayBuffer();
-              const contentType = fakeReq.headers.get("Content-Type");
-
-              const response = await fetch("https://catbox.moe/user/api.php", {
-                method: "POST",
-                body: serializedBody,
-                headers: {
-                  "Content-Type": contentType,
-                  "Content-Length": serializedBody.byteLength.toString(),
-                  // Full browser-like headers to avoid "Invalid uploader" rejection
-                  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-                  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-                  "Accept-Language": "en-US,en;q=0.9",
-                  "Origin": "https://catbox.moe",
-                  "Referer": "https://catbox.moe/",
-                  "Sec-Fetch-Dest": "document",
-                  "Sec-Fetch-Mode": "navigate",
-                  "Sec-Fetch-Site": "same-origin",
-                  "Sec-Fetch-User": "?1",
-                  "Cache-Control": "no-cache",
-                  "Pragma": "no-cache"
-                }
-              });
-
-              const responseText = await response.text();
-              
-              if (response.ok && responseText.startsWith("https://")) {
-                // Success - Catbox returns plain text URL
-                return new Response(JSON.stringify({
-                  success: true,
-                  url: responseText.trim(),
-                  thumb: responseText.trim()
-                }), {
-                  status: 200,
-                  headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
-                });
-              } else {
-                lastError = responseText || `HTTP ${response.status}`;
-                // If "Invalid uploader" or server error, retry
-                if (attempt < MAX_ATTEMPTS) {
-                  await new Promise(r => setTimeout(r, 1000 * attempt));
-                  continue;
-                }
+            const response = await fetch("https://catbox.moe/user/api.php", {
+              method: "POST",
+              body: serializedBody,
+              headers: {
+                "Content-Type": contentType,
+                "Content-Length": serializedBody.byteLength.toString(),
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                "Accept": "*/*",
+                "Origin": "https://catbox.moe",
+                "Referer": "https://catbox.moe/"
               }
-            } catch (fetchErr) {
-              lastError = fetchErr.message;
-              if (attempt < MAX_ATTEMPTS) {
-                await new Promise(r => setTimeout(r, 1000 * attempt));
-                continue;
-              }
+            });
+
+            const responseText = await response.text();
+            
+            if (response.ok && responseText.trim().startsWith("https://")) {
+              return new Response(JSON.stringify({
+                success: true,
+                url: responseText.trim(),
+                thumb: responseText.trim(),
+                provider: "catbox"
+              }), {
+                status: 200,
+                headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+              });
             }
+            // Catbox returned error - fall through to Telegra.ph
+            console.log("Catbox failed:", responseText);
+          } catch (catboxErr) {
+            console.log("Catbox error:", catboxErr.message);
           }
 
-          // All attempts failed
-          return new Response(JSON.stringify({
-            success: false,
-            error: lastError || "Upload failed after retries"
-          }), {
-            status: 500,
-            headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
-          });
+          // === ATTEMPT 2: Telegra.ph (fallback) ===
+          try {
+            const telegraphForm = new FormData();
+            telegraphForm.set("file", file, file.name || "image.webp");
+
+            const tgResponse = await fetch("https://telegra.ph/upload", {
+              method: "POST",
+              body: telegraphForm,
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/json",
+                "Origin": "https://telegra.ph",
+                "Referer": "https://telegra.ph/"
+              }
+            });
+
+            const tgResult = await tgResponse.json();
+
+            // Telegra.ph returns: [{"src":"/file/xxxxx.webp"}] on success
+            // or {"error":"..."} on failure
+            if (Array.isArray(tgResult) && tgResult[0]?.src) {
+              const imageUrl = `https://telegra.ph${tgResult[0].src}`;
+              return new Response(JSON.stringify({
+                success: true,
+                url: imageUrl,
+                thumb: imageUrl,
+                provider: "telegraph"
+              }), {
+                status: 200,
+                headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+              });
+            }
+
+            throw new Error(tgResult?.error || JSON.stringify(tgResult));
+          } catch (tgErr) {
+            return new Response(JSON.stringify({
+              success: false,
+              error: `Catbox bị chặn IP & Telegra.ph cũng lỗi: ${tgErr.message}`
+            }), {
+              status: 500,
+              headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+            });
+          }
         } catch (err) {
           return new Response(JSON.stringify({ success: false, error: err.message }), {
             status: 500,
