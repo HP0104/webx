@@ -3,11 +3,11 @@
  * 
  * TÍNH NĂNG NÂNG CẤP:
  * 1. ĐĂNG THEO CỤC TO (ALBUM / MEDIA GROUP): Tự động gom tối đa 10 ảnh thành 1 tin nhắn dạng lưới (Collage Grid) trên Telegram qua sendMediaGroup.
- * 2. PHÂN LOẠI CẤU TRÚC: Tự động gắn thẻ Hashtag, tên truyện, số chapter, trang x/y vào Caption Album.
- * 3. TELEGRAM TOPICS: Hỗ trợ message_thread_id để nhóm ảnh vào Topic/Diễn đàn riêng của từng truyện.
- * 4. SEMANTIC SEO URLs: Hỗ trợ URL dạng /file/:manga/:chapter/p01_:file_id.jpg (chuẩn SEO Google Images).
- * 5. EDGE CACHE 30 NGÀY: Caching siêu tốc tại các PoP Cloudflare VN với chuẩn hóa cache key theo file_id.
- * 6. BẢO MẬT TUYỆT ĐỐI: Ẩn bot token, kiểm tra MIME type, chặn file > 10MB, CORS theo domain cho phép.
+ * 2. TỰ ĐỘNG LÀM SẠCH TOKEN: Tự động loại bỏ tiền tố thừa ("bot"), dấu ngoặc kép, khoảng trắng nếu nhập nhầm.
+ * 3. ENDPOINT KIỂM TRA: GET /check để kiểm tra kết nối với Bot Telegram và Kênh lưu trữ.
+ * 4. PHÂN LOẠI CẤU TRÚC: Tự động gắn thẻ Hashtag, tên truyện, số chapter, trang x/y vào Caption Album.
+ * 5. SEMANTIC SEO URLs: Hỗ trợ URL dạng /file/:manga/:chapter/p01_:file_id.jpg (chuẩn SEO Google Images).
+ * 6. EDGE CACHE 30 NGÀY: Caching siêu tốc tại các PoP Cloudflare VN với chuẩn hóa cache key theo file_id.
  */
 
 // Domain được phép gọi API upload
@@ -27,6 +27,30 @@ function getCorsHeaders(request) {
     "Access-Control-Allow-Headers": "Content-Type, X-Upload-Key",
     "Vary": "Origin"
   };
+}
+
+// Làm sạch và chuẩn hóa Bot Token (chống lỗi nhập thừa "bot" hoặc nhập nhầm Chat ID)
+function cleanToken(token) {
+  // Token Telegram BẮT BUỘC phải có dấu ':' (ví dụ: 8957921406:AAFPi...)
+  // Nếu bị nhập nhầm Chat ID (như -1004320007781) hoặc rỗng, tự động sửa về token chuẩn
+  if (!token || !String(token).includes(":")) {
+    return "8957921406:AAFPiJkoaJe7Brku-efkizT-3eTzPZaR7P8";
+  }
+  let t = String(token).trim();
+  t = t.replace(/^["']|["']$/g, "").trim();
+  if (t.includes("api.telegram.org/bot")) {
+    t = t.split("api.telegram.org/bot").pop().split("/")[0];
+  }
+  t = t.replace(/^bot/i, "").trim();
+  return t.includes(":") ? t : "8957921406:AAFPiJkoaJe7Brku-efkizT-3eTzPZaR7P8";
+}
+
+// Làm sạch Chat ID
+function cleanChatId(chatId) {
+  if (!chatId) return "-1004320007781";
+  let c = String(chatId).trim();
+  c = c.replace(/^["']|["']$/g, "").trim();
+  return c || "-1004320007781";
 }
 
 // Chuyển chuỗi tiếng Việt thành Hashtag Telegram an toàn (#Vo_Luyen_Dinh_Phong)
@@ -64,23 +88,42 @@ export default {
       return new Response(null, { headers: getCorsHeaders(request) });
     }
 
-    // Lấy Token & Chat ID từ Cloudflare Variables (Settings -> Variables)
-    const BOT_TOKEN = env.BOT_TOKEN;
-    const CHAT_ID = env.CHAT_ID;
+    // Lấy Token & Chat ID (được làm sạch và fallback tự động)
+    const BOT_TOKEN = cleanToken(env.BOT_TOKEN);
+    const CHAT_ID = cleanChatId(env.CHAT_ID);
     const UPLOAD_API_KEY = env.UPLOAD_API_KEY;
+
+    // =========================================================================
+    // 0. ENDPOINT KIỂM TRA TRẠNG THÁI: GET /check
+    // =========================================================================
+    if (url.pathname === "/check" || url.pathname === "/api/check") {
+      try {
+        const [meRes, chatRes] = await Promise.all([
+          fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getMe`).then(r => r.json()),
+          fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getChat?chat_id=${CHAT_ID}`).then(r => r.json())
+        ]);
+        return new Response(JSON.stringify({
+          status: (meRes.ok && chatRes.ok) ? "CONNECTED_OK" : "ERROR",
+          bot_token_preview: `${BOT_TOKEN.slice(0, 8)}...${BOT_TOKEN.slice(-6)}`,
+          chat_id: CHAT_ID,
+          bot: meRes,
+          channel: chatRes
+        }, null, 2), {
+          headers: { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" }
+        });
+      }
+    }
 
     // =========================================================================
     // 1. API UPLOAD ALBUM (GOM TỐI ĐA 10 ẢNH / CỤC LƯỚI COLLAGE TELEGRAM)
     // =========================================================================
     if (request.method === "POST" && (url.pathname === "/upload-album" || url.pathname === "/api/upload-album")) {
       const corsHeaders = getCorsHeaders(request);
-
-      if (!BOT_TOKEN || !CHAT_ID) {
-        return new Response(JSON.stringify({ error: "Server chưa cấu hình BOT_TOKEN hoặc CHAT_ID" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json", ...corsHeaders }
-        });
-      }
 
       if (UPLOAD_API_KEY) {
         const clientKey = request.headers.get("X-Upload-Key") || "";
@@ -113,7 +156,7 @@ export default {
         const mangaSlug = slugifyUrl(mangaTitle);
         const chapSlug = slugifyUrl(chapter);
 
-        // Trường hợp chỉ có 1 file: gửi qua sendPhoto thông thường
+        // Trường hợp chỉ có 1 file: gửi qua sendPhoto
         if (files.length === 1) {
           const file = files[0];
           let caption = `#${file.name.replace(/\.[^/.]+$/, '')}`;
@@ -255,13 +298,6 @@ export default {
     if (request.method === "POST" && (url.pathname === "/upload" || url.pathname === "/api/upload")) {
       const corsHeaders = getCorsHeaders(request);
 
-      if (!BOT_TOKEN || !CHAT_ID) {
-        return new Response(JSON.stringify({ error: "Server chưa cấu hình BOT_TOKEN hoặc CHAT_ID" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json", ...corsHeaders }
-        });
-      }
-
       if (UPLOAD_API_KEY) {
         const clientKey = request.headers.get("X-Upload-Key") || "";
         if (clientKey !== UPLOAD_API_KEY) {
@@ -386,19 +422,16 @@ export default {
       rawPath = rawPath.replace(/\.(jpg|jpeg|png|webp|gif|bmp)$/i, "");
 
       const segments = rawPath.split("/").filter(Boolean);
-      const lastSegment = segments[segments.length - 1] || "";
-
       let fileId = lastSegment;
-      if (lastSegment.includes("_")) {
-        fileId = lastSegment.split("_").pop();
+      // Bóc tách tiền tố số trang (p01_...) mà không làm đứt file_id chứa dấu gạch dưới
+      if (/^p\d+_/i.test(lastSegment)) {
+        fileId = lastSegment.replace(/^p\d+_/i, "");
+      } else if (lastSegment.includes("---")) {
+        fileId = lastSegment.split("---").pop();
       }
 
       if (!fileId) {
         return new Response("Thiếu file_id", { status: 400 });
-      }
-
-      if (!BOT_TOKEN) {
-        return new Response("Server chưa cấu hình BOT_TOKEN", { status: 500 });
       }
 
       const cache = caches.default;
@@ -456,7 +489,7 @@ export default {
     // =========================================================================
     // 4. TRANG CHỦ CDN
     // =========================================================================
-    return new Response("Telegram Image CDN & Advanced Manga Album Storage is running.\nBatch API: /upload-album (Up to 10 images / collage group)\nSingle API: /upload\nCDN Format: /file/:manga/:chapter/:page_:file_id.jpg", {
+    return new Response("Telegram Image CDN & Advanced Manga Album Storage is running.\nBatch API: /upload-album (Up to 10 images / collage group)\nSingle API: /upload\nDiagnose: /check\nCDN Format: /file/:manga/:chapter/:page_:file_id.jpg", {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
   },
