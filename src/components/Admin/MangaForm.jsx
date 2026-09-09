@@ -642,6 +642,46 @@ function MangaForm({
           </button>
         </div>
 
+        {/* Telegram CDN Info Panel */}
+        {storageProvider === 'telegram' && (
+          <div style={{
+            padding: '0.85rem 1rem',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(59, 130, 246, 0.08)',
+            border: '1px solid rgba(59, 130, 246, 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Check size={16} style={{ color: '#60a5fa' }} />
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#60a5fa' }}>
+                  Telegram Cloud CDN Sẵn Sàng!
+                </span>
+                <span style={{
+                  fontSize: '0.68rem',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
+                  backgroundColor: '#10b981',
+                  color: '#fff',
+                  fontWeight: 700
+                }}>
+                  ⚡ TỐC ĐỘ CAO
+                </span>
+              </div>
+              <span style={{ fontSize: '0.72rem', color: '#93c5fd', fontFamily: 'monospace' }}>
+                Proxy: img-cdn.takarvn.workers.dev
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.8)', lineHeight: 1.45 }}>
+              • <strong>Lưu trữ vĩnh viễn:</strong> Ảnh tải lên được bảo mật trực tiếp trên Cloud Telegram và phân phối qua Cloudflare Edge Caching siêu tốc tại VN.<br/>
+              • <strong>Tự động tối ưu:</strong> Tự động nén WebP chất lượng cao, tối ưu dung lượng tải cho người đọc truyện.<br/>
+              • <strong>Không giới hạn:</strong> Không lo hết lượt tải (rate limit), không bị chặn IP.
+            </p>
+          </div>
+        )}
+
         {/* Provider-specific info panels */}
         {storageProvider === 'catbox' && (
           <div style={{
