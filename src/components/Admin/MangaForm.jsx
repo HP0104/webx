@@ -674,7 +674,7 @@ function MangaForm({
                   color: '#fff',
                   fontWeight: 700
                 }}>
-                  ⚡ PHÂN BIỆT THÔNG MINH
+                  ⚡ ĐĂNG CỤC ALBUM (10 ẢNH/LƯỚI)
                 </span>
               </div>
               <span style={{ fontSize: '0.72rem', color: '#93c5fd', fontFamily: 'monospace' }}>
@@ -683,7 +683,8 @@ function MangaForm({
             </div>
 
             <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.8)', lineHeight: 1.5 }}>
-              • <strong>Phân loại tự động:</strong> Mỗi bức ảnh tải lên đều được tự động gắn Hashtag (<code>#TenTruyen</code>, <code>#Chap_X</code>, <code>Trang x/y</code>) giúp dễ dàng tìm kiếm.<br/>
+              • <strong>Đăng theo cục to (Album):</strong> Tự động gom tối đa 10 ảnh vào 1 tin nhắn dạng lưới (Collage) trên Telegram.<br/>
+              • <strong>Phân loại tự động:</strong> Gắn Hashtag (<code>#TenTruyen</code>, <code>#Chap_X</code>, <code>Trang x/y</code>) giúp dễ dàng tìm kiếm.<br/>
               • <strong>URL chuẩn SEO:</strong> Đường dẫn ảnh có cấu trúc rõ ràng: <code>/file/ten-truyen/chap-x/p01_id.jpg</code>.<br/>
               • <strong>Lưu trữ vĩnh viễn:</strong> Cache 30 ngày tại Cloudflare Edge VN, không bao giờ lo mất ảnh hay bị chặn.
             </p>

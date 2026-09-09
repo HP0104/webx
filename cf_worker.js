@@ -1,12 +1,13 @@
 /**
  * Cloudflare Worker: Telegram Image CDN & Advanced Manga Storage Engine
  * 
- * TÍNH NĂNG NÂNG CẤP CHUYÊN SÂU:
- * 1. PHÂN LOẠI CẤU TRÚC: Tự động gắn thẻ Hashtag, tên truyện, số chapter, trang x/y vào Caption Telegram.
- * 2. TELEGRAM TOPICS: Hỗ trợ message_thread_id để tự động nhóm ảnh vào Topic/Diễn đàn riêng của từng truyện.
- * 3. SEMANTIC SEO URLs: Hỗ trợ URL dạng /file/:manga/:chapter/p01_:file_id.jpg (chuẩn SEO Google Images).
- * 4. EDGE CACHE 30 NGÀY: Caching siêu tốc tại các PoP Cloudflare VN với chuẩn hóa cache key theo file_id.
- * 5. BẢO MẬT TUYỆT ĐỐI: Ẩn bot token, kiểm tra MIME type, chặn file > 10MB, CORS theo domain cho phép.
+ * TÍNH NĂNG NÂNG CẤP:
+ * 1. ĐĂNG THEO CỤC TO (ALBUM / MEDIA GROUP): Tự động gom tối đa 10 ảnh thành 1 tin nhắn dạng lưới (Collage Grid) trên Telegram qua sendMediaGroup.
+ * 2. PHÂN LOẠI CẤU TRÚC: Tự động gắn thẻ Hashtag, tên truyện, số chapter, trang x/y vào Caption Album.
+ * 3. TELEGRAM TOPICS: Hỗ trợ message_thread_id để nhóm ảnh vào Topic/Diễn đàn riêng của từng truyện.
+ * 4. SEMANTIC SEO URLs: Hỗ trợ URL dạng /file/:manga/:chapter/p01_:file_id.jpg (chuẩn SEO Google Images).
+ * 5. EDGE CACHE 30 NGÀY: Caching siêu tốc tại các PoP Cloudflare VN với chuẩn hóa cache key theo file_id.
+ * 6. BẢO MẬT TUYỆT ĐỐI: Ẩn bot token, kiểm tra MIME type, chặn file > 10MB, CORS theo domain cho phép.
  */
 
 // Domain được phép gọi API upload
@@ -64,14 +65,193 @@ export default {
     }
 
     // Lấy Token & Chat ID từ Cloudflare Variables (Settings -> Variables)
-    // Có fallback để đảm bảo chạy mượt mà
     const BOT_TOKEN = env.BOT_TOKEN;
     const CHAT_ID = env.CHAT_ID;
     const UPLOAD_API_KEY = env.UPLOAD_API_KEY;
 
-    // ==========================================
-    // 1. API UPLOAD (CÓ PHÂN LOẠI & SEO)
-    // ==========================================
+    // =========================================================================
+    // 1. API UPLOAD ALBUM (GOM TỐI ĐA 10 ẢNH / CỤC LƯỚI COLLAGE TELEGRAM)
+    // =========================================================================
+    if (request.method === "POST" && (url.pathname === "/upload-album" || url.pathname === "/api/upload-album")) {
+      const corsHeaders = getCorsHeaders(request);
+
+      if (!BOT_TOKEN || !CHAT_ID) {
+        return new Response(JSON.stringify({ error: "Server chưa cấu hình BOT_TOKEN hoặc CHAT_ID" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+
+      if (UPLOAD_API_KEY) {
+        const clientKey = request.headers.get("X-Upload-Key") || "";
+        if (clientKey !== UPLOAD_API_KEY) {
+          return new Response(JSON.stringify({ error: "Unauthorized: API Key không hợp lệ" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json", ...corsHeaders }
+          });
+        }
+      }
+
+      try {
+        const formData = await request.formData();
+        const files = formData.getAll("files");
+        const mangaTitle = (formData.get("manga_title") || "").trim();
+        const chapter = (formData.get("chapter") || "").trim();
+        const startPage = parseInt(formData.get("start_page") || "1", 10);
+        const totalPages = parseInt(formData.get("total_pages") || String(files.length), 10);
+        const threadId = (formData.get("thread_id") || "").trim();
+
+        if (!files || files.length === 0) {
+          return new Response(JSON.stringify({ error: "Không tìm thấy file ảnh nào trong album" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...corsHeaders }
+          });
+        }
+
+        const mangaTag = slugifyHashtag(mangaTitle);
+        const chapTag = slugifyHashtag(chapter);
+        const mangaSlug = slugifyUrl(mangaTitle);
+        const chapSlug = slugifyUrl(chapter);
+
+        // Trường hợp chỉ có 1 file: gửi qua sendPhoto thông thường
+        if (files.length === 1) {
+          const file = files[0];
+          let caption = `#${file.name.replace(/\.[^/.]+$/, '')}`;
+          if (mangaTag || chapTag) {
+            const lines = [];
+            if (mangaTag) lines.push(`📚 #${mangaTag}`);
+            if (chapTag) lines.push(`📖 #${chapTag} | 📄 Trang ${startPage}/${totalPages}`);
+            lines.push(`🔖 ${mangaTitle}${chapter ? ` - ${chapter}` : ''}`);
+            caption = lines.join("\n");
+          }
+
+          const tgFormData = new FormData();
+          tgFormData.append("chat_id", CHAT_ID);
+          tgFormData.append("photo", file, file.name);
+          tgFormData.append("caption", caption);
+          if (threadId) tgFormData.append("message_thread_id", threadId);
+
+          const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+            method: "POST",
+            body: tgFormData
+          });
+          const tgData = await tgRes.json();
+          if (!tgData.ok) {
+            return new Response(JSON.stringify({ error: tgData.description || "Lỗi Telegram" }), {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...corsHeaders }
+            });
+          }
+
+          const bestPhoto = tgData.result.photo[tgData.result.photo.length - 1];
+          const fileId = bestPhoto.file_id;
+          const pagePart = `p${String(startPage).padStart(2, '0')}`;
+          let publicUrl = `${url.origin}/file/${fileId}.jpg`;
+          if (mangaSlug && chapSlug) {
+            publicUrl = `${url.origin}/file/${mangaSlug}/${chapSlug}/${pagePart}_${fileId}.jpg`;
+          }
+
+          return new Response(JSON.stringify({
+            success: true,
+            results: [{
+              page: startPage,
+              filename: file.name,
+              file_id: fileId,
+              url: publicUrl
+            }]
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json", ...corsHeaders }
+          });
+        }
+
+        // Trường hợp >= 2 file (Tối đa 10 file/album): Gửi qua sendMediaGroup để tạo CỤC LƯỚI
+        const endPage = startPage + files.length - 1;
+        let albumCaption = '';
+        if (mangaTag || chapTag) {
+          const lines = [];
+          if (mangaTag) lines.push(`📚 #${mangaTag}`);
+          if (chapTag) lines.push(`📖 #${chapTag} | 📄 Trang ${startPage}-${endPage}/${totalPages}`);
+          lines.push(`🔖 ${mangaTitle}${chapter ? ` - ${chapter}` : ''} (Album ${files.length} trang)`);
+          albumCaption = lines.join("\n");
+        } else {
+          albumCaption = `📁 Album ${files.length} trang truyện (${startPage}-${endPage})`;
+        }
+
+        const mediaArray = [];
+        const tgFormData = new FormData();
+        tgFormData.append("chat_id", CHAT_ID);
+        if (threadId) tgFormData.append("message_thread_id", threadId);
+
+        files.forEach((file, idx) => {
+          const attachKey = `photo_${idx}`;
+          tgFormData.append(attachKey, file, file.name);
+          mediaArray.push({
+            type: "photo",
+            media: `attach://${attachKey}`,
+            caption: idx === 0 ? albumCaption : undefined
+          });
+        });
+
+        tgFormData.append("media", JSON.stringify(mediaArray));
+
+        const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMediaGroup`, {
+          method: "POST",
+          body: tgFormData
+        });
+        const tgData = await tgRes.json();
+
+        if (!tgData.ok) {
+          return new Response(JSON.stringify({ error: tgData.description || "Lỗi Telegram sendMediaGroup" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json", ...corsHeaders }
+          });
+        }
+
+        // tgData.result là mảng Message tương ứng với từng ảnh trong album
+        const messages = tgData.result;
+        const results = [];
+
+        messages.forEach((msg, idx) => {
+          const currentPage = startPage + idx;
+          const file = files[idx];
+          const photos = msg.photo;
+          const bestPhoto = photos ? photos[photos.length - 1] : null;
+          const fileId = bestPhoto ? bestPhoto.file_id : '';
+          const pagePart = `p${String(currentPage).padStart(2, '0')}`;
+
+          let publicUrl = `${url.origin}/file/${fileId}.jpg`;
+          if (mangaSlug && chapSlug) {
+            publicUrl = `${url.origin}/file/${mangaSlug}/${chapSlug}/${pagePart}_${fileId}.jpg`;
+          }
+
+          results.push({
+            page: currentPage,
+            filename: file ? file.name : `page_${currentPage}`,
+            file_id: fileId,
+            url: publicUrl
+          });
+        });
+
+        return new Response(JSON.stringify({
+          success: true,
+          count: results.length,
+          results
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+    }
+
+    // =========================================================================
+    // 2. API UPLOAD ĐƠN LẺ (DÙNG CHO ẢNH BÌA HOẶC FILE RIÊNG LẺ)
+    // =========================================================================
     if (request.method === "POST" && (url.pathname === "/upload" || url.pathname === "/api/upload")) {
       const corsHeaders = getCorsHeaders(request);
 
@@ -82,7 +262,6 @@ export default {
         });
       }
 
-      // Kiểm tra API Key nếu có cấu hình
       if (UPLOAD_API_KEY) {
         const clientKey = request.headers.get("X-Upload-Key") || "";
         if (clientKey !== UPLOAD_API_KEY) {
@@ -109,7 +288,6 @@ export default {
           });
         }
 
-        // Kiểm tra loại file (chỉ nhận ảnh)
         const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"];
         if (file.type && !allowedTypes.includes(file.type)) {
           return new Response(JSON.stringify({ error: `Loại file không hợp lệ (${file.type}). Chỉ chấp nhận file ảnh.` }), {
@@ -118,7 +296,6 @@ export default {
           });
         }
 
-        // Giới hạn kích thước (10MB)
         const MAX_SIZE = 10 * 1024 * 1024;
         if (file.size > MAX_SIZE) {
           return new Response(JSON.stringify({ error: `File quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Tối đa 10MB.` }), {
@@ -127,7 +304,6 @@ export default {
           });
         }
 
-        // === CẤU TRÚC CAPTION THÔNG MINH CHO TELEGRAM ===
         let caption = `#${file.name.replace(/\.[^/.]+$/, '')}`;
         if (mangaTitle || chapter) {
           const mangaTag = slugifyHashtag(mangaTitle);
@@ -142,16 +318,11 @@ export default {
           caption = lines.join("\n");
         }
 
-        // Tạo FormData đẩy sang Telegram Bot API
         const tgFormData = new FormData();
         tgFormData.append("chat_id", CHAT_ID);
         tgFormData.append("photo", file, file.name);
         tgFormData.append("caption", caption);
-
-        // Hỗ trợ Telegram Forum Topic (Supergroup)
-        if (threadId) {
-          tgFormData.append("message_thread_id", threadId);
-        }
+        if (threadId) tgFormData.append("message_thread_id", threadId);
 
         const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
           method: "POST",
@@ -166,12 +337,10 @@ export default {
           });
         }
 
-        // Lấy ảnh độ nét cao nhất
         const photos = tgData.result.photo;
         const bestPhoto = photos[photos.length - 1];
         const fileId = bestPhoto.file_id;
 
-        // === TẠO URL CDN NGỮ NGHĨA (SEMANTIC SEO URL) ===
         const mangaSlug = slugifyUrl(mangaTitle);
         const chapSlug = slugifyUrl(chapter);
         let pagePart = file.name.replace(/\.[^/.]+$/, '');
@@ -209,16 +378,13 @@ export default {
       }
     }
 
-    // ==========================================
-    // 2. CDN PHÁT ẢNH + CACHE (HỖ TRỢ CẢ SEO URL)
-    // ==========================================
+    // =========================================================================
+    // 3. CDN PHÁT ẢNH + EDGE CACHING (HỖ TRỢ CẢ SEO URL & THƯỜNG)
+    // =========================================================================
     if (url.pathname.startsWith("/file/")) {
       let rawPath = url.pathname.replace(/^\/file\//, "").trim();
       rawPath = rawPath.replace(/\.(jpg|jpeg|png|webp|gif|bmp)$/i, "");
 
-      // Hỗ trợ cả 2 định dạng:
-      // 1. /file/AgACAgIA...jpg
-      // 2. /file/ten-truyen/chap-1/p01_AgACAgIA...jpg
       const segments = rawPath.split("/").filter(Boolean);
       const lastSegment = segments[segments.length - 1] || "";
 
@@ -235,7 +401,6 @@ export default {
         return new Response("Server chưa cấu hình BOT_TOKEN", { status: 500 });
       }
 
-      // Kiểm tra Edge Cache (chuẩn hóa key theo fileId)
       const cache = caches.default;
       const cacheKey = new Request(`${url.origin}/file/${fileId}`, { method: "GET" });
       let cachedResponse = await cache.match(cacheKey);
@@ -288,10 +453,10 @@ export default {
       }
     }
 
-    // ==========================================
-    // 3. TRANG CHỦ CDN
-    // ==========================================
-    return new Response("Telegram Image CDN & Manga Storage Engine is running.\nCDN URL Format: /file/:manga/:chapter/:page_:file_id.jpg\nDirect: /file/:file_id.jpg", {
+    // =========================================================================
+    // 4. TRANG CHỦ CDN
+    // =========================================================================
+    return new Response("Telegram Image CDN & Advanced Manga Album Storage is running.\nBatch API: /upload-album (Up to 10 images / collage group)\nSingle API: /upload\nCDN Format: /file/:manga/:chapter/:page_:file_id.jpg", {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
   },

@@ -1020,64 +1020,110 @@ export async function uploadMultipleToTelegram(files, onProgress, options = {}) 
     namePrefix = '',
     chapterTitle = '',
     mangaTitle = '',
-    nameGenerator = null,
     uploadKey = '',
-    threadId = ''
+    threadId = '',
+    batchSize = 10 // Gom tối đa 10 ảnh / 1 cục album media group
   } = options;
 
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    let customName = '';
+  const totalFiles = files.length;
+  let uploadedCount = 0;
 
-    if (typeof nameGenerator === 'function') {
-      customName = nameGenerator(file, i, files.length);
-    } else if (namePrefix) {
-      const padLen = files.length >= 100 ? 3 : 2;
-      const numStr = String(i + 1).padStart(padLen, '0');
-      const prefix = [namePrefix, chapterTitle].filter(Boolean).join(' ');
-      customName = `${prefix} ${numStr}`;
+  for (let i = 0; i < totalFiles; i += batchSize) {
+    const chunk = files.slice(i, i + batchSize);
+    const chunkStartPage = i + 1;
+
+    // Tối ưu ảnh WebP cho các ảnh trong chunk
+    const optimizedFiles = [];
+    for (let j = 0; j < chunk.length; j++) {
+      const file = chunk[j];
+      const pageNum = chunkStartPage + j;
+      const padLen = totalFiles >= 100 ? 3 : 2;
+      const numStr = String(pageNum).padStart(padLen, '0');
+      const customName = [namePrefix, chapterTitle, numStr].filter(Boolean).join(' ') || file.name;
+
+      if (onProgress) {
+        onProgress(uploadedCount, totalFiles, `Đang nén WebP trang ${pageNum}/${totalFiles}...`);
+      }
+
+      try {
+        const opt = await optimizeMangaImage(file, { customName });
+        optimizedFiles.push({ file: opt, fileName: opt.name });
+      } catch (e) {
+        optimizedFiles.push({ file, fileName: file.name });
+      }
     }
 
-    if (onProgress) onProgress(i, files.length, customName || file.name);
+    if (onProgress) {
+      onProgress(uploadedCount, totalFiles, `Đang tải album cục ${Math.floor(i / batchSize) + 1} (${chunkStartPage}-${chunkStartPage + chunk.length - 1}/${totalFiles})...`);
+    }
 
-    let uploaded = false;
+    // Gửi chunk lên Worker qua endpoint /upload-album (Media Group)
+    let chunkSuccess = false;
     let lastError = null;
-    let attempts = 0;
-
-    while (!uploaded && attempts < 3) {
-      attempts++;
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const result = await uploadToTelegram(file, {
-          customName,
-          shouldOptimize: true,
-          uploadKey,
-          mangaTitle,
-          chapterTitle,
-          pageIndex: i + 1,
-          totalPages: files.length,
-          threadId
+        const formData = new FormData();
+        optimizedFiles.forEach(item => {
+          formData.append('files', item.file, item.fileName);
         });
-        urls.push(result.url);
-        uploaded = true;
+        if (mangaTitle) formData.append('manga_title', mangaTitle);
+        if (chapterTitle) formData.append('chapter', chapterTitle);
+        formData.append('start_page', String(chunkStartPage));
+        formData.append('total_pages', String(totalFiles));
+        if (threadId) formData.append('thread_id', String(threadId));
+
+        const effectiveKey = uploadKey?.trim()
+          || (typeof window !== 'undefined' && localStorage.getItem(TELEGRAM_UPLOAD_KEY_STORAGE)?.trim())
+          || '';
+        const headers = {};
+        if (effectiveKey) headers['X-Upload-Key'] = effectiveKey;
+
+        const res = await fetch(`${TELEGRAM_CDN_DOMAIN}/upload-album`, {
+          method: 'POST',
+          headers,
+          body: formData
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success && Array.isArray(data.results)) {
+          data.results.forEach(r => {
+            urls.push(r.url);
+          });
+          uploadedCount += chunk.length;
+          chunkSuccess = true;
+          if (onProgress) {
+            onProgress(uploadedCount, totalFiles, `Đã đăng cục album ${Math.floor(i / batchSize) + 1} (${uploadedCount}/${totalFiles})`);
+          }
+          break;
+        }
+
+        if (res.status === 429) {
+          console.warn(`[Telegram FloodWait] Chờ 5s...`);
+          await new Promise(r => setTimeout(r, 5000));
+          continue;
+        }
+
+        throw new Error(data.error || `HTTP ${res.status}`);
       } catch (err) {
         lastError = err;
-        console.warn(`Lan thu ${attempts} tai ${file.name} len Telegram qua Worker that bai:`, err.message);
-        if (attempts < 3) {
-          await new Promise(r => setTimeout(r, 1000 * attempts));
+        console.warn(`Thử lại album (${chunkStartPage}-${chunkStartPage + chunk.length - 1}) lần ${attempt}:`, err.message);
+        if (attempt < 3) {
+          await new Promise(r => setTimeout(r, 1500 * attempt));
         }
       }
     }
 
-    if (!uploaded) {
-      throw new Error(`Telegram upload loi tai file "${file.name}": ${lastError?.message || 'Khong ro nguyen nhan'}`);
+    if (!chunkSuccess) {
+      throw new Error(`Tải Album (${chunkStartPage}-${chunkStartPage + chunk.length - 1}) thất bại: ${lastError?.message || 'Không rõ nguyên nhân'}`);
     }
 
-    if (i < files.length - 1) {
-      await new Promise(r => setTimeout(r, 150));
+    // Nghỉ nhẹ giữa các album để Telegram xử lý collage
+    if (i + batchSize < totalFiles) {
+      await new Promise(r => setTimeout(r, 300));
     }
   }
 
-  if (onProgress) onProgress(files.length, files.length, 'Done');
+  if (onProgress) onProgress(totalFiles, totalFiles, 'Done');
   return urls;
 }
 
