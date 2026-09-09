@@ -30,7 +30,7 @@ function MangaForm({
   onSaveManga,
   onCancelEdit
 }) {
-  const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'imgbb');
+  const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'telegram');
   const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem(IMGBB_API_KEY_STORAGE) || '');
   const [freeimageKey, setFreeimageKey] = useState(() => localStorage.getItem(FREEIMAGE_API_KEY_STORAGE) || '');
   const [uploadMode, setUploadMode] = useState('epub'); // 'epub', 'folder', 'single' or 'url'
@@ -191,7 +191,7 @@ function MangaForm({
 
       setParsedChapters([]);
       setUploadProgress(null);
-      const serverLabel = storageProvider === 'catbox' ? 'Catbox.moe' : (storageProvider === 'freeimage' ? 'FreeImage.host' : 'ImgBB');
+      const serverLabel = storageProvider === 'telegram' ? 'Telegram CDN' : (storageProvider === 'catbox' ? 'Catbox.moe' : (storageProvider === 'freeimage' ? 'FreeImage.host' : 'ImgBB'));
       alert(`Đã upload thành công ${addedChapters.length} chapter lên ${serverLabel}!`);
       return addedChapters;
     } catch (err) {
@@ -524,7 +524,36 @@ function MangaForm({
         </div>
 
         {/* Provider selection buttons */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.6rem', marginBottom: '0.8rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.6rem', marginBottom: '0.8rem' }}>
+          {/* Telegram CDN - Recommended */}
+          <button
+            type="button"
+            onClick={() => handleProviderChange('telegram')}
+            style={{
+              padding: '0.65rem 0.8rem',
+              borderRadius: '8px',
+              border: `2px solid ${storageProvider === 'telegram' ? '#3b82f6' : 'rgba(255, 255, 255, 0.1)'}`,
+              backgroundColor: storageProvider === 'telegram' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+              color: storageProvider === 'telegram' ? '#60a5fa' : 'var(--color-text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: '0.2rem',
+              textAlign: 'left',
+              transition: 'all 0.2s'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 700, fontSize: '0.85rem', flexWrap: 'wrap' }}>
+              <Layers size={14} /> Telegram CDN
+              <span style={{ fontSize: '0.62rem', padding: '1px 5px', borderRadius: '4px', backgroundColor: '#3b82f6', color: '#fff', fontWeight: 700 }}>
+                KHUYÊN DÙNG
+              </span>
+            </div>
+            <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>
+              Lưu trữ vô hạn, không giới hạn lượt tải, tốc độ cực nhanh
+            </span>
+          </button>
           {/* Catbox.moe - Recommended */}
           <button
             type="button"

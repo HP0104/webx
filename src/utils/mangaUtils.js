@@ -37,11 +37,19 @@ export const IMGBB_DEFAULT_KEYS = [
   '1808feec63ae10b325c569773e9b60b6'
 ];
 
+export const TELEGRAM_CDN_DOMAIN = 'https://img-cdn.takarvn.workers.dev';
+export const TELEGRAM_UPLOAD_KEY_STORAGE = 'web18p_telegram_upload_key';
+
 export const MANGA_STORAGE_PROVIDERS = {
+  telegram: {
+    id: 'telegram',
+    name: 'Telegram CDN (Khuyên dùng)',
+    description: 'Lưu trữ vô hạn, không giới hạn lượt tải, phát ảnh qua Cloudflare Edge Caching siêu tốc tại VN.'
+  },
   imgbb: {
     id: 'imgbb',
-    name: 'ImgBB (Khuyên dùng)',
-    description: 'Upload trực tiếp từ trình duyệt, đã tích hợp sẵn 5 API Key xoay vòng tự động. Ảnh lưu vĩnh viễn.'
+    name: 'ImgBB',
+    description: 'Upload trực tiếp từ trình duyệt, có 5 API Key xoay vòng nhưng dễ bị giới hạn 300 ảnh/ngày.'
   },
   catbox: {
     id: 'catbox',
@@ -895,13 +903,152 @@ export async function uploadMultipleToCatbox(files, onProgress, options = {}) {
   return urls;
 }
 
+// ============ TELEGRAM CLOUD STORAGE UPLOAD ============
+
+/**
+ * Upload a single image file to Telegram Channel via Bot API + Cloudflare Edge Cache
+ * @param {File} file - Image file to upload
+ * @param {string} customName - Optional custom title/filename
+ * @param {boolean} shouldOptimize - Whether to auto-compress to WebP
+ * @param {string} botToken - Telegram Bot Token
+ * @param {string} chatId - Telegram Channel Chat ID
+ * @returns {Promise<{url: string, thumb: string, fileId: string}>}
+ */
+export async function uploadToTelegram(file, customName = '', shouldOptimize = true, uploadKey = '') {
+  let fileToUpload = file;
+  if (shouldOptimize) {
+    try {
+      fileToUpload = await optimizeMangaImage(file, { customName });
+    } catch (e) {
+      console.warn('Image optimization skipped:', e);
+      fileToUpload = file;
+    }
+  }
+
+  const fileName = customName
+    ? (customName.endsWith('.webp') ? customName : `${customName}.webp`)
+    : fileToUpload.name;
+
+  const formData = new FormData();
+  formData.append('file', fileToUpload, fileName);
+
+  const effectiveKey = uploadKey?.trim()
+    || (typeof window !== 'undefined' && localStorage.getItem(TELEGRAM_UPLOAD_KEY_STORAGE)?.trim())
+    || '';
+
+  const headers = {};
+  if (effectiveKey) {
+    headers['X-Upload-Key'] = effectiveKey;
+  }
+
+  let lastError = null;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      const response = await fetch(`${TELEGRAM_CDN_DOMAIN}/upload`, {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success && result.url) {
+        return {
+          url: result.url,
+          thumb: result.url,
+          fileId: result.file_id || ''
+        };
+      }
+
+      if (response.status === 429) {
+        const waitSec = 3 * attempt;
+        console.warn(`[Telegram Upload RateLimit] Chờ ${waitSec}s...`);
+        await new Promise(r => setTimeout(r, waitSec * 1000));
+        continue;
+      }
+
+      throw new Error(result.error || `Lỗi tải ảnh HTTP ${response.status}`);
+    } catch (err) {
+      lastError = err;
+      if (attempt < 4) {
+        await new Promise(r => setTimeout(r, 1000 * attempt));
+      }
+    }
+  }
+
+  throw new Error(`Telegram upload thất bại: ${lastError?.message || 'Không rõ nguyên nhân'}`);
+}
+
+/**
+ * Upload multiple images to Telegram via Cloudflare Worker Proxy
+ *
+ * @param {File[]} files - Array of image files
+ * @param {function} onProgress - Callback(uploaded, total, currentFileName)
+ * @param {object} options - { namePrefix, chapterTitle, nameGenerator, uploadKey }
+ * @returns {Promise<string[]>} Array of image URLs
+ */
+export async function uploadMultipleToTelegram(files, onProgress, options = {}) {
+  const urls = [];
+  const { namePrefix = '', chapterTitle = '', nameGenerator = null, uploadKey = '' } = options;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    let customName = '';
+
+    if (typeof nameGenerator === 'function') {
+      customName = nameGenerator(file, i, files.length);
+    } else if (namePrefix) {
+      const padLen = files.length >= 100 ? 3 : 2;
+      const numStr = String(i + 1).padStart(padLen, '0');
+      const prefix = [namePrefix, chapterTitle].filter(Boolean).join(' ');
+      customName = `${prefix} ${numStr}`;
+    }
+
+    if (onProgress) onProgress(i, files.length, customName || file.name);
+
+    let uploaded = false;
+    let lastError = null;
+    let attempts = 0;
+
+    while (!uploaded && attempts < 3) {
+      attempts++;
+      try {
+        const result = await uploadToTelegram(file, customName, true, uploadKey);
+        urls.push(result.url);
+        uploaded = true;
+      } catch (err) {
+        lastError = err;
+        console.warn(`Lần thử ${attempts} tải ${file.name} lên Telegram qua Worker thất bại:`, err.message);
+        if (attempts < 3) {
+          await new Promise(r => setTimeout(r, 1000 * attempts));
+        }
+      }
+    }
+
+    if (!uploaded) {
+      throw new Error(`Telegram upload lỗi tại file "${file.name}": ${lastError?.message || 'Không rõ nguyên nhân'}`);
+    }
+
+    // Polite delay between requests
+    if (i < files.length - 1) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
+
+  if (onProgress) onProgress(files.length, files.length, 'Done');
+  return urls;
+}
+
 // ============ UNIFIED UPLOAD HELPERS ============
 
 /**
  * Upload a single image file using the selected provider
  */
 export async function uploadSingleMangaImage(file, options = {}) {
-  const { provider = 'imgbb', apiKey = '', customName = '', shouldOptimize = true, isNsfw = true } = options;
+  const { provider = 'telegram', apiKey = '', customName = '', shouldOptimize = true, isNsfw = true, botToken = '', chatId = '' } = options;
+  if (provider === 'telegram') {
+    return uploadToTelegram(file, customName, shouldOptimize, options.uploadKey || '');
+  }
   if (provider === 'catbox') {
     return uploadToCatbox(file, customName, shouldOptimize);
   }
@@ -915,7 +1062,10 @@ export async function uploadSingleMangaImage(file, options = {}) {
  * Upload multiple images using the selected provider
  */
 export async function uploadMultipleMangaImages(files, onProgress, options = {}) {
-  const { provider = 'imgbb', apiKey = '', isNsfw = true, ...restOptions } = options;
+  const { provider = 'telegram', apiKey = '', isNsfw = true, botToken = '', chatId = '', ...restOptions } = options;
+  if (provider === 'telegram') {
+    return uploadMultipleToTelegram(files, onProgress, restOptions);
+  }
   if (provider === 'catbox') {
     return uploadMultipleToCatbox(files, onProgress, restOptions);
   }
