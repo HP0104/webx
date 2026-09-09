@@ -422,16 +422,21 @@ export default {
       rawPath = rawPath.replace(/\.(jpg|jpeg|png|webp|gif|bmp)$/i, "");
 
       const segments = rawPath.split("/").filter(Boolean);
+      const lastSegment = segments[segments.length - 1] || "";
+
       let fileId = lastSegment;
-      // Bóc tách tiền tố số trang (p01_...) mà không làm đứt file_id chứa dấu gạch dưới
-      if (/^p\d+_/i.test(lastSegment)) {
-        fileId = lastSegment.replace(/^p\d+_/i, "");
+      // Bóc tách tiền tố số trang (p01_..., page1_..., 01_...) mà KHÔNG làm đứt file_id chứa dấu gạch dưới
+      if (/^(p\d+|page\d*|\d+)_/i.test(lastSegment)) {
+        fileId = lastSegment.replace(/^(p\d+|page\d*|\d+)_/i, "");
       } else if (lastSegment.includes("---")) {
         fileId = lastSegment.split("---").pop();
       }
 
       if (!fileId) {
-        return new Response("Thiếu file_id", { status: 400 });
+        return new Response("Thiếu file_id", {
+          status: 400,
+          headers: { "Cache-Control": "no-cache, no-store", "Access-Control-Allow-Origin": "*" }
+        });
       }
 
       const cache = caches.default;
@@ -442,6 +447,7 @@ export default {
         const res = new Response(cachedResponse.body, cachedResponse);
         res.headers.set("X-Cache-Status", "HIT");
         res.headers.set("Content-Disposition", "inline");
+        res.headers.set("Access-Control-Allow-Origin", "*");
         let ct = res.headers.get("Content-Type") || "";
         if (!ct.startsWith("image/")) {
           res.headers.set("Content-Type", "image/jpeg");
@@ -453,15 +459,28 @@ export default {
         const getFileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
         const getFileData = await getFileRes.json();
 
-        if (!getFileData.ok || !getFileData.result.file_path) {
-          return new Response("Ảnh không tồn tại trên Telegram!", { status: 404 });
+        if (!getFileData.ok || !getFileData.result || !getFileData.result.file_path) {
+          const errMsg = getFileData.description || "Telegram không tìm thấy file hoặc file_id không hợp lệ";
+          return new Response(`Ảnh không tồn tại trên Telegram! (${errMsg})`, {
+            status: 404,
+            headers: {
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Access-Control-Allow-Origin": "*"
+            }
+          });
         }
 
         const filePath = getFileData.result.file_path;
         const imageRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`);
 
         if (!imageRes.ok) {
-          return new Response("Lỗi khi tải ảnh từ Telegram", { status: imageRes.status });
+          return new Response(`Lỗi khi tải ảnh từ Telegram: ${imageRes.statusText}`, {
+            status: imageRes.status,
+            headers: {
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Access-Control-Allow-Origin": "*"
+            }
+          });
         }
 
         let contentType = "image/jpeg";
@@ -482,7 +501,13 @@ export default {
 
         return responseToCache;
       } catch (err) {
-        return new Response("Lỗi proxy: " + err.message, { status: 500 });
+        return new Response("Lỗi proxy: " + err.message, {
+          status: 500,
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Access-Control-Allow-Origin": "*"
+          }
+        });
       }
     }
 
