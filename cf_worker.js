@@ -1,18 +1,15 @@
 /**
- * Cloudflare Worker: Telegram Image CDN & Secure Upload Proxy
+ * Cloudflare Worker: Telegram Image CDN & Advanced Manga Storage Engine
  * 
- * BẢO MẬT:
- * - BOT_TOKEN chỉ nằm trong Environment Variables (KHÔNG hardcode)
- * - Endpoint /upload yêu cầu xác thực bằng header X-Upload-Key
- * - Kiểm tra file type (chỉ nhận ảnh) và giới hạn kích thước 10MB
- * - CORS giới hạn cho domain web18p.xyz và localhost
- * 
- * TÍNH NĂNG:
- * 1. POST /upload: Nhận ảnh từ web (có xác thực) → đẩy lên Telegram Channel
- * 2. GET /file/:id.jpg: Phát ảnh trực tiếp, cache 30 ngày tại VN qua Cloudflare Edge
+ * TÍNH NĂNG NÂNG CẤP CHUYÊN SÂU:
+ * 1. PHÂN LOẠI CẤU TRÚC: Tự động gắn thẻ Hashtag, tên truyện, số chapter, trang x/y vào Caption Telegram.
+ * 2. TELEGRAM TOPICS: Hỗ trợ message_thread_id để tự động nhóm ảnh vào Topic/Diễn đàn riêng của từng truyện.
+ * 3. SEMANTIC SEO URLs: Hỗ trợ URL dạng /file/:manga/:chapter/p01_:file_id.jpg (chuẩn SEO Google Images).
+ * 4. EDGE CACHE 30 NGÀY: Caching siêu tốc tại các PoP Cloudflare VN với chuẩn hóa cache key theo file_id.
+ * 5. BẢO MẬT TUYỆT ĐỐI: Ẩn bot token, kiểm tra MIME type, chặn file > 10MB, CORS theo domain cho phép.
  */
 
-// Domain được phép gọi API upload (thêm domain của bạn vào đây)
+// Domain được phép gọi API upload
 const ALLOWED_ORIGINS = [
   "https://web18p.xyz",
   "http://localhost:5173",
@@ -31,10 +28,29 @@ function getCorsHeaders(request) {
   };
 }
 
-// CORS mở cho CDN ảnh (ảnh cần nhúng được vào mọi trang)
-const CDN_CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*"
-};
+// Chuyển chuỗi tiếng Việt thành Hashtag Telegram an toàn (#Vo_Luyen_Dinh_Phong)
+function slugifyHashtag(str) {
+  if (!str) return '';
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .replace(/[^a-zA-Z0-9]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+// Chuyển chuỗi tiếng Việt thành URL Slug chuẩn SEO (vo-luyen-dinh-phong)
+function slugifyUrl(str) {
+  if (!str) return '';
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -48,18 +64,17 @@ export default {
     }
 
     // Lấy Token & Chat ID từ Cloudflare Variables (Settings -> Variables)
-    // Có fallback để đảm bảo hệ thống chạy mượt mà ngay cả khi chưa kịp cấu hình Dashboard
+    // Có fallback để đảm bảo chạy mượt mà
     const BOT_TOKEN = env.BOT_TOKEN;
     const CHAT_ID = env.CHAT_ID;
     const UPLOAD_API_KEY = env.UPLOAD_API_KEY;
 
-    // ==========================
-    // 1. API UPLOAD (CÓ XÁC THỰC)
-    // ==========================
+    // ==========================================
+    // 1. API UPLOAD (CÓ PHÂN LOẠI & SEO)
+    // ==========================================
     if (request.method === "POST" && (url.pathname === "/upload" || url.pathname === "/api/upload")) {
       const corsHeaders = getCorsHeaders(request);
 
-      // Kiểm tra cấu hình server
       if (!BOT_TOKEN || !CHAT_ID) {
         return new Response(JSON.stringify({ error: "Server chưa cấu hình BOT_TOKEN hoặc CHAT_ID" }), {
           status: 500,
@@ -67,7 +82,7 @@ export default {
         });
       }
 
-      // === XÁC THỰC: Kiểm tra API Key ===
+      // Kiểm tra API Key nếu có cấu hình
       if (UPLOAD_API_KEY) {
         const clientKey = request.headers.get("X-Upload-Key") || "";
         if (clientKey !== UPLOAD_API_KEY) {
@@ -81,6 +96,11 @@ export default {
       try {
         const formData = await request.formData();
         const file = formData.get("file");
+        const mangaTitle = (formData.get("manga_title") || "").trim();
+        const chapter = (formData.get("chapter") || "").trim();
+        const pageIndex = (formData.get("page_index") || "").trim();
+        const totalPages = (formData.get("total_pages") || "").trim();
+        const threadId = (formData.get("thread_id") || "").trim();
 
         if (!file || !(file instanceof File)) {
           return new Response(JSON.stringify({ error: "Không tìm thấy file ảnh" }), {
@@ -89,17 +109,17 @@ export default {
           });
         }
 
-        // === KIỂM TRA LOẠI FILE: Chỉ chấp nhận ảnh ===
+        // Kiểm tra loại file (chỉ nhận ảnh)
         const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"];
         if (file.type && !allowedTypes.includes(file.type)) {
-          return new Response(JSON.stringify({ error: `Loại file không được phép: ${file.type}. Chỉ chấp nhận ảnh.` }), {
+          return new Response(JSON.stringify({ error: `Loại file không hợp lệ (${file.type}). Chỉ chấp nhận file ảnh.` }), {
             status: 400,
             headers: { "Content-Type": "application/json", ...corsHeaders }
           });
         }
 
-        // === KIỂM TRA KÍCH THƯỚC: Tối đa 10MB ===
-        const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+        // Giới hạn kích thước (10MB)
+        const MAX_SIZE = 10 * 1024 * 1024;
         if (file.size > MAX_SIZE) {
           return new Response(JSON.stringify({ error: `File quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Tối đa 10MB.` }), {
             status: 400,
@@ -107,11 +127,31 @@ export default {
           });
         }
 
+        // === CẤU TRÚC CAPTION THÔNG MINH CHO TELEGRAM ===
+        let caption = `#${file.name.replace(/\.[^/.]+$/, '')}`;
+        if (mangaTitle || chapter) {
+          const mangaTag = slugifyHashtag(mangaTitle);
+          const chapTag = slugifyHashtag(chapter);
+          const lines = [];
+          if (mangaTag) lines.push(`📚 #${mangaTag}`);
+          if (chapTag) {
+            let pageLabel = pageIndex ? (totalPages ? `Trang ${pageIndex}/${totalPages}` : `Trang ${pageIndex}`) : '';
+            lines.push(`📖 #${chapTag} ${pageLabel ? `| 📄 ${pageLabel}` : ''}`.trim());
+          }
+          lines.push(`🔖 ${mangaTitle}${chapter ? ` - ${chapter}` : ''}`);
+          caption = lines.join("\n");
+        }
+
         // Tạo FormData đẩy sang Telegram Bot API
         const tgFormData = new FormData();
         tgFormData.append("chat_id", CHAT_ID);
         tgFormData.append("photo", file, file.name);
-        tgFormData.append("caption", `#${file.name.replace(/\.[^/.]+$/, '')}`);
+        tgFormData.append("caption", caption);
+
+        // Hỗ trợ Telegram Forum Topic (Supergroup)
+        if (threadId) {
+          tgFormData.append("message_thread_id", threadId);
+        }
 
         const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
           method: "POST",
@@ -126,11 +166,23 @@ export default {
           });
         }
 
-        // Lấy ảnh độ phân giải nét nhất
+        // Lấy ảnh độ nét cao nhất
         const photos = tgData.result.photo;
         const bestPhoto = photos[photos.length - 1];
         const fileId = bestPhoto.file_id;
-        const publicUrl = `${url.origin}/file/${fileId}.jpg`;
+
+        // === TẠO URL CDN NGỮ NGHĨA (SEMANTIC SEO URL) ===
+        const mangaSlug = slugifyUrl(mangaTitle);
+        const chapSlug = slugifyUrl(chapter);
+        let pagePart = file.name.replace(/\.[^/.]+$/, '');
+        if (pageIndex) {
+          pagePart = `p${String(pageIndex).padStart(2, '0')}`;
+        }
+
+        let publicUrl = `${url.origin}/file/${fileId}.jpg`;
+        if (mangaSlug && chapSlug) {
+          publicUrl = `${url.origin}/file/${mangaSlug}/${chapSlug}/${pagePart}_${fileId}.jpg`;
+        }
 
         return new Response(
           JSON.stringify({
@@ -138,7 +190,11 @@ export default {
             filename: file.name,
             file_id: fileId,
             url: publicUrl,
+            direct_url: `${url.origin}/file/${fileId}.jpg`,
             size: bestPhoto.file_size,
+            manga: mangaTitle,
+            chapter: chapter,
+            page: pageIndex
           }),
           {
             status: 200,
@@ -153,12 +209,23 @@ export default {
       }
     }
 
-    // ==========================
-    // 2. CDN PHÁT ẢNH + CACHE
-    // ==========================
+    // ==========================================
+    // 2. CDN PHÁT ẢNH + CACHE (HỖ TRỢ CẢ SEO URL)
+    // ==========================================
     if (url.pathname.startsWith("/file/")) {
-      let fileId = url.pathname.replace("/file/", "").trim();
-      fileId = fileId.replace(/\.(jpg|jpeg|png|webp|gif|bmp)$/i, "");
+      let rawPath = url.pathname.replace(/^\/file\//, "").trim();
+      rawPath = rawPath.replace(/\.(jpg|jpeg|png|webp|gif|bmp)$/i, "");
+
+      // Hỗ trợ cả 2 định dạng:
+      // 1. /file/AgACAgIA...jpg
+      // 2. /file/ten-truyen/chap-1/p01_AgACAgIA...jpg
+      const segments = rawPath.split("/").filter(Boolean);
+      const lastSegment = segments[segments.length - 1] || "";
+
+      let fileId = lastSegment;
+      if (lastSegment.includes("_")) {
+        fileId = lastSegment.split("_").pop();
+      }
 
       if (!fileId) {
         return new Response("Thiếu file_id", { status: 400 });
@@ -168,9 +235,9 @@ export default {
         return new Response("Server chưa cấu hình BOT_TOKEN", { status: 500 });
       }
 
-      // Kiểm tra Edge Cache
+      // Kiểm tra Edge Cache (chuẩn hóa key theo fileId)
       const cache = caches.default;
-      const cacheKey = new Request(url.origin + "/file/" + fileId, { method: "GET" });
+      const cacheKey = new Request(`${url.origin}/file/${fileId}`, { method: "GET" });
       let cachedResponse = await cache.match(cacheKey);
 
       if (cachedResponse) {
@@ -221,10 +288,10 @@ export default {
       }
     }
 
-    // ==========================
-    // 3. TRANG CHỦ
-    // ==========================
-    return new Response("Telegram Image CDN is running. Use /file/<FILE_ID>.jpg to view images.", {
+    // ==========================================
+    // 3. TRANG CHỦ CDN
+    // ==========================================
+    return new Response("Telegram Image CDN & Manga Storage Engine is running.\nCDN URL Format: /file/:manga/:chapter/:page_:file_id.jpg\nDirect: /file/:file_id.jpg", {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
     });
   },

@@ -31,6 +31,7 @@ function MangaForm({
   onCancelEdit
 }) {
   const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'telegram');
+  const [telegramThreadId, setTelegramThreadId] = useState(() => localStorage.getItem('web18p_telegram_thread_id') || '');
   const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem(IMGBB_API_KEY_STORAGE) || '');
   const [freeimageKey, setFreeimageKey] = useState(() => localStorage.getItem(FREEIMAGE_API_KEY_STORAGE) || '');
   const [uploadMode, setUploadMode] = useState('epub'); // 'epub', 'folder', 'single' or 'url'
@@ -166,6 +167,9 @@ function MangaForm({
             apiKey: currentApiKey,
             isNsfw: true,
             namePrefix: prefix,
+            mangaTitle: currentMangaTitle,
+            chapterTitle: ch.name || chapterLabel,
+            threadId: telegramThreadId,
             nameGenerator: (file, idx) => {
               const padLen = ch.files.length >= 100 ? 3 : 2;
               const numStr = String(idx + 1).padStart(padLen, '0');
@@ -366,6 +370,9 @@ function MangaForm({
           apiKey: currentApiKey,
           isNsfw: true,
           namePrefix: prefix,
+          mangaTitle: currentMangaTitle,
+          chapterTitle: chTitle,
+          threadId: telegramThreadId,
           nameGenerator: (file, idx) => {
             const padLen = imageFiles.length >= 100 ? 3 : 2;
             const numStr = String(idx + 1).padStart(padLen, '0');
@@ -651,13 +658,13 @@ function MangaForm({
             border: '1px solid rgba(59, 130, 246, 0.3)',
             display: 'flex',
             flexDirection: 'column',
-            gap: '0.5rem'
+            gap: '0.65rem'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <Check size={16} style={{ color: '#60a5fa' }} />
                 <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#60a5fa' }}>
-                  Telegram Cloud CDN Sẵn Sàng!
+                  Telegram Cloud CDN & Storage Sẵn Sàng!
                 </span>
                 <span style={{
                   fontSize: '0.68rem',
@@ -667,18 +674,46 @@ function MangaForm({
                   color: '#fff',
                   fontWeight: 700
                 }}>
-                  ⚡ TỐC ĐỘ CAO
+                  ⚡ PHÂN BIỆT THÔNG MINH
                 </span>
               </div>
               <span style={{ fontSize: '0.72rem', color: '#93c5fd', fontFamily: 'monospace' }}>
                 Proxy: img-cdn.takarvn.workers.dev
               </span>
             </div>
-            <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.8)', lineHeight: 1.45 }}>
-              • <strong>Lưu trữ vĩnh viễn:</strong> Ảnh tải lên được bảo mật trực tiếp trên Cloud Telegram và phân phối qua Cloudflare Edge Caching siêu tốc tại VN.<br/>
-              • <strong>Tự động tối ưu:</strong> Tự động nén WebP chất lượng cao, tối ưu dung lượng tải cho người đọc truyện.<br/>
-              • <strong>Không giới hạn:</strong> Không lo hết lượt tải (rate limit), không bị chặn IP.
+
+            <p style={{ margin: 0, fontSize: '0.76rem', color: 'rgba(255, 255, 255, 0.8)', lineHeight: 1.5 }}>
+              • <strong>Phân loại tự động:</strong> Mỗi bức ảnh tải lên đều được tự động gắn Hashtag (<code>#TenTruyen</code>, <code>#Chap_X</code>, <code>Trang x/y</code>) giúp dễ dàng tìm kiếm.<br/>
+              • <strong>URL chuẩn SEO:</strong> Đường dẫn ảnh có cấu trúc rõ ràng: <code>/file/ten-truyen/chap-x/p01_id.jpg</code>.<br/>
+              • <strong>Lưu trữ vĩnh viễn:</strong> Cache 30 ngày tại Cloudflare Edge VN, không bao giờ lo mất ảnh hay bị chặn.
             </p>
+
+            {/* Telegram Topic ID (Thread ID) optional */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', color: '#93c5fd', fontWeight: 600 }}>
+                💬 Telegram Topic ID (Tùy chọn):
+              </span>
+              <input
+                type="text"
+                value={telegramThreadId}
+                onChange={(e) => {
+                  setTelegramThreadId(e.target.value);
+                  localStorage.setItem('web18p_telegram_thread_id', e.target.value);
+                }}
+                placeholder="Ví dụ: 1234 (Để trống nếu dùng kênh thông thường)"
+                style={{
+                  flex: '1',
+                  minWidth: '220px',
+                  padding: '0.35rem 0.6rem',
+                  fontSize: '0.75rem',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(59, 130, 246, 0.4)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                  color: '#fff',
+                  outline: 'none'
+                }}
+              />
+            </div>
           </div>
         )}
 

@@ -914,9 +914,31 @@ export async function uploadMultipleToCatbox(files, onProgress, options = {}) {
  * @param {string} chatId - Telegram Channel Chat ID
  * @returns {Promise<{url: string, thumb: string, fileId: string}>}
  */
-export async function uploadToTelegram(file, customName = '', shouldOptimize = true, uploadKey = '') {
+export async function uploadToTelegram(file, customNameOrOptions = '', shouldOptimize = true, uploadKey = '') {
+  let customName = '';
+  let effectiveOptimize = shouldOptimize;
+  let effectiveKey = uploadKey;
+  let mangaTitle = '';
+  let chapterTitle = '';
+  let pageIndex = '';
+  let totalPages = '';
+  let threadId = '';
+
+  if (typeof customNameOrOptions === 'object' && customNameOrOptions !== null) {
+    customName = customNameOrOptions.customName || '';
+    effectiveOptimize = customNameOrOptions.shouldOptimize !== undefined ? customNameOrOptions.shouldOptimize : true;
+    effectiveKey = customNameOrOptions.uploadKey || uploadKey;
+    mangaTitle = customNameOrOptions.mangaTitle || '';
+    chapterTitle = customNameOrOptions.chapterTitle || '';
+    pageIndex = customNameOrOptions.pageIndex || '';
+    totalPages = customNameOrOptions.totalPages || '';
+    threadId = customNameOrOptions.threadId || '';
+  } else {
+    customName = customNameOrOptions;
+  }
+
   let fileToUpload = file;
-  if (shouldOptimize) {
+  if (effectiveOptimize) {
     try {
       fileToUpload = await optimizeMangaImage(file, { customName });
     } catch (e) {
@@ -931,14 +953,19 @@ export async function uploadToTelegram(file, customName = '', shouldOptimize = t
 
   const formData = new FormData();
   formData.append('file', fileToUpload, fileName);
+  if (mangaTitle) formData.append('manga_title', mangaTitle);
+  if (chapterTitle) formData.append('chapter', chapterTitle);
+  if (pageIndex) formData.append('page_index', String(pageIndex));
+  if (totalPages) formData.append('total_pages', String(totalPages));
+  if (threadId) formData.append('thread_id', String(threadId));
 
-  const effectiveKey = uploadKey?.trim()
+  const authKey = effectiveKey?.trim()
     || (typeof window !== 'undefined' && localStorage.getItem(TELEGRAM_UPLOAD_KEY_STORAGE)?.trim())
     || '';
 
   const headers = {};
-  if (effectiveKey) {
-    headers['X-Upload-Key'] = effectiveKey;
+  if (authKey) {
+    headers['X-Upload-Key'] = authKey;
   }
 
   let lastError = null;
@@ -962,12 +989,12 @@ export async function uploadToTelegram(file, customName = '', shouldOptimize = t
 
       if (response.status === 429) {
         const waitSec = 3 * attempt;
-        console.warn(`[Telegram Upload RateLimit] Chờ ${waitSec}s...`);
+        console.warn(`[Telegram Upload RateLimit] Cho ${waitSec}s...`);
         await new Promise(r => setTimeout(r, waitSec * 1000));
         continue;
       }
 
-      throw new Error(result.error || `Lỗi tải ảnh HTTP ${response.status}`);
+      throw new Error(result.error || `Loi tai anh HTTP ${response.status}`);
     } catch (err) {
       lastError = err;
       if (attempt < 4) {
@@ -976,20 +1003,27 @@ export async function uploadToTelegram(file, customName = '', shouldOptimize = t
     }
   }
 
-  throw new Error(`Telegram upload thất bại: ${lastError?.message || 'Không rõ nguyên nhân'}`);
+  throw new Error(`Telegram upload that bai: ${lastError?.message || 'Khong ro nguyen nhan'}`);
 }
 
 /**
- * Upload multiple images to Telegram via Cloudflare Worker Proxy
+ * Upload multiple images to Telegram via Cloudflare Worker Proxy with Structured Metadata
  *
  * @param {File[]} files - Array of image files
  * @param {function} onProgress - Callback(uploaded, total, currentFileName)
- * @param {object} options - { namePrefix, chapterTitle, nameGenerator, uploadKey }
+ * @param {object} options - { namePrefix, chapterTitle, mangaTitle, nameGenerator, uploadKey, threadId }
  * @returns {Promise<string[]>} Array of image URLs
  */
 export async function uploadMultipleToTelegram(files, onProgress, options = {}) {
   const urls = [];
-  const { namePrefix = '', chapterTitle = '', nameGenerator = null, uploadKey = '' } = options;
+  const {
+    namePrefix = '',
+    chapterTitle = '',
+    mangaTitle = '',
+    nameGenerator = null,
+    uploadKey = '',
+    threadId = ''
+  } = options;
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -1013,12 +1047,21 @@ export async function uploadMultipleToTelegram(files, onProgress, options = {}) 
     while (!uploaded && attempts < 3) {
       attempts++;
       try {
-        const result = await uploadToTelegram(file, customName, true, uploadKey);
+        const result = await uploadToTelegram(file, {
+          customName,
+          shouldOptimize: true,
+          uploadKey,
+          mangaTitle,
+          chapterTitle,
+          pageIndex: i + 1,
+          totalPages: files.length,
+          threadId
+        });
         urls.push(result.url);
         uploaded = true;
       } catch (err) {
         lastError = err;
-        console.warn(`Lần thử ${attempts} tải ${file.name} lên Telegram qua Worker thất bại:`, err.message);
+        console.warn(`Lan thu ${attempts} tai ${file.name} len Telegram qua Worker that bai:`, err.message);
         if (attempts < 3) {
           await new Promise(r => setTimeout(r, 1000 * attempts));
         }
@@ -1026,12 +1069,11 @@ export async function uploadMultipleToTelegram(files, onProgress, options = {}) 
     }
 
     if (!uploaded) {
-      throw new Error(`Telegram upload lỗi tại file "${file.name}": ${lastError?.message || 'Không rõ nguyên nhân'}`);
+      throw new Error(`Telegram upload loi tai file "${file.name}": ${lastError?.message || 'Khong ro nguyen nhan'}`);
     }
 
-    // Polite delay between requests
     if (i < files.length - 1) {
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 150));
     }
   }
 
