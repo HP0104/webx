@@ -264,7 +264,8 @@ function VideoDetail() {
             (() => {
               const TRUSTED_DOMAINS = [
                 'streamtape.com', 'streamtape.to',
-                'filemoon.sx', 'filemoon.to', 'filemoon.in',
+                'filemoon.sx', 'filemoon.to', 'filemoon.in', 'fmoonembed.com',
+                'streamhg.com', 'hgcloud.to', 'vibuxer.com', 'huntrexus.com',
                 'doodstream.com', 'dood.pm', 'dood.to', 'dood.so', 'dood.watch', 'dood.wf', 'ds2play.com', 'd0000d.com',
                 'upstream.to',
                 'mixdrop.co', 'mixdrop.to', 'mixdrop.sx',

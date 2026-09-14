@@ -144,7 +144,7 @@ function VideoForm({
             <input
               type="text"
               className="input-field"
-              placeholder="Link Video (Filemoon, Doodstream, VOE, YouTube... hoặc paste code HTML/iframe)"
+              placeholder="Link Video (StreamHG, Filemoon, Doodstream, VOE, YouTube... hoặc paste code HTML/iframe)"
               value={videoData.videoUrl}
               onChange={e => handleUrlInput(e.target.value)}
               onPaste={handlePaste}

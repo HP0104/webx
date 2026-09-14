@@ -57,8 +57,8 @@ export function parseVideoUrl(input) {
     };
   }
 
-  // 3. Filemoon variants (filemoon.sx, filemoon.to, fmoonembed.com, hgcloud.to, vibuxer.com, etc.)
-  const fmMatch = url.match(/(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]*(?:filemoon|fmoonembed|fmoon|hgcloud|vibuxer)[a-zA-Z0-9.-]*)\/(?:(?:d|e|v|download)\/)?([a-zA-Z0-9_-]+)/i);
+  // 3. Filemoon / StreamHG variants (filemoon.sx, filemoon.to, fmoonembed.com, hgcloud.to, streamhg.com, vibuxer.com, etc.)
+  const fmMatch = url.match(/(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]*(?:filemoon|fmoonembed|fmoon|hgcloud|vibuxer|streamhg|hgstream|huntrexus)[a-zA-Z0-9.-]*)\/(?:(?:d|e|v|download)\/)?([a-zA-Z0-9_-]+)/i);
   if (fmMatch) {
     const domain = fmMatch[1];
     const id = fmMatch[2];
@@ -203,7 +203,11 @@ export function getVideoProviderName(url) {
   switch (parsed.provider) {
     case 'voe': return 'VOE.sx';
     case 'doodstream': return 'Doodstream / Doobstream';
-    case 'filemoon': return 'Filemoon';
+    case 'filemoon':
+      if (parsed.domain && (parsed.domain.includes('streamhg') || parsed.domain.includes('hgcloud') || parsed.domain.includes('huntrexus') || parsed.domain.includes('hgstream'))) {
+        return 'StreamHG';
+      }
+      return 'Filemoon';
     case 'streamtape': return 'Streamtape';
     case 'vidguard': return 'Vidguard';
     case 'lulustream': return 'Lulustream';
@@ -282,7 +286,10 @@ export function getDownloadUrl(url) {
   const parsed = parseVideoUrl(url);
   
   if (parsed.provider === 'filemoon') {
-    return `https://${parsed.domain}/d/${parsed.id}`;
+    let dlDomain = parsed.domain || 'streamhg.com';
+    if (dlDomain.includes('fmoonembed')) dlDomain = 'filemoon.sx';
+    if (dlDomain.includes('huntrexus')) dlDomain = 'streamhg.com';
+    return `https://${dlDomain}/d/${parsed.id}`;
   }
   if (parsed.provider === 'streamtape') {
     return `https://${parsed.domain}/v/${parsed.id}`;
