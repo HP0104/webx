@@ -131,7 +131,10 @@ class TelegramUploader:
                 if ext in IMAGE_EXTS:
                     images.append(os.path.join(root, f))
 
-        images.sort()
+        def natural_sort_key(s):
+            import re
+            return [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', os.path.basename(str(s)))]
+        images.sort(key=natural_sort_key)
         total = len(images)
         print(f"=== Bắt đầu upload {total} ảnh lên Telegram Channel ===")
 

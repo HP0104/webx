@@ -339,15 +339,34 @@ function MangaForm({
     }
 
     const imageFiles = Array.from(fileList)
-      .filter(f => f.type?.startsWith('image/'))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      .filter(isImageFile)
+      .sort((a, b) => naturalSort(a.name, b.name));
 
     if (imageFiles.length === 0) return alert('Không tìm thấy ảnh trong folder!');
 
     setIsUploading(true);
     const chapterNumber = (mangaData.chapters?.length || 0) + 1;
-    const currentMangaTitle = (mangaData.title || '').trim();
-    const chTitle = manualChapterTitle || `Chapter ${chapterNumber}`;
+    let currentMangaTitle = (mangaData.title || '').trim();
+
+    // Auto-detect chapter name and manga title from folder structure if not manually set
+    let detectedChName = '';
+    const samplePath = (imageFiles[0].webkitRelativePath || '').replace(/\\/g, '/');
+    const pathParts = samplePath.split('/').filter(Boolean);
+    if (pathParts.length >= 2) {
+      const cleanFolders = pathParts.slice(0, -1).filter(d => !['webp', 'raw', 'images', 'image', 'img', 'hardsub'].includes(d.toLowerCase().trim()));
+      if (cleanFolders.length > 0) {
+        const parsed = parseMangaTitleAndChapter(cleanFolders[cleanFolders.length - 1]);
+        if (parsed.chapterName && parsed.chapterName !== 'Chapter 1') {
+          detectedChName = parsed.chapterName;
+        }
+        if (!currentMangaTitle && parsed.title) {
+          currentMangaTitle = parsed.title;
+          setMangaData(prev => ({ ...prev, title: parsed.title }));
+        }
+      }
+    }
+
+    const chTitle = manualChapterTitle.trim() || detectedChName || `Chapter ${chapterNumber}`;
     const prefix = [currentMangaTitle, chTitle].filter(Boolean).join(' ');
     const currentApiKey = storageProvider === 'catbox' ? '' : (storageProvider === 'freeimage' ? freeimageKey : imgbbKey);
 

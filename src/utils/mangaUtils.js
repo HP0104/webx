@@ -1168,29 +1168,40 @@ export async function uploadMultipleMangaImages(files, onProgress, options = {})
 /**
  * Check if a file is an image based on extension/type
  */
-function isImageFile(file) {
+export function isImageFile(file) {
+  if (!file) return false;
   const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif'];
-  const ext = '.' + file.name.split('.').pop().toLowerCase();
+  const ext = '.' + (file.name || '').split('.').pop().toLowerCase();
   return file.type?.startsWith('image/') || imageExts.includes(ext);
 }
 
 /**
- * Natural sort comparator for filenames (001.jpg < 002.jpg < 10.jpg)
+ * Natural sort comparator for filenames (001.jpg < 002.jpg < 10.jpg, 01_1 < 01_2 < 01_10, 00791 < 00792)
+ * Handles arbitrary starting index (0, 1, or offset numbers like 791).
  */
-function naturalSort(a, b) {
-  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+export function naturalSort(a, b) {
+  const strA = typeof a === 'string' ? a : (a?.name || '');
+  const strB = typeof b === 'string' ? b : (b?.name || '');
+  return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
 }
+
+// Technical directory names to ignore when extracting chapter hierarchy
+const TECHNICAL_DIRS = new Set([
+  'webp', 'jpg', 'jpeg', 'png', 'avif', 'bmp', 'gif',
+  'raw', 'raws',
+  'image', 'images', 'img', 'imgs',
+  'pic', 'pics', 'picture', 'pictures',
+  'page', 'pages',
+  'photo', 'photos',
+  'hardsub', 'softsub'
+]);
 
 /**
  * Parse a FileList from a folder input into chapter structure.
- * Expects structure:
- *   FolderName/
- *     Chapter 1/
- *       001.jpg, 002.jpg, ...
- *     Chapter 2/
- *       001.jpg, 002.jpg, ...
- *
- * If no subfolders, treats all images as a single chapter.
+ * Supports:
+ *   - Any numbering scheme (starting from 0, 1, or arbitrary numbers like 791)
+ *   - Arbitrary subfolder layouts (e.g. Manga/Chapter/webp/01_1.webp or Chapter/00001.webp)
+ *   - Auto-detection of chapter names and manga titles from folder names
  *
  * @param {FileList} fileList - Files from <input webkitdirectory>
  * @returns {{ mangaTitle: string, chapters: Array<{name: string, files: File[]}> }}
@@ -1211,27 +1222,48 @@ export function parseFolderStructure(fileList) {
     return { file: f, parts };
   });
 
-  // Detect manga title from root folder name (if available)
-  let mangaTitle = '';
-  if (pathParts[0]?.parts.length >= 2) {
-    mangaTitle = pathParts[0].parts[0];
-  }
-
-  // Group files by chapter
+  let detectedMangaTitle = '';
   const chapterMap = new Map();
 
   for (const { file, parts } of pathParts) {
-    let chapterName = 'Chapter 1';
+    const rawFolders = parts.slice(0, -1);
+    // Filter out technical subfolders like 'webp', 'images', etc.
+    const cleanFolders = rawFolders.filter(d => !TECHNICAL_DIRS.has(d.toLowerCase().trim()));
 
-    if (parts.length >= 3) {
-      // MangaName/ChapterFolder/image.jpg
-      chapterName = parts[1];
-    } else if (parts.length === 2) {
-      // MangaName/image.jpg or ChapterFolder/image.jpg
-      chapterName = 'Chapter 1';
+    let chapterName = 'Chapter 1';
+    let currentMangaTitle = '';
+
+    if (cleanFolders.length >= 2) {
+      // e.g. [ParentFolder, ChapterFolder] or [MangaTitle, ChapterFolder]
+      const lastFolder = cleanFolders[cleanFolders.length - 1];
+      const parsedLast = parseMangaTitleAndChapter(lastFolder);
+
+      if (parsedLast.chapterName && parsedLast.chapterName !== 'Chapter 1') {
+        chapterName = parsedLast.chapterName;
+        currentMangaTitle = parsedLast.title || cleanFolders[0];
+      } else {
+        const firstFolder = cleanFolders[0];
+        const parsedFirst = parseMangaTitleAndChapter(firstFolder);
+        if (parsedFirst.chapterName && parsedFirst.chapterName !== 'Chapter 1') {
+          chapterName = parsedFirst.chapterName;
+          currentMangaTitle = parsedFirst.title;
+        } else {
+          chapterName = lastFolder;
+          currentMangaTitle = cleanFolders[0];
+        }
+      }
+    } else if (cleanFolders.length === 1) {
+      // Selected a single chapter folder, e.g. "VỢ-TÔI-NHIỄM-NHIỄM-CHƯƠNG-1_anh_da_gan_hardsub"
+      const folder = cleanFolders[0];
+      const parsed = parseMangaTitleAndChapter(folder);
+      chapterName = parsed.chapterName || 'Chapter 1';
+      currentMangaTitle = parsed.title || folder;
     } else {
-      // Direct image file
       chapterName = 'Chapter 1';
+    }
+
+    if (currentMangaTitle && !detectedMangaTitle) {
+      detectedMangaTitle = currentMangaTitle;
     }
 
     if (!chapterMap.has(chapterName)) {
@@ -1240,14 +1272,14 @@ export function parseFolderStructure(fileList) {
     chapterMap.get(chapterName).push(file);
   }
 
-  // Sort chapter names naturally, and sort files within each chapter
+  // Sort chapter names naturally, and sort files naturally within each chapter (supports 0, 1, 791, 01_1...)
   const chapterNames = [...chapterMap.keys()].sort(naturalSort);
   const chapters = chapterNames.map(name => ({
     name,
     files: (chapterMap.get(name) || []).sort((a, b) => naturalSort(a.name, b.name))
   }));
 
-  return { mangaTitle, chapters };
+  return { mangaTitle: detectedMangaTitle, chapters };
 }
 
 /**
@@ -1282,20 +1314,20 @@ export function isArchiveFile(file) {
 }
 
 /**
- * Smart extraction of manga title and chapter name from archive filename
- * E.g. "VỢ-TÔI-NHIỄM-NHIỄM-CHƯƠNG-1.epub" -> { title: "VỢ TÔI NHIỄM NHIỄM", chapterName: "Chương 1" }
+ * Smart extraction of manga title and chapter name from archive/folder filename
+ * E.g. "VỢ-TÔI-NHIỄM-NHIỄM-CHƯƠNG-1_anh_da_gan_hardsub" -> { title: "VỢ TÔI NHIỄM NHIỄM", chapterName: "Chương 1" }
  * "One Piece Chap 1000.cbz" -> { title: "One Piece", chapterName: "Chap 1000" }
  */
 export function parseMangaTitleAndChapter(filename) {
   if (!filename) return { title: '', chapterName: 'Chapter 1' };
-  const nameWithoutExt = filename.replace(/\.(epub|cbz|zip)$/i, '').trim();
+  const nameWithoutExt = filename.replace(/\.(epub|cbz|zip|rar|tar|gz|7z)$/i, '').trim();
 
   // Look for chapter keyword and number
   const chRegex = /(?:[-_\s]+)?(?:\b|_|-)(chương|chuong|chapter|chap|ch|tập|tap|vol)[\s._-]*(\d+(?:\.\d+)?)/i;
   const match = nameWithoutExt.match(chRegex);
 
   if (match) {
-    const rawWord = match[1];
+    const rawWord = match[1].toLowerCase();
     // Capitalize first letter: "chương" -> "Chương", "chap" -> "Chap"
     const prefixWord = rawWord.charAt(0).toUpperCase() + rawWord.slice(1);
     const chapterNum = match[2];
@@ -1303,6 +1335,11 @@ export function parseMangaTitleAndChapter(filename) {
     const rawTitle = nameWithoutExt.slice(0, match.index).trim();
     const title = rawTitle.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
     return { title, chapterName };
+  }
+
+  // Check if string is only numbers, e.g. "01", "2"
+  if (/^\d+$/.test(nameWithoutExt)) {
+    return { title: '', chapterName: `Chapter ${parseInt(nameWithoutExt, 10)}` };
   }
 
   const title = nameWithoutExt.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
