@@ -6,25 +6,20 @@ import {
   Eye, 
   Trash2, 
   Edit, 
-  ExternalLink, 
   Search, 
-  Key, 
   CheckCircle2, 
   AlertCircle, 
   HardDrive, 
-  Sparkles,
-  BarChart3,
-  Layers,
+  Layers, 
   HelpCircle,
-  X
+  FolderCheck
 } from 'lucide-react';
 import { useAppContext } from '../App';
 import VideoForm from '../components/Admin/VideoForm';
 import { getVideoThumbnail } from '../utils/videoUtils';
 import { 
-  getStreamHGKey, 
-  saveStreamHGKey, 
-  uploadVideoToStreamHG 
+  uploadVideoToStreamHG,
+  TARGET_FOLDER_NAME
 } from '../services/streamhgService';
 
 const INITIAL_VIDEO_STATE = {
@@ -51,11 +46,6 @@ function UploaderDashboard() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
   const [showAllVideosForAdmin, setShowAllVideosForAdmin] = useState(false);
-
-  // StreamHG API Key state
-  const [streamhgKey, setStreamhgKey] = useState(() => getStreamHGKey());
-  const [showKeyConfig, setShowKeyConfig] = useState(false);
-  const [keySavedMessage, setKeySavedMessage] = useState(false);
 
   // StreamHG Upload state
   const [selectedFile, setSelectedFile] = useState(null);
@@ -187,40 +177,28 @@ function UploaderDashboard() {
     }
   };
 
-  // Save StreamHG Key
-  const handleSaveKey = (e) => {
-    e.preventDefault();
-    saveStreamHGKey(streamhgKey);
-    setKeySavedMessage(true);
-    setTimeout(() => setKeySavedMessage(false), 3000);
-  };
-
-  // StreamHG Direct Upload
+  // StreamHG Direct Upload into web18p.xyz folder
   const handleUploadToStreamHG = async () => {
     if (!selectedFile) {
       alert('Vui lòng chọn file video trước!');
       return;
     }
 
-    const key = streamhgKey.trim();
-    if (!key) {
-      alert('Vui lòng nhập API Key của StreamHG trong phần cấu hình bên dưới trước khi upload trực tiếp!');
-      setShowKeyConfig(true);
-      return;
-    }
-
     setIsUploading(true);
     setUploadProgress(0);
-    setUploadStatus({ type: 'info', text: `Đang kết nối máy chủ StreamHG và tải lên "${selectedFile.name}"...` });
+    setUploadStatus({ 
+      type: 'info', 
+      text: `Đang kết nối máy chủ StreamHG và tải lên thư mục "${TARGET_FOLDER_NAME}"...` 
+    });
 
     try {
-      const result = await uploadVideoToStreamHG(selectedFile, key, (progress) => {
+      const result = await uploadVideoToStreamHG(selectedFile, (progress) => {
         setUploadProgress(progress);
-      });
+      }, TARGET_FOLDER_NAME);
 
       setUploadStatus({ 
         type: 'success', 
-        text: `Tải lên StreamHG thành công! Mã file: ${result.filecode}. Đã tự động điền link vào form.` 
+        text: `Tải lên thư mục "${TARGET_FOLDER_NAME}" thành công! Mã file: ${result.filecode}. Đã tự động điền link vào form bên dưới.` 
       });
 
       // Auto fill video form
@@ -283,7 +261,7 @@ function UploaderDashboard() {
           </p>
         </div>
 
-        {/* Quick Action / Stats buttons */}
+        {/* Quick Action for Admin */}
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           {user.role === 'admin' && (
             <button
@@ -302,82 +280,8 @@ function UploaderDashboard() {
               {showAllVideosForAdmin ? 'Đang xem: Tất cả video' : 'Chỉ xem video của tôi'}
             </button>
           )}
-
-          <button
-            onClick={() => setShowKeyConfig(!showKeyConfig)}
-            className="btn btn-outline"
-            style={{
-              borderColor: streamhgKey ? 'rgba(0, 210, 211, 0.4)' : 'var(--color-border)',
-              color: streamhgKey ? '#00d2d3' : 'var(--color-text-light)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              fontSize: '0.85rem'
-            }}
-          >
-            <Key size={16} />
-            {streamhgKey ? 'StreamHG API Key: Đã lưu' : 'Cấu hình StreamHG Key'}
-          </button>
         </div>
       </div>
-
-      {/* StreamHG Key Modal / Collapsible Section */}
-      {showKeyConfig && (
-        <div className="card" style={{ border: '1px solid rgba(0, 210, 211, 0.3)', backgroundColor: '#141418' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3 style={{ color: '#00d2d3', margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Key size={18} /> Cấu hình API Key StreamHG
-            </h3>
-            <button 
-              onClick={() => setShowKeyConfig(false)}
-              style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer' }}
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-            Nhập API Key tài khoản StreamHG của bạn để tải video trực tiếp lên máy chủ StreamHG từ trình duyệt. Key sẽ được lưu an toàn trong trình duyệt của bạn (localStorage).
-          </p>
-
-          <form onSubmit={handleSaveKey} style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
-            <input
-              type="text"
-              className="input-field"
-              placeholder="Nhập API Key StreamHG (ví dụ: 123456abcdef...)"
-              value={streamhgKey}
-              onChange={(e) => setStreamhgKey(e.target.value)}
-              style={{ flex: '1 1 300px', margin: 0 }}
-            />
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={{ backgroundColor: '#00d2d3', color: '#000', fontWeight: 600 }}
-            >
-              Lưu Key
-            </button>
-            {streamhgKey && (
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => {
-                  setStreamhgKey('');
-                  saveStreamHGKey('');
-                }}
-                style={{ color: '#ff4d4f' }}
-              >
-                Xóa Key
-              </button>
-            )}
-          </form>
-
-          {keySavedMessage && (
-            <div style={{ marginTop: '0.8rem', color: '#52c41a', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
-              <CheckCircle2 size={16} /> Đã lưu API Key thành công!
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Stats Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem' }}>
@@ -438,11 +342,11 @@ function UploaderDashboard() {
           </div>
           <div>
             <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Nền tảng lưu trữ</div>
-            <div style={{ color: '#52c41a', fontSize: '1.2rem', fontWeight: 700 }}>
+            <div style={{ color: '#52c41a', fontSize: '1.15rem', fontWeight: 700 }}>
               StreamHG
             </div>
-            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
-              hgcloud.to / huntrexus.com
+            <div style={{ color: '#00d2d3', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+              <FolderCheck size={14} /> Thư mục: {TARGET_FOLDER_NAME}
             </div>
           </div>
         </div>
@@ -470,10 +374,10 @@ function UploaderDashboard() {
           }}>
             <Upload size={32} color="#00d2d3" opacity={0.8} />
             <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.95rem' }}>
-              Tải file video trực tiếp lên StreamHG
+              Tải file video trực tiếp vào thư mục {TARGET_FOLDER_NAME}
             </div>
-            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', maxWidth: '360px' }}>
-              Chọn file video từ máy tính (.mp4, .mkv, .avi, .webm) để tự động tải lên và tạo link StreamHG.
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', maxWidth: '380px' }}>
+              Chọn file video từ máy tính (.mp4, .mkv, .avi, .webm) để tải trực tiếp lên máy chủ StreamHG vào thư mục <strong style={{ color: '#00d2d3' }}>{TARGET_FOLDER_NAME}</strong>.
             </div>
 
             <input
@@ -513,7 +417,7 @@ function UploaderDashboard() {
                     cursor: isUploading ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  {isUploading ? `Đang tải ${uploadProgress}%...` : 'Tải lên StreamHG'}
+                  {isUploading ? `Đang tải ${uploadProgress}%...` : `Tải lên StreamHG (${TARGET_FOLDER_NAME})`}
                 </button>
               )}
             </div>
@@ -568,11 +472,11 @@ function UploaderDashboard() {
             gap: '0.75rem'
           }}>
             <div style={{ fontWeight: 600, color: '#00d2d3', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <HelpCircle size={16} /> Hướng dẫn lấy link StreamHG:
+              <HelpCircle size={16} /> Hướng dẫn đăng phim từ StreamHG:
             </div>
             <ul style={{ paddingLeft: '1.2rem', color: 'var(--color-text-muted)', lineHeight: '1.6' }}>
               <li>
-                Nếu bạn đã upload sẵn trên <strong style={{ color: '#fff' }}>streamhg.com</strong>, bạn chỉ cần copy link video (ví dụ: <code style={{ color: '#66c0f4' }}>https://streamhg.com/e/abcxyz</code> hoặc mã nhúng <code style={{ color: '#66c0f4' }}>&lt;iframe...&gt;</code>) rồi dán vào form bên dưới.
+                Nếu bạn đã upload sẵn trên <strong style={{ color: '#fff' }}>streamhg.com</strong> trong thư mục <code style={{ color: '#00d2d3' }}>{TARGET_FOLDER_NAME}</code>, bạn chỉ cần copy link video (ví dụ: <code style={{ color: '#66c0f4' }}>https://streamhg.com/e/abcxyz</code> hoặc mã nhúng <code style={{ color: '#66c0f4' }}>&lt;iframe...&gt;</code>) rồi dán vào form bên dưới.
               </li>
               <li>
                 Hệ thống tự động nhận diện ID video StreamHG và tự động lấy ảnh bìa từ <strong style={{ color: '#fff' }}>huntrexus.com/ID.jpg</strong>.

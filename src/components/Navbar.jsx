@@ -143,13 +143,6 @@ function Navbar() {
             )}
           </li>
         ))}
-        {(user?.role === 'uploader' || user?.role === 'admin') && (
-          <li className={`nav-item ${location.pathname === '/uploader' ? 'active' : ''}`}>
-            <Link to="/uploader" className="nav-link" onClick={() => setIsMenuOpen(false)} style={{ color: '#00d2d3' }}>
-              <Film size={16} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} /> Kênh Đăng Video
-            </Link>
-          </li>
-        )}
       </ul>
 
       <form onSubmit={handleSearchSubmit} className="nav-search-form" style={{ position: 'relative', display: 'flex', alignItems: 'center', margin: '0 1rem' }}>
