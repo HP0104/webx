@@ -168,7 +168,9 @@ function Admin() {
       category: video.category || 'vam',
       description: video.description || '',
       tags: Array.isArray(video.tags) ? video.tags.join(', ') : (video.tags || ''),
-      views: video.views || 0
+      views: video.views || 0,
+      uploaderId: video.uploaderId || null,
+      uploaderName: video.uploaderName || null
     });
     const formEl = document.getElementById('admin-video-form');
     if (formEl) window.scrollTo({ top: formEl.offsetTop - 80, behavior: 'smooth' });

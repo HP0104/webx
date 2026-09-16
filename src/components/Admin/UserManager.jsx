@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
-import { CheckCircle2, ChevronDown, ChevronRight, Clock, Gamepad2, XCircle, Search } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Clock, Gamepad2, XCircle, Search, Film } from 'lucide-react';
 import { formatOwnershipDate, isOwnershipActive, normalizeOwnedGames } from '../../utils/ownership';
 
 function UserManager({ users, games }) {
@@ -60,6 +60,21 @@ function UserManager({ users, games }) {
     }
   };
 
+  const handleToggleRole = async (userId, currentRole) => {
+    const nextRole = currentRole === 'uploader' ? 'user' : 'uploader';
+    const roleLabel = nextRole === 'uploader' ? 'Uploader (Người đăng video)' : 'Thành viên thường (User)';
+    if (!window.confirm(`Bạn có chắc muốn chuyển vai trò tài khoản này thành "${roleLabel}"?`)) {
+      return;
+    }
+    try {
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, { role: nextRole });
+      alert('Đổi quyền thành công!');
+    } catch (error) {
+      alert('Lỗi đổi quyền: ' + error.message);
+    }
+  };
+
   const filteredUsers = users.filter(u => 
     (u.username || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
     (u.email || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -94,7 +109,51 @@ function UserManager({ users, games }) {
           <div key={u.id} style={{ padding: '1rem', backgroundColor: 'var(--color-bg-main)', borderRadius: '4px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.8rem' }}>
               <div style={{ flex: 1, minWidth: '150px' }}>
-                <div style={{ color: 'var(--color-text-light)', fontWeight: 'bold' }}>{u.username} {u.role === 'admin' && '⭐'}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ color: 'var(--color-text-light)', fontWeight: 'bold' }}>{u.username}</span>
+                  {u.role === 'admin' && (
+                    <span style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      padding: '0.15rem 0.5rem',
+                      borderRadius: '4px',
+                      backgroundColor: 'rgba(255, 77, 79, 0.2)',
+                      color: '#ff4d4f',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px'
+                    }}>
+                      ⭐ Admin
+                    </span>
+                  )}
+                  {u.role === 'uploader' && (
+                    <span style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      padding: '0.15rem 0.5rem',
+                      borderRadius: '4px',
+                      backgroundColor: 'rgba(0, 210, 211, 0.2)',
+                      color: '#00d2d3',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px'
+                    }}>
+                      🎬 Uploader
+                    </span>
+                  )}
+                  {(!u.role || u.role === 'user') && (
+                    <span style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 500,
+                      padding: '0.15rem 0.4rem',
+                      borderRadius: '4px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      color: 'var(--color-text-muted)'
+                    }}>
+                      User
+                    </span>
+                  )}
+                </div>
                 <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{u.email}</div>
                 <div style={{ color: 'var(--color-success)', fontSize: '0.9rem' }}>{(u.balance || 0).toLocaleString('vi-VN')} VNĐ</div>
               </div>
@@ -111,6 +170,23 @@ function UserManager({ users, games }) {
                 </button>
                 {u.role !== 'admin' && (
                   <>
+                    <button
+                      onClick={() => handleToggleRole(u.id, u.role)}
+                      className="btn btn-outline"
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '0.2rem 0.5rem',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem',
+                        borderColor: u.role === 'uploader' ? 'rgba(0, 210, 211, 0.4)' : 'var(--color-border)',
+                        color: u.role === 'uploader' ? '#00d2d3' : 'var(--color-text-muted)'
+                      }}
+                      title={u.role === 'uploader' ? 'Hạ quyền xuống User thường' : 'Nâng cấp quyền Uploader'}
+                    >
+                      <Film size={13} />
+                      {u.role === 'uploader' ? 'Bỏ Uploader' : 'Cấp Uploader'}
+                    </button>
                     {editingUserId === u.id ? (
                       <>
                         <input

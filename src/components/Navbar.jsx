@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Wallet, User, LogOut, ShieldAlert, Menu, X, ChevronDown, Search } from 'lucide-react';
+import { Wallet, User, LogOut, ShieldAlert, Menu, X, ChevronDown, Search, Film } from 'lucide-react';
 import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
 
@@ -143,6 +143,13 @@ function Navbar() {
             )}
           </li>
         ))}
+        {(user?.role === 'uploader' || user?.role === 'admin') && (
+          <li className={`nav-item ${location.pathname === '/uploader' ? 'active' : ''}`}>
+            <Link to="/uploader" className="nav-link" onClick={() => setIsMenuOpen(false)} style={{ color: '#00d2d3' }}>
+              <Film size={16} style={{ marginRight: '6px', verticalAlign: 'text-bottom' }} /> Kênh Đăng Video
+            </Link>
+          </li>
+        )}
       </ul>
 
       <form onSubmit={handleSearchSubmit} className="nav-search-form" style={{ position: 'relative', display: 'flex', alignItems: 'center', margin: '0 1rem' }}>
@@ -313,6 +320,11 @@ function Navbar() {
             </Link>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+              {(user.role === 'uploader' || user.role === 'admin') && (
+                <Link to="/uploader" style={{ color: '#00d2d3', display: 'flex', alignItems: 'center' }} title="Kênh Uploader (Đăng Video)">
+                  <Film size={20} />
+                </Link>
+              )}
               {user.role === 'admin' && (
                 <Link to="/admin" style={{ color: '#ff4d4f', display: 'flex', alignItems: 'center' }} title="Admin Panel">
                   <ShieldAlert size={20} />

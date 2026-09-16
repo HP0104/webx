@@ -7,6 +7,11 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    // Hàm kiểm tra quyền Uploader
+    function isUploader() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'uploader';
+    }
+
     // 1. Quy tắc cho Phòng Chat cộng đồng (Ai cũng đọc được, đăng nhập mới được chat)
     match /chats/{chatId} {
       allow read: if true;
@@ -92,9 +97,20 @@ service cloud.firestore {
     // 5. Quy tắc cho Video & Bình luận Video
     match /videos/{videoId} {
       allow read: if true;
-      allow create, delete: if request.auth != null && isAdmin();
+      // Admin tạo mọi video; Uploader tạo video của chính họ
+      allow create: if request.auth != null && (
+        isAdmin() || 
+        (isUploader() && request.resource.data.uploaderId == request.auth.uid)
+      );
+      // Admin xóa mọi video; Uploader xóa video do chính họ đăng
+      allow delete: if request.auth != null && (
+        isAdmin() || 
+        (isUploader() && resource.data.uploaderId == request.auth.uid)
+      );
+      // Admin sửa mọi video; Uploader sửa video do chính họ đăng; User chỉ tăng views
       allow update: if request.auth != null && (
         isAdmin()
+        || (isUploader() && resource.data.uploaderId == request.auth.uid)
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
             && request.resource.data.views == resource.data.views + 1)
       );

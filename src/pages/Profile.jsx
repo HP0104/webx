@@ -253,7 +253,7 @@ function Profile() {
                 <h2 style={{ color: 'var(--color-text-light)' }}>{user?.username}</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-success)', fontSize: '0.85rem' }}>
                   <ShieldCheck size={14} />
-                  <span>{user?.role === 'admin' ? 'Quản trị viên' : 'Thành viên'}</span>
+                  <span>{user?.role === 'admin' ? 'Quản trị viên' : user?.role === 'uploader' ? 'Uploader (Người đăng video)' : 'Thành viên'}</span>
                 </div>
               </div>
             </div>
@@ -275,6 +275,11 @@ function Profile() {
                 <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setIsMenuOpen(true)}>
                   Chỉnh sửa thông tin
                 </button>
+                {(user?.role === 'uploader' || user?.role === 'admin') && (
+                  <Link to="/uploader" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', backgroundColor: 'rgba(0, 210, 211, 0.1)', color: '#00d2d3', border: '1px solid rgba(0, 210, 211, 0.4)' }}>
+                    <Play size={18} style={{ marginRight: '0.4rem' }} /> Kênh Đăng Video
+                  </Link>
+                )}
                 {user?.role === 'admin' && (
                   <Link to="/admin" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', backgroundColor: 'rgba(255, 83, 83, 0.1)', color: '#ff5353', border: '1px solid #ff5353' }}>
                     <ShieldCheck size={18} style={{ marginRight: '0.4rem' }} /> Quản lý Admin

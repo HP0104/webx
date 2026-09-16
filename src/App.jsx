@@ -21,6 +21,7 @@ import VideoDetail from './pages/VideoDetail';
 import MangaList from './pages/MangaList';
 import MangaDetail from './pages/MangaDetail';
 import MangaReader from './pages/MangaReader';
+import UploaderDashboard from './pages/UploaderDashboard';
 import ExoClickPopunder from './components/ExoClickPopunder';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -442,7 +443,13 @@ function App() {
   // ---- Video CRUD ----
   const addVideoToStore = async (newVideo) => {
     const videoId = Date.now().toString();
-    const videoData = { ...newVideo, id: videoId };
+    const videoData = {
+      ...newVideo,
+      id: videoId,
+      uploaderId: newVideo.uploaderId || user?.id || null,
+      uploaderName: newVideo.uploaderName || user?.username || (user?.role === 'admin' ? 'Admin' : 'Uploader'),
+      createdAt: newVideo.createdAt || new Date().toISOString()
+    };
     setVideos(prev => [...prev, videoData]);
     try {
       await setDoc(doc(db, 'videos', videoId), videoData);
@@ -544,6 +551,7 @@ function App() {
                 <Route path="/wallet" element={user ? <Wallet /> : <Navigate to="/auth" />} />
                 <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
                 <Route path="/admin" element={user?.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
+                <Route path="/uploader" element={(user?.role === 'uploader' || user?.role === 'admin') ? <UploaderDashboard /> : <Navigate to={user ? "/" : "/auth"} />} />
                 <Route path="/blog" element={<Blog />} />
                 <Route path="/report" element={<Report />} />
                 <Route path="/ai-search" element={<GameSearch />} />

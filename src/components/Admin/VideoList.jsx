@@ -68,6 +68,7 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
           <thead>
             <tr style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
               <th style={{ padding: '0.8rem 1rem', fontWeight: 600, minWidth: '280px', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Phim</th>
+              <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Người đăng</th>
               <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Thể loại</th>
               <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Lượt xem</th>
               <th style={{ padding: '0.8rem 1rem', fontWeight: 600, whiteSpace: 'nowrap', position: 'sticky', top: 0, backgroundColor: '#1a1a2e', zIndex: 1, borderBottom: '1px solid var(--color-border)' }}>Thao tác</th>
@@ -76,7 +77,7 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
           <tbody>
             {filteredVideos.length === 0 ? (
               <tr>
-                <td colSpan="4" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
+                <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>
                   Không tìm thấy phim nào.
                 </td>
               </tr>
@@ -115,6 +116,18 @@ function VideoList({ videos, onEditClick, onDeleteClick }) {
                       {video.title}
                     </span>
                   </div>
+                </td>
+                <td style={{ padding: '0.8rem 1rem', whiteSpace: 'nowrap' }}>
+                  <span style={{
+                    fontSize: '0.8rem',
+                    color: video.uploaderName ? 'var(--color-text-light)' : 'var(--color-text-muted)',
+                    fontWeight: 500,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}>
+                    {video.uploaderName || 'Admin'}
+                  </span>
                 </td>
                 <td style={{ padding: '0.8rem 1rem' }}>
                   <span style={{
