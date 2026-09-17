@@ -133,30 +133,11 @@ async function detectAdBlocker() {
   })();
   if (fetchBlocked) return true;
 
-  // ── Check 4: Cốc Cốc & Browser Popup Blocker Detection ──
-  const isPopupBlocked = (() => {
-    // If a popup was already successfully opened, popups are clearly allowed!
-    if (window.__popupSuccessfullyOpened === true) return false;
-
-    // 4a: Check if already flagged by popup monitor (from a blocked click)
-    if (window.__popupBlockedDetected === true) return true;
-
-    // 4b: For Cốc Cốc browser specifically, test if popups are blocked on page load
-    const isCocCoc = /CocCoc/i.test(navigator.userAgent);
-    if (isCocCoc) {
-      try {
-        const testWin = window.open('about:blank', '_blank', 'width=1,height=1,left=-9999,top=-9999');
-        if (!testWin || testWin.closed || typeof testWin.closed === 'undefined') {
-          return true; // Popup is blocked in Cốc Cốc!
-        }
-        testWin.close();
-      } catch {
-        return true;
-      }
-    }
-    return false;
-  })();
-  if (isPopupBlocked) return true;
+  // ── Check 4: Popup Blocker Detection ──
+  // Only flagged if a popup attempt was actually blocked by browser/Cốc Cốc on user click
+  if (window.__popupBlockedDetected === true && !window.__popupSuccessfullyOpened) {
+    return true;
+  }
 
   // ── Check 5: Script load check (catches script-level blocking) ──
   const [exoBlocked, baitBlocked] = await Promise.all([
@@ -463,6 +444,8 @@ export function AdBlockWall() {
         {/* Nút kiểm tra lại */}
         <button
           onClick={() => {
+            window.__popupBlockedDetected = false;
+            window.__popupSuccessfullyOpened = false;
             window.location.reload();
           }}
           style={{
