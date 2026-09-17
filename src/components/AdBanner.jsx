@@ -133,16 +133,27 @@ async function detectAdBlocker() {
   })();
   if (fetchBlocked) return true;
 
-  // ── Check 4: Popup Blocker Hook Detection ──
-  const isPopupBlockerActive = (() => {
-    try {
-      const openStr = window.open.toString();
-      return openStr.indexOf('[native code]') === -1;
-    } catch {
-      return false;
+  // ── Check 4: Cốc Cốc & Browser Popup Blocker Detection ──
+  const isPopupBlocked = (() => {
+    // 4a: Check if already flagged by popup monitor (e.g. from user click)
+    if (window.__popupBlockedDetected === true) return true;
+
+    // 4b: For Cốc Cốc browser specifically, test if popups are blocked on page load
+    const isCocCoc = /CocCoc/i.test(navigator.userAgent);
+    if (isCocCoc) {
+      try {
+        const testWin = window.open('about:blank', '_blank', 'width=1,height=1,left=-9999,top=-9999');
+        if (!testWin || testWin.closed || typeof testWin.closed === 'undefined') {
+          return true; // Popup is blocked in Cốc Cốc!
+        }
+        testWin.close();
+      } catch {
+        return true;
+      }
     }
+    return false;
   })();
-  if (isPopupBlockerActive) return true;
+  if (isPopupBlocked) return true;
 
   // ── Check 5: Script load check (catches script-level blocking) ──
   const [exoBlocked, baitBlocked] = await Promise.all([
@@ -150,6 +161,32 @@ async function detectAdBlocker() {
     checkScriptLoad('/ads.js', () => window.__adblockerBait === true)
   ]);
   return exoBlocked || baitBlocked;
+}
+
+// ─── Global Popup Monitor ───────────────────────────────────────────
+// Intercepts window.open calls to catch blocked popups / popunders on click
+if (typeof window !== 'undefined' && !window.__popupMonitorInstalled) {
+  window.__popupMonitorInstalled = true;
+  window.__popupBlockedDetected = false;
+
+  const _originalWindowOpen = window.open;
+  window.__originalOpen = _originalWindowOpen;
+
+  window.open = function(...args) {
+    const win = _originalWindowOpen.apply(this, args);
+    // If window.open returned null/undefined or was immediately closed upon creation,
+    // it was blocked by the browser / Cốc Cốc popup blocker
+    if (!win || win.closed || typeof win.closed === 'undefined') {
+      // Don't flag if it's our internal test probe
+      if (args[0] !== 'about:blank' || args[2] !== 'width=1,height=1,left=-9999,top=-9999') {
+        window.__popupBlockedDetected = true;
+        window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
+          detail: { url: args[0], reason: 'popup_blocked' }
+        }));
+      }
+    }
+    return win;
+  };
 }
 
 let _adBlockDetected = null;
@@ -238,6 +275,18 @@ export function AdBlockWall() {
     checkAdBlock();
   }, [checkAdBlock]);
 
+  // Lắng nghe sự kiện chặn popup (khi Cốc Cốc / tiện ích chặn popup lúc click hoặc tải trang)
+  useEffect(() => {
+    const onPopupBlocked = () => {
+      setBlocked(true);
+      setChecking(false);
+    };
+    window.addEventListener('adblock:popup-blocked', onPopupBlocked);
+    return () => {
+      window.removeEventListener('adblock:popup-blocked', onPopupBlocked);
+    };
+  }, []);
+
   useEffect(() => {
     if (blocked && !checking) {
       // Block body scrolling
@@ -318,7 +367,7 @@ export function AdBlockWall() {
           margin: '0 0 0.75rem',
           lineHeight: 1.3,
         }}>
-          Vui lòng tắt trình chặn quảng cáo
+          Vui lòng tắt trình chặn quảng cáo & popup
         </h2>
 
         {/* Nội dung */}
@@ -337,7 +386,7 @@ export function AdBlockWall() {
           lineHeight: 1.5,
           margin: '0 0 2rem',
         }}>
-          Hãy tắt Ad Blocker (uBlock Origin, AdBlock Plus, v.v.) rồi nhấn nút bên dưới để tiếp tục truy cập. Cảm ơn bạn đã ủng hộ! 💚
+          Hãy tắt Ad Blocker và cho phép cửa sổ bật lên (popup) trên trình duyệt rồi nhấn nút bên dưới để tiếp tục truy cập. Cảm ơn bạn đã ủng hộ! 💚
         </p>
 
         {/* Hướng dẫn nhanh */}
@@ -357,13 +406,13 @@ export function AdBlockWall() {
             letterSpacing: '0.5px',
             margin: '0 0 0.6rem',
           }}>
-            Cách tắt nhanh
+            Cách tắt nhanh trên Cốc Cốc & Trình duyệt
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             {[
-              '1. Nhấn vào icon Ad Blocker trên thanh trình duyệt',
-              '2. Chọn "Tạm dừng" hoặc "Tắt cho trang này"',
-              '3. Quay lại đây và nhấn nút "Tôi đã tắt"',
+              '1. Nhấn vào biểu tượng Khiên (hoặc AdBlock) trên thanh địa chỉ',
+              '2. Tắt cả "Chặn quảng cáo" và "Chặn cửa sổ bật lên" (Pop-up)',
+              '3. Quay lại đây và nhấn nút "Tôi đã tắt" bên dưới',
             ].map((step, i) => (
               <span key={i} style={{
                 color: 'rgba(255, 255, 255, 0.55)',
@@ -402,7 +451,7 @@ export function AdBlockWall() {
             e.currentTarget.style.transform = 'scale(1)';
           }}
         >
-          ✅ Tôi đã tắt Ad Blocker (Tải lại trang)
+          ✅ Tôi đã tắt Ad Blocker & Popup (Tải lại trang)
         </button>
       </div>
 
