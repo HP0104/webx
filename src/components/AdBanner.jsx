@@ -7,7 +7,7 @@ const ADBLOCK_DETECT_DELAY = 3000;
 
 // ─── Ad Blocker Detection ───────────────────────────────────────────
 
-function checkScriptLoad(src, validationFn = null) {
+function checkScriptLoad(src, validationFn = null, timeout = 4000) {
   return new Promise((resolve) => {
     const script = document.createElement('script');
     script.src = src;
@@ -22,11 +22,10 @@ function checkScriptLoad(src, validationFn = null) {
       resolve(blocked);
     };
 
+    // Ad blockers block requests immediately -> triggers script.onerror within < 50ms
     script.onerror = () => done(true);
     script.onload = () => {
       if (validationFn) {
-        // If validation fails, it means the script loaded but didn't execute properly
-        // (likely a spoofed empty 200 OK response from the adblocker)
         done(!validationFn());
       } else {
         done(false);
@@ -34,7 +33,9 @@ function checkScriptLoad(src, validationFn = null) {
     };
 
     document.head.appendChild(script);
-    setTimeout(() => done(true), ADBLOCK_DETECT_DELAY);
+    // Timeout does NOT mean blocked (could be slow network or CDN latency)
+    // Only real ad blocker intervention actively triggers script.onerror
+    setTimeout(() => done(false), timeout);
   });
 }
 
@@ -58,11 +59,8 @@ async function detectAdBlocker() {
       if (document.body.contains(bait)) {
         const style = window.getComputedStyle(bait);
         isBlocked =
-          bait.offsetParent === null ||
           bait.offsetHeight === 0 ||
           bait.offsetWidth === 0 ||
-          bait.clientHeight === 0 ||
-          bait.clientWidth === 0 ||
           style.display === 'none' ||
           style.visibility === 'hidden' ||
           style.opacity === '0';
@@ -75,12 +73,13 @@ async function detectAdBlocker() {
   });
 
   const domBlocked = await checkDOM;
-  if (domBlocked) return true;
+  if (domBlocked) {
+    console.warn('[AdBlock] Blocked by Check 1 (DOM bait)');
+    return true;
+  }
 
-  // ── Check 2: AdSense element check (catches Cốc Cốc) ──
+  // ── Check 2: AdSense element check (catches Cốc Cốc built-in ad blocker) ──
   // Cốc Cốc's built-in adblocker specifically targets .adsbygoogle elements
-  // even though it doesn't touch generic ad-class divs.
-  // All styles use !important to prevent false positives from external CSS.
   const checkAdSenseElement = new Promise((resolve) => {
     const ins = document.createElement('ins');
     ins.className = 'adsbygoogle';
@@ -91,7 +90,7 @@ async function detectAdBlocker() {
       'position: absolute !important; top: -9999px !important; left: -9999px !important; ' +
       'visibility: visible !important; opacity: 1 !important; overflow: hidden !important;'
     );
-    ins.textContent = '\u00A0'; // &nbsp; to give it content
+    ins.textContent = '\u00A0';
 
     document.body.appendChild(ins);
 
@@ -99,8 +98,6 @@ async function detectAdBlocker() {
       let isBlocked = false;
       if (document.body.contains(ins)) {
         const style = window.getComputedStyle(ins);
-        // Only check CSS properties that an adblocker would change
-        // Don't check offsetParent (unreliable for positioned elements)
         isBlocked =
           style.display === 'none' ||
           style.visibility === 'hidden' ||
@@ -109,7 +106,6 @@ async function detectAdBlocker() {
           ins.offsetWidth === 0;
         ins.remove();
       } else {
-        // Element was removed from DOM by adblocker
         isBlocked = true;
       }
       resolve(isBlocked);
@@ -117,7 +113,10 @@ async function detectAdBlocker() {
   });
 
   const adsenseBlocked = await checkAdSenseElement;
-  if (adsenseBlocked) return true;
+  if (adsenseBlocked) {
+    console.warn('[AdBlock] Blocked by Check 2 (Cốc Cốc AdSense filter)');
+    return true;
+  }
 
   // ── Check 3: Fetch Check (catches network-level blockers like Brave Shields) ──
   const fetchBlocked = await (async () => {
@@ -131,11 +130,20 @@ async function detectAdBlocker() {
       return true;
     }
   })();
-  if (fetchBlocked) return true;
+  if (fetchBlocked) {
+    console.warn('[AdBlock] Blocked by Check 3 (Network fetch)');
+    return true;
+  }
 
   // ── Check 4: Popup Blocker Detection ──
-  // Only flagged if a popup attempt was actually blocked by browser/Cốc Cốc on user click
-  if (window.__popupBlockedDetected === true && !window.__popupSuccessfullyOpened) {
+  // Only flagged if genuinely blocked AND user has never shown a popup in this session
+  const popupAlreadyShown =
+    window.__popupSuccessfullyOpened === true ||
+    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ad_popup_shown') === 'true') ||
+    (typeof document !== 'undefined' && document.cookie.includes('zone-cap-'));
+
+  if (window.__popupBlockedDetected === true && !popupAlreadyShown && !window.disablePopunder) {
+    console.warn('[AdBlock] Blocked by Check 4 (Popup blocked)');
     return true;
   }
 
@@ -144,22 +152,46 @@ async function detectAdBlocker() {
     checkScriptLoad(EXOCLICK_PROVIDER_SRC),
     checkScriptLoad('/ads.js', () => window.__adblockerBait === true)
   ]);
-  return exoBlocked || baitBlocked;
+  if (exoBlocked || baitBlocked) {
+    console.warn('[AdBlock] Blocked by Check 5 (Script load): exo=' + exoBlocked + ', bait=' + baitBlocked);
+    return true;
+  }
+
+  return false;
 }
 
-// ─── Global Popup Monitor ───────────────────────────────────────────
-// Intercepts window.open calls to catch blocked popups / popunders on click
+// ─── Global Popup & Creative Monitor ────────────────────────────────
 if (typeof window !== 'undefined' && !window.__popupMonitorInstalled) {
   window.__popupMonitorInstalled = true;
   window.__popupBlockedDetected = false;
-  window.__popupSuccessfullyOpened = false;
 
-  let popupSuccessInCurrentClick = false;
+  const markPopupSuccess = () => {
+    window.__popupSuccessfullyOpened = true;
+    window.__popupBlockedDetected = false;
+    try {
+      sessionStorage.setItem('ad_popup_shown', 'true');
+    } catch {}
+  };
 
-  // Track each click interaction to reset the per-click flag
-  document.addEventListener('click', () => {
-    popupSuccessInCurrentClick = false;
-  }, true);
+  // Restore state if popup was already shown in this tab session or cookie exists
+  try {
+    if (sessionStorage.getItem('ad_popup_shown') === 'true' || document.cookie.includes('zone-cap-')) {
+      window.__popupSuccessfullyOpened = true;
+    }
+  } catch {}
+
+  // Listen for ExoClick creative display events on document
+  document.addEventListener('creativeDisplayed-6004200', () => markPopupSuccess(), true);
+  document.addEventListener('creativeDisplayed-5983670', () => markPopupSuccess(), true);
+
+  // Catch any CustomEvent starting with creativeDisplayed
+  const origDispatch = document.dispatchEvent;
+  document.dispatchEvent = function(evt) {
+    if (evt && typeof evt.type === 'string' && evt.type.startsWith('creativeDisplayed')) {
+      markPopupSuccess();
+    }
+    return origDispatch.apply(this, arguments);
+  };
 
   const _originalWindowOpen = window.open;
   window.__originalOpen = _originalWindowOpen;
@@ -168,38 +200,51 @@ if (typeof window !== 'undefined' && !window.__popupMonitorInstalled) {
     const win = _originalWindowOpen.apply(this, args);
     const target = args[1] || '_blank';
 
-    // Ignore self / top / parent navigations (not new popup windows)
+    // Ignore self / top / parent navigations (internal navigations)
     if (target === '_self' || target === '_top' || target === '_parent') {
       return win;
     }
 
     // Ignore internal test probes
-    if (args[0] === 'about:blank' && args[2] === 'width=1,height=1,left=-9999,top=-9999') {
+    if (args[0] === 'about:blank') {
       return win;
     }
 
-    // If this popup call succeeded:
-    if (win && !win.closed && typeof win.closed !== 'undefined') {
-      popupSuccessInCurrentClick = true;
-      window.__popupSuccessfullyOpened = true;
-      window.__popupBlockedDetected = false;
+    // If popup call succeeded:
+    if (win && !win.closed) {
+      markPopupSuccess();
       return win;
     }
 
-    // If this popup call returned null or was closed:
-    // Wait a short tick (300ms) to make sure no sibling popup on this click succeeded
-    // (e.g. duplicate listeners where 1st opened and 2nd was blocked by 1-popup-per-gesture rule)
+    // If popup returned null or was closed:
+    // If user has ALREADY opened a popup or route has popunder disabled, NEVER block user!
+    const alreadyAllowed =
+      window.__popupSuccessfullyOpened === true ||
+      window.disablePopunder ||
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ad_popup_shown') === 'true') ||
+      (typeof document !== 'undefined' && document.cookie.includes('zone-cap-'));
+
+    if (alreadyAllowed) {
+      return win;
+    }
+
+    // Wait 600ms to allow asynchronous creativeDisplayed or popunder handlers to confirm
     setTimeout(() => {
-      if (popupSuccessInCurrentClick || window.__popupSuccessfullyOpened) {
-        // A popup ad successfully appeared! DO NOT show adblock wall!
+      const confirmedAllowed =
+        window.__popupSuccessfullyOpened === true ||
+        window.disablePopunder ||
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ad_popup_shown') === 'true') ||
+        (typeof document !== 'undefined' && document.cookie.includes('zone-cap-'));
+
+      if (confirmedAllowed) {
         return;
       }
-      // No popup opened, it was genuinely blocked by browser / Cốc Cốc
+
       window.__popupBlockedDetected = true;
       window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
         detail: { url: args[0], reason: 'popup_blocked' }
       }));
-    }, 300);
+    }, 600);
 
     return win;
   };
@@ -291,9 +336,18 @@ export function AdBlockWall() {
     checkAdBlock();
   }, [checkAdBlock]);
 
-  // Lắng nghe sự kiện chặn popup (khi Cốc Cốc / tiện ích chặn popup lúc click hoặc tải trang)
+  // Lắng nghe sự kiện chặn popup (chỉ chặn khi chưa từng có popup nào mở thành công)
   useEffect(() => {
     const onPopupBlocked = () => {
+      const alreadyAllowed =
+        window.__popupSuccessfullyOpened === true ||
+        window.disablePopunder ||
+        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ad_popup_shown') === 'true') ||
+        (typeof document !== 'undefined' && document.cookie.includes('zone-cap-'));
+
+      if (alreadyAllowed) {
+        return;
+      }
       setBlocked(true);
       setChecking(false);
     };
@@ -446,6 +500,9 @@ export function AdBlockWall() {
           onClick={() => {
             window.__popupBlockedDetected = false;
             window.__popupSuccessfullyOpened = false;
+            try {
+              sessionStorage.removeItem('ad_popup_shown');
+            } catch {}
             window.location.reload();
           }}
           style={{
