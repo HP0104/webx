@@ -39,7 +39,7 @@ function checkScriptLoad(src, validationFn = null) {
 }
 
 async function detectAdBlocker() {
-  // Helper: check if an element is hidden/collapsed by adblocker
+  // Helper: check if an element is hidden/collapsed by adblocker CSS rules
   function isElementBlocked(el) {
     if (!document.body.contains(el)) return true;
     const style = window.getComputedStyle(el);
@@ -56,157 +56,78 @@ async function detectAdBlocker() {
     );
   }
 
-  // ── Check 1: Classic DOM bait (catches uBlock, ABP) ──
-  const checkClassicDOM = () => new Promise((resolve) => {
-    const bait = document.createElement('div');
-    bait.className = 'ad-banner adsbox doubleclick ad ads ad-placement ad-placeholder sponsor ad-container ad-wrapper pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links';
-    bait.id = 'adsense';
-    Object.assign(bait.style, {
-      position: 'absolute', top: '-9999px', left: '-9999px',
-      width: '10px', height: '10px', display: 'block',
-    });
-    document.body.appendChild(bait);
-
-    setTimeout(() => {
-      const blocked = isElementBlocked(bait);
-      bait.remove();
-      resolve(blocked);
-    }, 300);
-  });
-
-  // ── Check 2: Google AdSense <ins> element (catches Cốc Cốc) ──
-  // Cốc Cốc's adblocker specifically targets AdSense ins elements and collapses them
-  const checkAdSenseIns = () => new Promise((resolve) => {
-    const ins = document.createElement('ins');
-    ins.className = 'adsbygoogle';
-    ins.setAttribute('data-ad-client', 'ca-pub-1234567890123456');
-    ins.setAttribute('data-ad-slot', '1234567890');
-    Object.assign(ins.style, {
-      display: 'block', width: '300px', height: '250px',
-      position: 'absolute', top: '-9999px', left: '-9999px',
-      overflow: 'hidden',
-    });
-    document.body.appendChild(ins);
-
-    setTimeout(() => {
-      const blocked = isElementBlocked(ins);
-      ins.remove();
-      resolve(blocked);
-    }, 500);
-  });
-
-  // ── Check 3: ExoClick ad slot (catches Cốc Cốc targeting ExoClick) ──
-  const checkExoClickSlot = () => new Promise((resolve) => {
+  // ── Check 1: DOM Bait Elements (Catches Cốc Cốc, uBlock, ABP cosmetic filtering) ──
+  // We test multiple common ad classes that Cốc Cốc and adblockers inject CSS to hide:
+  // - .adsbygoogle (Google AdSense)
+  // - .adsbox, .ad-banner, .pub_300x250 (EasyList generic)
+  // - .eas6a97888e38 (ExoClick)
+  const checkDOMBait = () => new Promise((resolve) => {
     const container = document.createElement('div');
-    Object.assign(container.style, {
-      position: 'absolute', top: '-9999px', left: '-9999px',
-      width: '728px', height: '90px', overflow: 'hidden',
-    });
-    const ins = document.createElement('ins');
-    ins.className = 'eas6a97888e38';
-    ins.setAttribute('data-zoneid', '5983796');
-    Object.assign(ins.style, { display: 'block', width: '728px', height: '90px' });
-    container.appendChild(ins);
+    container.setAttribute('style', 'position: absolute !important; top: -9999px !important; left: -9999px !important; width: 100px !important; height: 100px !important;');
+
+    const baitDiv = document.createElement('div');
+    baitDiv.className = 'adsbox ad-placement pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads text-ad-links banner-ad ad-container';
+    baitDiv.id = 'adsense';
+    baitDiv.innerHTML = '&nbsp;';
+    baitDiv.style.width = '100px';
+    baitDiv.style.height = '100px';
+
+    const insAdsense = document.createElement('ins');
+    insAdsense.className = 'adsbygoogle';
+    insAdsense.innerHTML = '&nbsp;';
+    insAdsense.style.display = 'block';
+    insAdsense.style.width = '100px';
+    insAdsense.style.height = '100px';
+
+    const insExo = document.createElement('ins');
+    insExo.className = 'eas6a97888e38';
+    insExo.setAttribute('data-zoneid', '5983796');
+    insExo.innerHTML = '&nbsp;';
+    insExo.style.display = 'block';
+    insExo.style.width = '100px';
+    insExo.style.height = '100px';
+
+    container.appendChild(baitDiv);
+    container.appendChild(insAdsense);
+    container.appendChild(insExo);
     document.body.appendChild(container);
 
+    // Wait for browser styling & adblocker injected CSS to apply
     setTimeout(() => {
-      const blocked = isElementBlocked(ins) || isElementBlocked(container);
+      const blocked =
+        isElementBlocked(baitDiv) ||
+        isElementBlocked(insAdsense) ||
+        isElementBlocked(insExo) ||
+        isElementBlocked(container);
+
       container.remove();
       resolve(blocked);
-    }, 500);
+    }, 250);
   });
 
-  // ── Check 4: Google Ad iframe (Cốc Cốc blocks googlesyndication at frame level) ──
-  const checkGoogleAdFrame = () => new Promise((resolve) => {
-    const iframe = document.createElement('iframe');
-    iframe.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js';
-    iframe.setAttribute('name', 'google_ads_iframe');
-    Object.assign(iframe.style, {
-      width: '1px', height: '1px', position: 'absolute',
-      top: '-9999px', left: '-9999px', visibility: 'hidden',
-    });
-
-    let settled = false;
-    const done = (blocked) => {
-      if (settled) return;
-      settled = true;
-      iframe.remove();
-      resolve(blocked);
-    };
-
-    iframe.onerror = () => done(true);
-    iframe.onload = () => {
-      // Even if onload fires, check if the iframe was actually blocked/empty
-      setTimeout(() => {
-        try {
-          // If blocked, accessing contentWindow or its content will fail or be empty
-          const doc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (!doc || !doc.body || doc.body.innerHTML.length < 10) {
-            done(true);
-          } else {
-            done(false);
-          }
-        } catch {
-          // Cross-origin = loaded successfully (not blocked)
-          done(false);
-        }
-      }, 200);
-    };
-
-    document.body.appendChild(iframe);
-    setTimeout(() => done(true), ADBLOCK_DETECT_DELAY);
-  });
-
-  // ── Check 5: Ad pixel image (tracking pixel from known ad domains) ──
-  const checkAdPixel = () => new Promise((resolve) => {
-    const img = document.createElement('img');
-    img.style.position = 'absolute';
-    img.style.top = '-9999px';
-    img.style.left = '-9999px';
-    img.style.width = '1px';
-    img.style.height = '1px';
-
-    let settled = false;
-    const done = (blocked) => {
-      if (settled) return;
-      settled = true;
-      img.remove();
-      resolve(blocked);
-    };
-
-    // Use a doubleclick pixel URL — most adblockers block *.doubleclick.net
-    img.src = 'https://ad.doubleclick.net/favicon.ico?t=' + Date.now();
-    img.onerror = () => done(true);
-    img.onload = () => done(false);
-    document.body.appendChild(img);
-
-    setTimeout(() => done(true), ADBLOCK_DETECT_DELAY);
-  });
-
-  // ── Check 6: Fetch with redirect-based detection ──
-  // Cốc Cốc may allow no-cors fetches to succeed (opaque responses),
-  // so we use 'cors' mode which will fail if blocked or if CORS is denied
-  const checkFetch = async () => {
+  // ── Check 2: Fetch check (Network-level blocking, e.g. Cốc Cốc network filter, Brave Shields) ──
+  // Note: Using fetch never triggers a file download dialog!
+  const checkNetworkFetch = async () => {
     try {
-      // This specific URL is on nearly every filter list
-      const resp = await fetch(
-        'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js',
-        { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }
-      );
-      // Even if fetch succeeds with opaque response, check if the response type indicates blocking
-      // Some blockers return a successful response but with type 'opaque' and zero-length body
-      // Additional heuristic: try a second ad domain
-      await fetch(
-        'https://ad.doubleclick.net/favicon.ico',
-        { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }
-      );
+      await Promise.all([
+        fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', {
+          method: 'HEAD',
+          mode: 'no-cors',
+          cache: 'no-store'
+        }),
+        fetch('https://a.magsrv.com/ad-provider.js', {
+          method: 'HEAD',
+          mode: 'no-cors',
+          cache: 'no-store'
+        })
+      ]);
       return false;
     } catch {
       return true;
     }
   };
 
-  // ── Check 7: Popup blocker hook detection ──
+  // ── Check 3: Popup Blocker Hook Detection ──
   const checkPopupHook = () => {
     try {
       return window.open.toString().indexOf('[native code]') === -1;
@@ -215,37 +136,32 @@ async function detectAdBlocker() {
     }
   };
 
-  // ── Check 8: First-party bait script ──
+  // ── Check 4: First-party bait script (/ads.js) ──
   const checkBaitScript = () =>
     checkScriptLoad('/ads.js', () => window.__adblockerBait === true);
 
-  // ── Check 9: Dynamic script load from ad domains ──
-  const checkAdScriptLoad = () =>
-    checkScriptLoad(EXOCLICK_PROVIDER_SRC);
+  // ── Check 5: Ad Script tags (catches ERR_BLOCKED_BY_CLIENT on script tags) ──
+  // Note: Script tags execute JS; they NEVER download files.
+  const checkAdScripts = () =>
+    Promise.all([
+      checkScriptLoad(EXOCLICK_PROVIDER_SRC),
+      checkScriptLoad('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js')
+    ]).then(([exoBlocked, googleBlocked]) => exoBlocked || googleBlocked);
 
-  // ── Run all checks in parallel, return true if ANY detects blocking ──
-  // Group into "fast" (DOM-based, ~300-500ms) and "slow" (network-based, ~1-3s)
-  // If fast checks detect, return immediately without waiting for slow ones
-  const fastChecks = Promise.all([
-    checkClassicDOM(),
-    checkAdSenseIns(),
-    checkExoClickSlot(),
-  ]);
+  // Run DOM check first (fastest, ~250ms)
+  const domBlocked = await checkDOMBait();
+  if (domBlocked) return true;
 
-  const fastResult = await fastChecks;
-  if (fastResult.some(Boolean)) return true;
-
-  // If fast checks all passed, run slower network/pixel checks
   if (checkPopupHook()) return true;
 
-  const slowChecks = await Promise.all([
-    checkGoogleAdFrame(),
-    checkAdPixel(),
-    checkFetch(),
+  // Run network & script checks in parallel
+  const [fetchBlocked, baitBlocked, scriptBlocked] = await Promise.all([
+    checkNetworkFetch(),
     checkBaitScript(),
-    checkAdScriptLoad(),
+    checkAdScripts()
   ]);
-  return slowChecks.some(Boolean);
+
+  return fetchBlocked || baitBlocked || scriptBlocked;
 }
 
 let _adBlockDetected = null;
