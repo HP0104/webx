@@ -136,13 +136,8 @@ async function detectAdBlocker() {
   }
 
   // ── Check 4: Popup Blocker Detection ──
-  // Only flagged if genuinely blocked AND user has never shown a popup in this session
-  const popupAlreadyShown =
-    window.__popupSuccessfullyOpened === true ||
-    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ad_popup_shown') === 'true') ||
-    (typeof document !== 'undefined' && document.cookie.includes('zone-cap-'));
-
-  if (window.__popupBlockedDetected === true && !popupAlreadyShown && !window.disablePopunder) {
+  // Only flagged if genuinely blocked by browser/Cốc Cốc on click AND popup not already allowed
+  if (window.__popupBlockedDetected === true && !window.__popupSuccessfullyOpened && !window.disablePopunder) {
     console.warn('[AdBlock] Blocked by Check 4 (Popup blocked)');
     return true;
   }
@@ -164,21 +159,12 @@ async function detectAdBlocker() {
 if (typeof window !== 'undefined' && !window.__popupMonitorInstalled) {
   window.__popupMonitorInstalled = true;
   window.__popupBlockedDetected = false;
+  window.__popupSuccessfullyOpened = false;
 
   const markPopupSuccess = () => {
     window.__popupSuccessfullyOpened = true;
     window.__popupBlockedDetected = false;
-    try {
-      sessionStorage.setItem('ad_popup_shown', 'true');
-    } catch {}
   };
-
-  // Restore state if popup was already shown in this tab session or cookie exists
-  try {
-    if (sessionStorage.getItem('ad_popup_shown') === 'true' || document.cookie.includes('zone-cap-')) {
-      window.__popupSuccessfullyOpened = true;
-    }
-  } catch {}
 
   // Listen for ExoClick creative display events on document
   document.addEventListener('creativeDisplayed-6004200', () => markPopupSuccess(), true);
@@ -216,35 +202,16 @@ if (typeof window !== 'undefined' && !window.__popupMonitorInstalled) {
       return win;
     }
 
-    // If popup returned null or was closed:
     // If user has ALREADY opened a popup or route has popunder disabled, NEVER block user!
-    const alreadyAllowed =
-      window.__popupSuccessfullyOpened === true ||
-      window.disablePopunder ||
-      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ad_popup_shown') === 'true') ||
-      (typeof document !== 'undefined' && document.cookie.includes('zone-cap-'));
-
-    if (alreadyAllowed) {
+    if (window.__popupSuccessfullyOpened === true || window.disablePopunder) {
       return win;
     }
 
-    // Wait 600ms to allow asynchronous creativeDisplayed or popunder handlers to confirm
-    setTimeout(() => {
-      const confirmedAllowed =
-        window.__popupSuccessfullyOpened === true ||
-        window.disablePopunder ||
-        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ad_popup_shown') === 'true') ||
-        (typeof document !== 'undefined' && document.cookie.includes('zone-cap-'));
-
-      if (confirmedAllowed) {
-        return;
-      }
-
-      window.__popupBlockedDetected = true;
-      window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
-        detail: { url: args[0], reason: 'popup_blocked' }
-      }));
-    }, 600);
+    // Popup was blocked by browser (e.g. Cốc Cốc popup blocker)
+    window.__popupBlockedDetected = true;
+    window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
+      detail: { url: args[0], reason: 'popup_blocked' }
+    }));
 
     return win;
   };
@@ -339,13 +306,7 @@ export function AdBlockWall() {
   // Lắng nghe sự kiện chặn popup (chỉ chặn khi chưa từng có popup nào mở thành công)
   useEffect(() => {
     const onPopupBlocked = () => {
-      const alreadyAllowed =
-        window.__popupSuccessfullyOpened === true ||
-        window.disablePopunder ||
-        (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('ad_popup_shown') === 'true') ||
-        (typeof document !== 'undefined' && document.cookie.includes('zone-cap-'));
-
-      if (alreadyAllowed) {
+      if (window.__popupSuccessfullyOpened === true || window.disablePopunder) {
         return;
       }
       setBlocked(true);
@@ -502,6 +463,14 @@ export function AdBlockWall() {
             window.__popupSuccessfullyOpened = false;
             try {
               sessionStorage.removeItem('ad_popup_shown');
+              localStorage.removeItem('ad_popup_shown');
+              document.cookie.split(";").forEach(c => {
+                const name = c.split("=")[0].trim();
+                if (name.startsWith("zone-cap-")) {
+                  document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/";
+                  document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:01 GMT;path=/;domain=" + window.location.hostname;
+                }
+              });
             } catch {}
             window.location.reload();
           }}
