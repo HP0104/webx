@@ -463,6 +463,20 @@ export default {
           }
         }
 
+        // Fetch Manga
+        const mangaUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/manga?pageSize=500`;
+        const mangaResponse = await fetch(mangaUrl, { headers: { "Authorization": `Bearer ${token}` } });
+        let mangaList = [];
+        if (mangaResponse.ok) {
+          const data = await mangaResponse.json();
+          if (data.documents) {
+            mangaList = data.documents.map(doc => {
+              const parts = doc.name.split('/');
+              return parts[parts.length - 1]; // id
+            });
+          }
+        }
+
         let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -471,87 +485,92 @@ export default {
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/games</loc>
+    <loc>https://web18p.xyz/games/</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/videos</loc>
+    <loc>https://web18p.xyz/videos/</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/videos/all</loc>
+    <loc>https://web18p.xyz/videos/all/</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/videos/vam</loc>
+    <loc>https://web18p.xyz/videos/vam/</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/videos/3d</loc>
+    <loc>https://web18p.xyz/videos/3d/</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/blog</loc>
+    <loc>https://web18p.xyz/manga/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/blog/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/report</loc>
+    <loc>https://web18p.xyz/report/</loc>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/category/hot</loc>
+    <loc>https://web18p.xyz/category/hot/</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/category/new</loc>
+    <loc>https://web18p.xyz/category/new/</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/category/popular</loc>
+    <loc>https://web18p.xyz/category/popular/</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/category/top-rated</loc>
+    <loc>https://web18p.xyz/category/top-rated/</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/category/18-plus</loc>
+    <loc>https://web18p.xyz/category/18-plus/</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/category/18-all</loc>
+    <loc>https://web18p.xyz/category/18-all/</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/category/18-vn</loc>
+    <loc>https://web18p.xyz/category/18-vn/</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/category/18-uncensored</loc>
+    <loc>https://web18p.xyz/category/18-uncensored/</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/category/18-pc</loc>
+    <loc>https://web18p.xyz/category/18-pc/</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/category/18-android</loc>
+    <loc>https://web18p.xyz/category/18-android/</loc>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>`;
@@ -559,7 +578,7 @@ export default {
         games.forEach(slug => {
           xml += `
   <url>
-    <loc>https://web18p.xyz/game/${slug}</loc>
+    <loc>https://web18p.xyz/game/${slug}/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>`;
@@ -568,7 +587,16 @@ export default {
         videos.forEach(id => {
           xml += `
   <url>
-    <loc>https://web18p.xyz/video/${id}</loc>
+    <loc>https://web18p.xyz/video/${id}/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>`;
+        });
+
+        mangaList.forEach(id => {
+          xml += `
+  <url>
+    <loc>https://web18p.xyz/manga/${id}/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>`;

@@ -115,7 +115,8 @@ function PageTitle({ games }) {
     }
 
     document.title = `${pageTitle} | WEB18P`;
-    const canonicalUrl = `https://web18p.xyz${canonicalPath}`;
+    const normalizedPath = canonicalPath === '/' ? '/' : (canonicalPath.endsWith('/') ? canonicalPath : `${canonicalPath}/`);
+    const canonicalUrl = `https://web18p.xyz${normalizedPath}`;
     const setMeta = (selector, attr, value) => {
       const element = document.querySelector(selector);
       if (element) element.setAttribute(attr, value);
