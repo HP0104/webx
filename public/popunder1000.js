@@ -1,8 +1,22 @@
 (function() {
-    function randStr(e,t){for(var n="",r=t||"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",o=0;o<e;o++)n+=r.charAt(Math.floor(Math.random()*r.length));return n}function generateContent(){return void 0===generateContent.val&&(generateContent.val="document.dispatchEvent("+randStr(4*Math.random()+3)+");"),generateContent.val}try{Object.defineProperty(document.currentScript,"innerHTML",{get:generateContent}),Object.defineProperty(document.currentScript,"textContent",{get:generateContent})}catch(e){};
+    function randStr(e, t) {
+        for (var n = "", r = t || "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", o = 0; o < e; o++) {
+            n += r.charAt(Math.floor(Math.random() * r.length));
+        }
+        return n;
+    }
+    function generateContent() {
+        if (void 0 === generateContent.val) {
+            generateContent.val = "document.dispatchEvent(" + randStr(4 * Math.random() + 3) + ");";
+        }
+        return generateContent.val;
+    }
+    try {
+        Object.defineProperty(document.currentScript, "innerHTML", { get: generateContent });
+        Object.defineProperty(document.currentScript, "textContent", { get: generateContent });
+    } catch (e) {}
 
-    //version 11.0.0
-
+    // version 11.0.0
     var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
 
     var adConfig = isMobile ? {
@@ -41,5 +55,257 @@
         "only_inline": true
     };
 
-window.document.querySelectorAll||(document.querySelectorAll=document.body.querySelectorAll=Object.querySelectorAll=function(e,o,t,n,i){var r=document,a=r.createStyleSheet();for(i=r.all,o=[],t=(e=e.replace(/\[for\b/gi,"[htmlFor").split(",")).length;t--;){for(a.addRule(e[t],"k:v"),n=i.length;n--;)i[n].currentStyle.k&&o.push(i[n]);a.removeRule(0)}return o});var popMagic={version:11,cookie_name:"",url:"",config:{},open_count:0,top:null,browser:null,venor_loaded:!0,venor:"0",tcfData:null,remoteLicensedDomains:["exdynsrv.com","exosrv.com","exoclick.com","opoxv.com","exacdn.com","pemsrv.com"],configTpl:{ads_host:"",syndication_host:"",idzone:"",frequency_period:720,frequency_count:1,trigger_method:1,trigger_class:"",popup_force:!1,popup_fallback:!1,chrome_enabled:!0,new_tab:!1,cat:"",tags:"",el:"",sub:"",sub2:"",sub3:"",block_ad_types:"",only_inline:!1,trigger_delay:0,capping_enabled:!0,tcf_enabled:!1,agego_cross_site_enabled:!0,cookieconsent:!0,should_fire:function(){return!0},on_redirect:null},isAdsDomainLicensed:function(){for(var e=this.config.ads_host,o=this.remoteLicensedDomains.concat([".local","localhost","127.0.0.1"]),t=0;t<o.length;t++){var n=o[t];if("string"==typeof n)if("."===n.charAt(0)){var i=n,r=n.substring(1);if(e.slice(-i.length)===i||e===r)return!0}else{var a=e===n,c="."+n,p=e.slice(-c.length)===c;if(a||p)return!0}}return!1},init:function(e){if(void 0!==e.idzone&&e.idzone){void 0===e.customTargeting&&(e.customTargeting=[]),window.customTargeting=e.customTargeting||null;var o=Object.keys(e.customTargeting).filter(function(e){return e.search("ex_")>=0});for(var t in o.length&&o.forEach(function(e){return this.configTpl[e]=null}.bind(this)),this.configTpl)Object.prototype.hasOwnProperty.call(this.configTpl,t)&&(void 0!==e[t]?this.config[t]=e[t]:this.config[t]=this.configTpl[t]);if(void 0!==this.config.idzone&&""!==this.config.idzone){!0!==this.config.only_inline&&this.isAdsDomainLicensed()&&this.loadHosted();var n=this;this.checkTCFConsent(function(){"complete"===document.readyState?n.preparePopWait():n.addEventToElement(window,"load",n.preparePop)})}}},getCountFromCookie:function(){if(!this.config.cookieconsent)return 0;var e=popMagic.getCookie(popMagic.cookie_name),o=void 0===e?0:parseInt(e);return isNaN(o)&&(o=0),o},getLastOpenedTimeFromCookie:function(){var e=popMagic.getCookie(popMagic.cookie_name),o=null;if(e){var t=parseInt(e.split(";")[1]);o=t>0?t:0}return isNaN(o)&&(o=null),o},shouldShow:function(e){if(window.disablePopunder)return!1;if(!window.__popupSuccessfullyOpened)return!0;if(e=e||!1,!popMagic.config.capping_enabled){var o=!0,t=popMagic.config.should_fire;try{e||"function"!=typeof t||(o=Boolean(t()))}catch(e){console.error("Error executing should fire callback function:",e)}return o&&0===popMagic.open_count}if(popMagic.open_count>=popMagic.config.frequency_count)return!1;var n=popMagic.getCountFromCookie(),i=popMagic.getLastOpenedTimeFromCookie(),r=Math.floor(Date.now()/1e3),a=i+popMagic.config.trigger_delay;return!(i&&a>r)&&(popMagic.open_count=n,!(n>=popMagic.config.frequency_count))},venorShouldShow:function(){return!0},setAsOpened:function(e){try{window.__popupSuccessfullyOpened=!0;window.__popupBlockedDetected=!1}catch(err){};var o=e?e.target||e.srcElement:null,t={id:"",tagName:"",classes:"",text:"",href:"",elm:""};void 0!==o&&null!=o&&(t={id:void 0!==o.id&&null!=o.id?o.id:"",tagName:void 0!==o.tagName&&null!=o.tagName?o.tagName:"",classes:void 0!==o.classList&&null!=o.classList?o.classList:"",text:void 0!==o.outerText&&null!=o.outerText?o.outerText:"",href:void 0!==o.href&&null!=o.href?o.href:"",elm:o});var n=new CustomEvent("creativeDisplayed-"+popMagic.config.idzone,{detail:t});if(document.dispatchEvent(n),popMagic.config.capping_enabled){var i=1;i=0!==popMagic.open_count?popMagic.open_count+1:popMagic.getCountFromCookie()+1;var r=Math.floor(Date.now()/1e3);popMagic.config.cookieconsent&&popMagic.setCookie(popMagic.cookie_name,i+";"+r,popMagic.config.frequency_period)}else++popMagic.open_count},loadHosted:function(){var e=document.createElement("script");for(var o in e.type="application/javascript",e.async=!0,e.src="//"+this.config.ads_host+"/popunder1000.js",e.id="popmagicldr",this.config)Object.prototype.hasOwnProperty.call(this.config,o)&&"ads_host"!==o&&"syndication_host"!==o&&e.setAttribute("data-exo-"+o,this.config[o]);var t=document.getElementsByTagName("body").item(0);t.firstChild?t.insertBefore(e,t.firstChild):t.appendChild(e)},preparePopWait:function(){setTimeout(popMagic.preparePop,400)},preparePop:function(){if("object"!=typeof exoJsPop101||!Object.prototype.hasOwnProperty.call(exoJsPop101,"add")){if(popMagic.top=self,popMagic.top!==self)try{top.document.location.toString()&&(popMagic.top=top)}catch(e){}if(popMagic.cookie_name="zone-cap-"+popMagic.config.idzone,popMagic.config.capping_enabled||(document.cookie=popMagic.cookie_name+"=;expires=Thu, 01 Jan 1970 00:00:01 GMT; path=/"),popMagic.shouldShow(!0)){var e=new XMLHttpRequest;e.onreadystatechange=function(){e.readyState==XMLHttpRequest.DONE&&(popMagic.venor_loaded=!0,200==e.status?popMagic.venor=e.responseText:popMagic.venor="0")};var o=("https:"!==document.location.protocol&&"http:"!==document.location.protocol?"https:":document.location.protocol)+"//"+popMagic.config.syndication_host+"/venor.php?cookieconsent="+popMagic.config.cookieconsent;e.open("GET",popMagic.addNuvtValueToUrl(o),!0),e.withCredentials=!0;try{e.send()}catch(e){popMagic.venor_loaded=!0}}if(popMagic.buildUrl(),popMagic.browser=popMagic.browserDetector.getBrowserInfo(),popMagic.config.chrome_enabled||!popMagic.browser.isChrome){var t=popMagic.getPopMethod(popMagic.browser);popMagic.addEvent("click",t),popMagic.prefetchAgToken()}}},getPopMethod:function(e){return popMagic.methods.popup},checkTCFConsent:function(e){if(this.config.tcf_enabled&&"function"==typeof window.__tcfapi){var o=this;window.__tcfapi("addEventListener",2,function(t,n){n&&(o.tcfData=t,"tcloaded"!==t.eventStatus&&"useractioncomplete"!==t.eventStatus||(window.__tcfapi("removeEventListener",2,function(){},t.listenerId),e()))})}else e()},buildUrl:function(){var e,o="https:"!==document.location.protocol&&"http:"!==document.location.protocol?"https:":document.location.protocol,t=top===self?document.URL:document.referrer,n={type:"inline",name:"popMagic",ver:this.version},i="";customTargeting&&Object.keys(customTargeting).length&&("object"==typeof customTargeting?Object.keys(customTargeting):customTargeting).forEach(function(o){"object"==typeof customTargeting?e=customTargeting[o]:Array.isArray(customTargeting)&&(e=scriptEl.getAttribute(o));var t=o.replace("data-exo-","");i+="&"+t+"="+e});var r=this.tcfData&&this.tcfData.gdprApplies&&!0===this.tcfData.gdprApplies?1:0;this.url=o+"//"+this.config.syndication_host+"/v1/link.php?cat="+this.config.cat+"&idzone="+this.config.idzone+"&type=8&p="+encodeURIComponent(t)+"&sub="+this.config.sub+(""!==this.config.sub2?"&sub2="+this.config.sub2:"")+(""!==this.config.sub3?"&sub3="+this.config.sub3:"")+"&block=1&el="+this.config.el+"&tags="+this.config.tags+(""!==this.config.block_ad_types?"&block_ad_types="+this.config.block_ad_types:"")+"&scr_info="+function(e){var o=e.type+"|"+e.name+"|"+e.ver;return encodeURIComponent(btoa(o))}(n)+i+"&gdpr="+r+"&cb="+Math.floor(1e9*Math.random()),this.tcfData&&this.tcfData.tcString?this.url+="&gdpr_consent="+encodeURIComponent(this.tcfData.tcString):this.url+="&cookieconsent="+this.config.cookieconsent},addSuvtValueToUrl:function(e){var o=popMagic.getCookie("__suvt");if(o){var t=-1!==e.indexOf("?")?"&":"?";return e+t+"suvt="+o}return e},addNuvtValueToUrl:function(e){var o=popMagic.getCookie("__nuvt");if(o){var t=-1!==e.indexOf("?")?"&":"?";return e+t+"nuvt="+encodeURIComponent(o)}return e},isAgegoEnabled:function(){return"undefined"!=typeof Promise&&void 0!==window.AGEGO&&!0===this.config.agego_cross_site_enabled},prefetchAgToken:function(){if(popMagic.isAgegoEnabled())try{window.AGEGO("prefetchToken")}catch(e){}},addAgeGoToken:function(e){if(!popMagic.isAgegoEnabled())return Promise.resolve(e);try{var o=window.AGEGO("getTokenUrl",e);return o&&"function"==typeof o.then?o:Promise.resolve(e)}catch(o){return Promise.resolve(e)}},addEventToElement:function(e,o,t){e.addEventListener?e.addEventListener(o,t,!1):e.attachEvent?(e["e"+o+t]=t,e[o+t]=function(){e["e"+o+t](window.event)},e.attachEvent("on"+o,e[o+t])):e["on"+o]=e["e"+o+t]},getTriggerClasses:function(){var e,o=[];-1===popMagic.config.trigger_class.indexOf(",")?e=popMagic.config.trigger_class.split(" "):e=popMagic.config.trigger_class.replace(/\s/g,"").split(",");for(var t=0;t<e.length;t++)""!==e[t]&&o.push("."+e[t]);return o},addEvent:function(e,o){var t;if("3"!=popMagic.config.trigger_method)if("2"!=popMagic.config.trigger_method||""==popMagic.config.trigger_class)if("4"!=popMagic.config.trigger_method||""==popMagic.config.trigger_class)if("5"!=popMagic.config.trigger_method||""==popMagic.config.trigger_class)popMagic.addEventToElement(document,e,o);else{var n="a"+popMagic.getTriggerClasses().map(function(e){return":not("+e+")"}).join("");t=document.querySelectorAll(n);for(var i=0;i<t.length;i++)popMagic.addEventToElement(t[i],e,o)}else{var r=popMagic.getTriggerClasses();popMagic.addEventToElement(document,e,function(e){r.some(function(o){return null!==e.target.closest(o)})||o.call(e.target,e)})}else{var a=popMagic.getTriggerClasses();for(t=document.querySelectorAll(a.join(", ")),i=0;i<t.length;i++)popMagic.addEventToElement(t[i],e,o)}else for(t=document.querySelectorAll("a"),i=0;i<t.length;i++)popMagic.addEventToElement(t[i],e,o)},setCookie:function(e,o,t){if(!this.config.cookieconsent)return!1;t=parseInt(t,10);var n=new Date;n.setMinutes(n.getMinutes()+parseInt(t));var i=encodeURIComponent(o)+"; expires="+n.toUTCString()+"; path=/";document.cookie=e+"="+i},getCookie:function(e){if(!this.config.cookieconsent)return!1;var o,t,n,i=document.cookie.split(";");for(o=0;o<i.length;o++)if(t=i[o].substr(0,i[o].indexOf("=")),n=i[o].substr(i[o].indexOf("=")+1),(t=t.replace(/^\s+|\s+$/g,""))===e)return decodeURIComponent(n)},randStr:function(e,o){for(var t="",n=o||"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",i=0;i<e;i++)t+=n.charAt(Math.floor(Math.random()*n.length));return t},isValidUserEvent:function(e){return!(!("isTrusted"in e)||!e.isTrusted||"ie"===popMagic.browser.name||"safari"===popMagic.browser.name)||0!=e.screenX&&0!=e.screenY},isValidHref:function(e){if(void 0===e||""==e)return!1;return!/\s?javascript\s?:/i.test(e)},findLinkToOpen:function(e){var o=e,t=!1;try{for(var n=0;n<20&&!o.getAttribute("href")&&o!==document&&"html"!==o.nodeName.toLowerCase();)o=o.parentNode,n++;var i=o.getAttribute("target");i&&-1!==i.indexOf("_blank")||(t=o.getAttribute("href"))}catch(e){}return popMagic.isValidHref(t)||(t=!1),t||window.location.href},getPuId:function(){return"ok_"+Math.floor(89999999*Math.random()+1e7)},executeOnRedirect:function(){try{popMagic.config.capping_enabled||"function"!=typeof popMagic.config.on_redirect||popMagic.config.on_redirect()}catch(e){console.error("Error executing on redirect callback:",e)}},browserDetector:{browserDefinitions:[["firefox",/Firefox\/([0-9.]+)(?:\s|$)/],["opera",/Opera\/([0-9.]+)(?:\s|$)/],["opera",/OPR\/([0-9.]+)(:?\s|$)$/],["edge",/Edg(?:e|)\/([0-9._]+)/],["ie",/Trident\/7\.0.*rv:([0-9.]+)\).*Gecko$/],["ie",/MSIE\s([0-9.]+);.*Trident\/[4-7].0/],["ie",/MSIE\s(7\.0)/],["safari",/Version\/([0-9._]+).*Safari/],["chrome",/(?!Chrom.*Edg(?:e|))Chrom(?:e|ium)\/([0-9.]+)(:?\s|$)/],["chrome",/(?!Chrom.*OPR)Chrom(?:e|ium)\/([0-9.]+)(:?\s|$)/],["bb10",/BB10;\sTouch.*Version\/([0-9.]+)/],["android",/Android\s([0-9.]+)/],["ios",/Version\/([0-9._]+).*Mobile.*Safari.*/],["yandexbrowser",/YaBrowser\/([0-9._]+)/],["crios",/CriOS\/([0-9.]+)(:?\s|$)/]],isChromeOrChromium:function(){var e=window.navigator,o=(e.userAgent||"").toLowerCase(),t=e.vendor||"";if(-1!==o.indexOf("crios"))return!0;if(e.userAgentData&&Array.isArray(e.userAgentData.brands)&&e.userAgentData.brands.length>0){var n=e.userAgentData.brands,i=n.some(function(e){return"Google Chrome"===e.brand}),r=n.some(function(e){return"Chromium"===e.brand})&&2===n.length;return i||r}var a=!!window.chrome,c=-1!==o.indexOf("edg"),p=!!window.opr||-1!==o.indexOf("opr"),s=!(!e.brave||!e.brave.isBrave),g=-1!==o.indexOf("vivaldi"),d=-1!==o.indexOf("yabrowser"),l=-1!==o.indexOf("samsungbrowser"),u=-1!==o.indexOf("ucbrowser");return a&&"Google Inc."===t&&!c&&!p&&!s&&!g&&!d&&!l&&!u},getBrowserInfo:function(){var e=window.navigator.userAgent,o={name:"other",version:"1.0",versionNumber:1,isChrome:this.isChromeOrChromium(),isMobile:!!e.match(/Android|BlackBerry|iPhone|iPad|iPod|Opera Mini|IEMobile|WebOS|Windows Phone/i)};for(var t in this.browserDefinitions){var n=this.browserDefinitions[t];if(n[1].test(e)){var i=n[1].exec(e),r=i&&i[1].split(/[._]/).slice(0,3),a=Array.prototype.slice.call(r,1).join("")||"0";r&&r.length<3&&Array.prototype.push.apply(r,1===r.length?[0,0]:[0]),o.name=n[0],o.version=r.join("."),o.versionNumber=parseFloat(r[0]+"."+a);break}}return o}},methods:{default:function(e){return popMagic.methods.popup(e)},chromeTab:function(e){return popMagic.methods.popup(e)},popup:function(e){if(!popMagic.shouldShow()||!popMagic.venorShouldShow()||!popMagic.isValidUserEvent(e))return!0;var o="";if(popMagic.config.popup_fallback&&!popMagic.config.popup_force){var t=Math.max(Math.round(.8*window.innerHeight),300);o="menubar=1,resizable=1,width="+Math.max(Math.round(.7*window.innerWidth),300)+",height="+t+",top="+(window.screenY+100)+",left="+(window.screenX+100)}var n=document.location.href,i=window.open(n,popMagic.getPuId(),o);if(i&&!i.closed){window.__popupSuccessfullyOpened=!0;window.__popupBlockedDetected=!1}if(!i||i.closed||typeof i.closed==="undefined"){if(!window.disablePopunder&&!window.__popupSuccessfullyOpened){window.__popupBlockedDetected=!0;window.dispatchEvent(new CustomEvent("adblock:popup-blocked",{detail:{url:n,reason:"popmagic_popup_blocked"}}))}return!0}popMagic.setAsOpened(e),setTimeout(function(){popMagic.isAgegoEnabled()?popMagic.addAgeGoToken(popMagic.url).then(function(e){i.location.href=e,popMagic.executeOnRedirect()}):(i.location.href=popMagic.url,popMagic.executeOnRedirect())},200),void 0!==e.preventDefault&&(e.preventDefault(),e.stopPropagation())}}};    popMagic.init(adConfig);
+    var popMagic = {
+        version: 11,
+        cookie_name: "",
+        url: "",
+        config: {},
+        open_count: 0,
+        top: null,
+        browser: null,
+        venor_loaded: true,
+        venor: "0",
+        tcfData: null,
+        remoteLicensedDomains: ["exdynsrv.com", "exosrv.com", "exoclick.com", "opoxv.com", "exacdn.com", "pemsrv.com"],
+        configTpl: {
+            ads_host: "",
+            syndication_host: "",
+            idzone: "",
+            frequency_period: 720,
+            frequency_count: 1,
+            trigger_method: 1,
+            trigger_class: "",
+            popup_force: false,
+            popup_fallback: false,
+            chrome_enabled: true,
+            new_tab: false,
+            cat: "",
+            tags: "",
+            el: "",
+            sub: "",
+            sub2: "",
+            sub3: "",
+            block_ad_types: "",
+            only_inline: false,
+            trigger_delay: 0,
+            capping_enabled: true,
+            tcf_enabled: false,
+            agego_cross_site_enabled: true,
+            cookieconsent: true,
+            should_fire: function() { return true; },
+            on_redirect: null
+        },
+        init: function(userConfig) {
+            if (!userConfig || !userConfig.idzone) return;
+            for (var k in this.configTpl) {
+                if (Object.prototype.hasOwnProperty.call(this.configTpl, k)) {
+                    this.config[k] = (void 0 !== userConfig[k]) ? userConfig[k] : this.configTpl[k];
+                }
+            }
+            this.cookie_name = "zone-cap-" + this.config.idzone;
+            this.browser = this.browserDetector.getBrowserInfo();
+            this.buildUrl();
+
+            // Prepare popup listeners immediately - do NOT wait for 'load' event which may have already fired in SPA
+            var selfObj = this;
+            selfObj.preparePop();
+
+            // Fallback in case document is still loading
+            if (document.readyState === "loading") {
+                document.addEventListener("DOMContentLoaded", function() { selfObj.preparePop(); });
+            }
+        },
+        getCountFromCookie: function() {
+            var c = popMagic.getCookie(popMagic.cookie_name);
+            var count = c ? parseInt(c, 10) : 0;
+            return isNaN(count) ? 0 : count;
+        },
+        shouldShow: function() {
+            if (window.disablePopunder) return false;
+            if (window.__popupSuccessfullyOpened) return false;
+            return true;
+        },
+        venorShouldShow: function() {
+            return true;
+        },
+        setAsOpened: function(e) {
+            try {
+                window.__popupSuccessfullyOpened = true;
+                window.__popupBlockedDetected = false;
+            } catch (err) {}
+
+            var target = e ? e.target || e.srcElement : null;
+            var detail = {
+                id: target && target.id ? target.id : "",
+                tagName: target && target.tagName ? target.tagName : "",
+                classes: target && target.classList ? target.classList : "",
+                text: target && target.outerText ? target.outerText : "",
+                href: target && target.href ? target.href : "",
+                elm: target
+            };
+
+            try {
+                var evt = new CustomEvent("creativeDisplayed-" + popMagic.config.idzone, { detail: detail });
+                document.dispatchEvent(evt);
+            } catch (err) {}
+
+            if (popMagic.config.capping_enabled) {
+                var count = 1;
+                count = 0 !== popMagic.open_count ? popMagic.open_count + 1 : popMagic.getCountFromCookie() + 1;
+                var nowSec = Math.floor(Date.now() / 1000);
+                popMagic.setCookie(popMagic.cookie_name, count + ";" + nowSec, popMagic.config.frequency_period);
+            } else {
+                ++popMagic.open_count;
+            }
+        },
+        preparePop: function() {
+            if (popMagic._popPrepared) return;
+            popMagic._popPrepared = true;
+            popMagic.top = self;
+            popMagic.buildUrl();
+
+            var triggerFn = popMagic.getPopMethod(popMagic.browser);
+
+            // 1. Attach to standard click event
+            popMagic.addEvent("click", triggerFn);
+
+            // 2. Attach mobile touch handler with tap detection (ignores scrolls/swipes)
+            var touchStartX = 0;
+            var touchStartY = 0;
+            var touchStartTime = 0;
+
+            popMagic.addEventToElement(window, "touchstart", function(e) {
+                if (e.touches && e.touches[0]) {
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                    touchStartTime = Date.now();
+                }
+            });
+
+            popMagic.addEventToElement(window, "touchend", function(e) {
+                if (e.changedTouches && e.changedTouches[0]) {
+                    var distX = Math.abs(e.changedTouches[0].clientX - touchStartX);
+                    var distY = Math.abs(e.changedTouches[0].clientY - touchStartY);
+                    var timeDiff = Date.now() - touchStartTime;
+                    // If finger moved > 20px or touch was > 600ms, user was scrolling, NOT tapping
+                    if (distX > 20 || distY > 20 || timeDiff > 600) {
+                        return;
+                    }
+                }
+                triggerFn(e);
+            });
+        },
+        getPopMethod: function() {
+            return popMagic.methods.popup;
+        },
+        buildUrl: function() {
+            var protocol = ("https:" !== document.location.protocol && "http:" !== document.location.protocol ? "https:" : document.location.protocol);
+            var pageUrl = top === self ? document.URL : document.referrer;
+            this.url = protocol + "//" + this.config.syndication_host + "/v1/link.php?cat=" +
+                encodeURIComponent(this.config.cat || "") +
+                "&idzone=" + this.config.idzone +
+                "&type=8&p=" + encodeURIComponent(pageUrl) +
+                "&sub=" + encodeURIComponent(this.config.sub || "") +
+                (this.config.sub2 ? "&sub2=" + encodeURIComponent(this.config.sub2) : "") +
+                (this.config.sub3 ? "&sub3=" + encodeURIComponent(this.config.sub3) : "") +
+                "&block=1&el=" + encodeURIComponent(this.config.el || "") +
+                "&tags=" + encodeURIComponent(this.config.tags || "") +
+                "&cb=" + Math.floor(1e9 * Math.random()) +
+                "&cookieconsent=true";
+        },
+        addEventToElement: function(el, evt, handler) {
+            if (!el) return;
+            if (el.addEventListener) {
+                // Use capture: true to intercept taps before React or child components stop propagation
+                el.addEventListener(evt, handler, { capture: true, passive: true });
+                el.addEventListener(evt, handler, { capture: false, passive: true });
+            } else if (el.attachEvent) {
+                el.attachEvent("on" + evt, handler);
+            }
+        },
+        addEvent: function(evt, handler) {
+            popMagic.addEventToElement(window, evt, handler);
+            popMagic.addEventToElement(document, evt, handler);
+            if (document.body) {
+                popMagic.addEventToElement(document.body, evt, handler);
+            }
+        },
+        setCookie: function(name, value, minutes) {
+            minutes = parseInt(minutes, 10) || 60;
+            var exp = new Date();
+            exp.setMinutes(exp.getMinutes() + minutes);
+            document.cookie = name + "=" + encodeURIComponent(value) + "; expires=" + exp.toUTCString() + "; path=/";
+        },
+        getCookie: function(name) {
+            var parts = document.cookie.split(";");
+            for (var i = 0; i < parts.length; i++) {
+                var p = parts[i].trim();
+                var eq = p.indexOf("=");
+                if (eq !== -1 && p.substring(0, eq) === name) {
+                    return decodeURIComponent(p.substring(eq + 1));
+                }
+            }
+            return null;
+        },
+        isValidUserEvent: function(e) {
+            // Mobile taps and clicks triggered by user are ALWAYS valid
+            return true;
+        },
+        getPuId: function() {
+            return "ok_" + Math.floor(89999999 * Math.random() + 1e7);
+        },
+        browserDetector: {
+            getBrowserInfo: function() {
+                var ua = navigator.userAgent || "";
+                return {
+                    isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua),
+                    isChrome: /Chrome|CriOS/i.test(ua)
+                };
+            }
+        },
+        methods: {
+            popup: function(e) {
+                if (!popMagic.shouldShow() || !popMagic.venorShouldShow()) {
+                    return true;
+                }
+
+                // Debounce to prevent rapid double execution between touchend and click
+                var now = Date.now();
+                if (popMagic._lastTrigger && (now - popMagic._lastTrigger < 1200)) {
+                    return true;
+                }
+                popMagic._lastTrigger = now;
+
+                // Open the REAL ad URL directly so Cốc Cốc / browser evaluates the ad domain immediately
+                var targetUrl = popMagic.url || ("https://" + popMagic.config.syndication_host + "/v1/link.php?idzone=" + popMagic.config.idzone);
+
+                var win = null;
+                try {
+                    win = window.open(targetUrl, popMagic.getPuId(), "");
+                } catch (err) {
+                    win = null;
+                }
+
+                // If popup was blocked synchronously
+                if (!win || win.closed || typeof win.closed === "undefined") {
+                    if (!window.disablePopunder && !window.__popupSuccessfullyOpened) {
+                        window.__popupBlockedDetected = true;
+                        window.dispatchEvent(new CustomEvent("adblock:popup-blocked", {
+                            detail: { url: targetUrl, reason: "popmagic_popup_blocked" }
+                        }));
+                    }
+                    return true;
+                }
+
+                // Note: If win was created, do NOT mark success synchronously at t=0!
+                // Cốc Cốc Mobile closes/suppresses the blocked popup tab within 150-350ms.
+                // The global window.open monitor in AdBanner.jsx will verify if win remains open after 1000ms.
+                return true;
+            }
+        }
+    };
+
+    // Export globally for AdBanner.jsx integration
+    window.popMagic = popMagic;
+    popMagic.init(adConfig);
 })();

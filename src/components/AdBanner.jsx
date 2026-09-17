@@ -161,20 +161,36 @@ if (typeof window !== 'undefined' && !window.__popupMonitorInstalled) {
   window.__popupBlockedDetected = false;
   window.__popupSuccessfullyOpened = false;
 
+  let marking = false;
   const markPopupSuccess = () => {
+    if (marking) return;
+    marking = true;
     window.__popupSuccessfullyOpened = true;
     window.__popupBlockedDetected = false;
+    try {
+      if (typeof window.popMagic !== 'undefined' && typeof window.popMagic.setAsOpened === 'function') {
+        window.popMagic.setAsOpened();
+      }
+    } catch (err) {}
+    marking = false;
   };
 
   // Listen for ExoClick creative display events on document
-  document.addEventListener('creativeDisplayed-6004200', () => markPopupSuccess(), true);
-  document.addEventListener('creativeDisplayed-5983670', () => markPopupSuccess(), true);
+  document.addEventListener('creativeDisplayed-6004200', () => {
+    window.__popupSuccessfullyOpened = true;
+    window.__popupBlockedDetected = false;
+  }, true);
+  document.addEventListener('creativeDisplayed-5983670', () => {
+    window.__popupSuccessfullyOpened = true;
+    window.__popupBlockedDetected = false;
+  }, true);
 
   // Catch any CustomEvent starting with creativeDisplayed
   const origDispatch = document.dispatchEvent;
   document.dispatchEvent = function(evt) {
     if (evt && typeof evt.type === 'string' && evt.type.startsWith('creativeDisplayed')) {
-      markPopupSuccess();
+      window.__popupSuccessfullyOpened = true;
+      window.__popupBlockedDetected = false;
     }
     return origDispatch.apply(this, arguments);
   };
@@ -183,35 +199,83 @@ if (typeof window !== 'undefined' && !window.__popupMonitorInstalled) {
   window.__originalOpen = _originalWindowOpen;
 
   window.open = function(...args) {
-    const win = _originalWindowOpen.apply(this, args);
     const target = args[1] || '_blank';
 
     // Ignore self / top / parent navigations (internal navigations)
     if (target === '_self' || target === '_top' || target === '_parent') {
-      return win;
+      return _originalWindowOpen.apply(this, args);
     }
 
     // Ignore internal test probes
     if (args[0] === 'about:blank') {
-      return win;
-    }
-
-    // If popup call succeeded:
-    if (win && !win.closed) {
-      markPopupSuccess();
-      return win;
+      return _originalWindowOpen.apply(this, args);
     }
 
     // If user has ALREADY opened a popup or route has popunder disabled, NEVER block user!
     if (window.__popupSuccessfullyOpened === true || window.disablePopunder) {
+      return _originalWindowOpen.apply(this, args);
+    }
+
+    let win;
+    try {
+      win = _originalWindowOpen.apply(this, args);
+    } catch (e) {
+      win = null;
+    }
+
+    // Case 1: Browser blocked synchronously (win is null or undefined)
+    if (!win) {
+      window.__popupBlockedDetected = true;
+      window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
+        detail: { url: args[0], reason: 'popup_blocked_null' }
+      }));
       return win;
     }
 
-    // Popup was blocked by browser (e.g. Cốc Cốc popup blocker)
-    window.__popupBlockedDetected = true;
-    window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
-      detail: { url: args[0], reason: 'popup_blocked' }
-    }));
+    // Case 2: Browser created a dummy window that is already closed
+    try {
+      if (win.closed) {
+        window.__popupBlockedDetected = true;
+        window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
+          detail: { url: args[0], reason: 'popup_closed_immediately' }
+        }));
+        return win;
+      }
+    } catch (e) {}
+
+    // Case 3: Mobile Cốc Cốc / Chromium asynchronously closes/destroys the blocked popup tab
+    // within 150-400ms upon evaluating the third-party ad URL.
+    let checkCount = 0;
+    const interval = setInterval(() => {
+      checkCount++;
+      let isClosed = false;
+      try {
+        isClosed = win.closed;
+      } catch (e) {
+        // Cross-origin restriction -> Window navigated to remote ad destination -> Success!
+        clearInterval(interval);
+        markPopupSuccess();
+        return;
+      }
+
+      if (isClosed) {
+        clearInterval(interval);
+        // Closed in < 1 second -> Automated browser popup blocker intervention!
+        if (!window.__popupSuccessfullyOpened && !window.disablePopunder) {
+          window.__popupBlockedDetected = true;
+          window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
+            detail: { url: args[0], reason: 'popup_closed_by_browser' }
+          }));
+        }
+        return;
+      }
+
+      // If still open after 1000ms (5 * 200ms) -> Genuine popup success!
+      if (checkCount >= 5) {
+        clearInterval(interval);
+        markPopupSuccess();
+      }
+    }, 200);
 
     return win;
   };
