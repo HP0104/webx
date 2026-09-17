@@ -135,7 +135,10 @@ async function detectAdBlocker() {
 
   // ── Check 4: Cốc Cốc & Browser Popup Blocker Detection ──
   const isPopupBlocked = (() => {
-    // 4a: Check if already flagged by popup monitor (e.g. from user click)
+    // If a popup was already successfully opened, popups are clearly allowed!
+    if (window.__popupSuccessfullyOpened === true) return false;
+
+    // 4a: Check if already flagged by popup monitor (from a blocked click)
     if (window.__popupBlockedDetected === true) return true;
 
     // 4b: For Cốc Cốc browser specifically, test if popups are blocked on page load
@@ -168,23 +171,55 @@ async function detectAdBlocker() {
 if (typeof window !== 'undefined' && !window.__popupMonitorInstalled) {
   window.__popupMonitorInstalled = true;
   window.__popupBlockedDetected = false;
+  window.__popupSuccessfullyOpened = false;
+
+  let popupSuccessInCurrentClick = false;
+
+  // Track each click interaction to reset the per-click flag
+  document.addEventListener('click', () => {
+    popupSuccessInCurrentClick = false;
+  }, true);
 
   const _originalWindowOpen = window.open;
   window.__originalOpen = _originalWindowOpen;
 
   window.open = function(...args) {
     const win = _originalWindowOpen.apply(this, args);
-    // If window.open returned null/undefined or was immediately closed upon creation,
-    // it was blocked by the browser / Cốc Cốc popup blocker
-    if (!win || win.closed || typeof win.closed === 'undefined') {
-      // Don't flag if it's our internal test probe
-      if (args[0] !== 'about:blank' || args[2] !== 'width=1,height=1,left=-9999,top=-9999') {
-        window.__popupBlockedDetected = true;
-        window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
-          detail: { url: args[0], reason: 'popup_blocked' }
-        }));
-      }
+    const target = args[1] || '_blank';
+
+    // Ignore self / top / parent navigations (not new popup windows)
+    if (target === '_self' || target === '_top' || target === '_parent') {
+      return win;
     }
+
+    // Ignore internal test probes
+    if (args[0] === 'about:blank' && args[2] === 'width=1,height=1,left=-9999,top=-9999') {
+      return win;
+    }
+
+    // If this popup call succeeded:
+    if (win && !win.closed && typeof win.closed !== 'undefined') {
+      popupSuccessInCurrentClick = true;
+      window.__popupSuccessfullyOpened = true;
+      window.__popupBlockedDetected = false;
+      return win;
+    }
+
+    // If this popup call returned null or was closed:
+    // Wait a short tick (300ms) to make sure no sibling popup on this click succeeded
+    // (e.g. duplicate listeners where 1st opened and 2nd was blocked by 1-popup-per-gesture rule)
+    setTimeout(() => {
+      if (popupSuccessInCurrentClick || window.__popupSuccessfullyOpened) {
+        // A popup ad successfully appeared! DO NOT show adblock wall!
+        return;
+      }
+      // No popup opened, it was genuinely blocked by browser / Cốc Cốc
+      window.__popupBlockedDetected = true;
+      window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
+        detail: { url: args[0], reason: 'popup_blocked' }
+      }));
+    }, 300);
+
     return win;
   };
 }
