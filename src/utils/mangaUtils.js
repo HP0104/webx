@@ -1498,6 +1498,86 @@ export function parseMangaTitleAndChapter(filename) {
 }
 
 /**
+ * Trích xuất giá trị số thứ tự chapter từ chapter object, tên, tiêu đề hoặc folder name.
+ * Ví dụ:
+ *   "Chapter 1" -> 1
+ *   "Chương 09" -> 9
+ *   "Chap 1.5" -> 1.5
+ *   "VỢ-TÔI-NHIỄM-NHIỄM-CHƯƠNG-9_anh_da_gan_hardsub" -> 9
+ */
+export function extractChapterNumericValue(item) {
+  if (item === null || item === undefined) return null;
+  if (typeof item === 'number' && !isNaN(item)) return item;
+  if (typeof item.number === 'number' && !isNaN(item.number)) return item.number;
+  if (typeof item.number === 'string' && !isNaN(parseFloat(item.number))) return parseFloat(item.number);
+
+  const text = item.name || item.title || item.folderName || (typeof item === 'string' ? item : '');
+  if (!text) return null;
+
+  // Regex phát hiện chương / chapter / chap / ch / tập / tap / vol / c kèm số
+  const chRegex = /(?:[-_\s]+)?(?:\b|_|-)(chương|chuong|chapter|chap|ch|tập|tap|vol)[\s._-]*(\d+(?:\.\d+)?)/i;
+  const match = String(text).match(chRegex);
+  if (match) return parseFloat(match[2]);
+
+  // Chuỗi chỉ chứa số (vd: "01", "9")
+  const pureNum = String(text).trim().match(/^(\d+(?:\.\d+)?)$/);
+  if (pureNum) return parseFloat(pureNum[1]);
+
+  return null;
+}
+
+/**
+ * Kiểm tra xem 2 chapter có phải là trùng lặp của nhau hay không
+ * (so sánh theo số thứ tự chapter hoặc tên chuẩn hóa)
+ */
+export function isSameChapter(chA, chB) {
+  if (!chA || !chB) return false;
+
+  const numA = extractChapterNumericValue(chA);
+  const numB = extractChapterNumericValue(chB);
+  if (numA !== null && numB !== null && numA === numB) {
+    return true;
+  }
+
+  const cleanStr = (s) => (s || '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/(?:chương|chuong|chapter|chap|ch|tập|tap|vol)/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+
+  const nameA = cleanStr(chA.name || chA.title || chA.folderName);
+  const nameB = cleanStr(chB.name || chB.title || chB.folderName);
+
+  if (nameA && nameB && nameA === nameB) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Tìm tất cả các nhóm chapter trùng lặp trong mảng chapters
+ * Trả về mảng: [{ key, number, label, chapters: [...] }]
+ */
+export function findDuplicateChapters(chapters = []) {
+  const groups = new Map();
+
+  chapters.forEach((ch, idx) => {
+    const num = extractChapterNumericValue(ch);
+    const key = num !== null ? `num_${num}` : `title_${(ch.title || ch.name || '').trim().toLowerCase()}`;
+    const label = num !== null ? `Chương ${num}` : (ch.title || ch.name || `Chapter ${idx + 1}`);
+
+    if (!groups.has(key)) {
+      groups.set(key, { key, number: num, label, chapters: [] });
+    }
+    groups.get(key).chapters.push({ ...ch, originalIndex: idx });
+  });
+
+  return Array.from(groups.values()).filter(g => g.chapters.length > 1);
+}
+
+/**
  * Extract images from a single .epub, .cbz or .zip archive file.
  * Returns chapter list and detected title.
  *

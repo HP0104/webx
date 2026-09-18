@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { BookOpen, Upload, Link as LinkIcon, Trash2, Plus, FolderOpen, ImageIcon, ChevronDown, ChevronUp, Eye, X, Loader, Layers, Check, FileArchive, Sparkles, Clock, AlertCircle, RefreshCw, AlertTriangle, FileCheck, CheckCircle2 } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { BookOpen, Upload, Link as LinkIcon, Trash2, Plus, FolderOpen, ImageIcon, ChevronDown, ChevronUp, Eye, X, Loader, Layers, Check, FileArchive, Sparkles, Clock, AlertCircle, RefreshCw, AlertTriangle, FileCheck, CheckCircle2, Search, ShieldAlert, GitMerge, CheckCheck, Filter } from 'lucide-react';
 import {
   MANGA_GENRES,
   MANGA_STATUS,
@@ -24,7 +24,10 @@ import {
   scanDirectoryEntries,
   naturalSort,
   isImageFile,
-  parseMangaTitleAndChapter
+  parseMangaTitleAndChapter,
+  extractChapterNumericValue,
+  isSameChapter,
+  findDuplicateChapters
 } from '../../utils/mangaUtils';
 
 function MangaForm({
@@ -68,6 +71,12 @@ function MangaForm({
     userCustomTotal: ''
   });
   const [resumeInfo, setResumeInfo] = useState(null);
+
+  // Quản lý kiểm tra chapter trùng lặp
+  const [duplicateModal, setDuplicateModal] = useState({
+    isOpen: false,
+    duplicateGroups: []
+  });
 
   // Ticking every 1s for live countdown of quotas & cooldowns
   useEffect(() => {
@@ -528,6 +537,141 @@ function MangaForm({
   // Sort parsed chapters by name 1 -> 9
   const handleSortParsedChapters = () => {
     setParsedChapters(prev => [...prev].sort((a, b) => naturalSort(a.name, b.name)));
+  };
+
+  // Bỏ chọn tất cả các chapter đã trùng với mangaData.chapters
+  const handleUncheckDuplicateParsedChapters = () => {
+    let uncheckedCount = 0;
+    setParsedChapters(prev => prev.map(ch => {
+      const isDup = (mangaData.chapters || []).some(existing => isSameChapter(existing, ch));
+      if (isDup && ch.checked !== false) {
+        uncheckedCount++;
+        return { ...ch, checked: false };
+      }
+      return ch;
+    }));
+    if (uncheckedCount > 0) {
+      alert(`Đã tự động bỏ chọn ${uncheckedCount} chapter đã có trên hệ thống!`);
+    } else {
+      alert('Không có chapter nào trong danh sách chờ bị trùng với các chapter đã có.');
+    }
+  };
+
+  // Xóa các chapter đã trùng khỏi parsedChapters
+  const handleRemoveDuplicateParsedChapters = () => {
+    const dupCount = parsedChapters.filter(ch => (mangaData.chapters || []).some(existing => isSameChapter(existing, ch))).length;
+    if (dupCount === 0) return alert('Không có chapter trùng nào trong danh sách chờ để xóa!');
+    if (!confirm(`Bạn có chắc muốn xóa ${dupCount} chapter đã trùng khỏi danh sách chờ upload?`)) return;
+    setParsedChapters(prev => prev.filter(ch => !(mangaData.chapters || []).some(existing => isSameChapter(existing, ch))));
+  };
+
+  // Mở modal kiểm tra và xử lý chapter trùng lặp trong mangaData.chapters
+  const handleCheckExistingDuplicates = () => {
+    const groups = findDuplicateChapters(mangaData.chapters || []);
+    if (groups.length === 0) {
+      alert(`🎉 Tuyệt vời! Toàn bộ ${(mangaData.chapters || []).length} chapter của truyện này đều duy nhất, không phát hiện chapter nào bị trùng lặp.`);
+      return;
+    }
+    setDuplicateModal({
+      isOpen: true,
+      duplicateGroups: groups
+    });
+  };
+
+  // Giữ bản tốt nhất (nhiều ảnh nhất) trong 1 nhóm trùng lặp
+  const handleKeepBestChapterInGroup = (group) => {
+    const sorted = [...group.chapters].sort((a, b) => (b.images?.length || 0) - (a.images?.length || 0));
+    const bestCh = sorted[0];
+    const removeIds = new Set(sorted.slice(1).map(c => c.id));
+
+    setMangaData(prev => {
+      const updated = (prev.chapters || []).filter(c => !removeIds.has(c.id));
+      return { ...prev, chapters: updated };
+    });
+
+    setDuplicateModal(prev => {
+      const remainingGroups = findDuplicateChapters((mangaData.chapters || []).filter(c => !removeIds.has(c.id)));
+      return {
+        ...prev,
+        duplicateGroups: remainingGroups,
+        isOpen: remainingGroups.length > 0
+      };
+    });
+
+    alert(`Đã giữ lại bản có nhiều ảnh nhất (${bestCh.images?.length || 0} ảnh) và xóa ${removeIds.size} bản trùng!`);
+  };
+
+  // Gộp ảnh của 1 nhóm trùng lặp thành 1 chapter duy nhất
+  const handleMergeChapterGroup = (group) => {
+    const allImages = [];
+    group.chapters.forEach(ch => {
+      (ch.images || []).forEach(url => {
+        if (!allImages.includes(url)) allImages.push(url);
+      });
+    });
+
+    const primaryCh = group.chapters[0];
+    const otherIds = new Set(group.chapters.slice(1).map(c => c.id));
+
+    setMangaData(prev => {
+      const updated = (prev.chapters || []).filter(c => !otherIds.has(c.id)).map(c => {
+        if (c.id === primaryCh.id) {
+          return { ...c, images: allImages };
+        }
+        return c;
+      });
+      return { ...prev, chapters: updated };
+    });
+
+    setDuplicateModal(prev => {
+      const remaining = prev.duplicateGroups.filter(g => g.key !== group.key);
+      return {
+        ...prev,
+        duplicateGroups: remaining,
+        isOpen: remaining.length > 0
+      };
+    });
+
+    alert(`Đã gộp thành công ${allImages.length} ảnh vào ${primaryCh.title || 'Chapter ' + primaryCh.number}!`);
+  };
+
+  // Tự động xử lý tất cả các nhóm trùng: Giữ bản nhiều ảnh nhất
+  const handleAutoCleanAllDuplicates = () => {
+    const groups = duplicateModal.duplicateGroups;
+    if (groups.length === 0) return;
+
+    const removeIds = new Set();
+    groups.forEach(g => {
+      const sorted = [...g.chapters].sort((a, b) => (b.images?.length || 0) - (a.images?.length || 0));
+      sorted.slice(1).forEach(c => removeIds.add(c.id));
+    });
+
+    setMangaData(prev => {
+      const updated = (prev.chapters || []).filter(c => !removeIds.has(c.id));
+      return { ...prev, chapters: updated };
+    });
+
+    setDuplicateModal({ isOpen: false, duplicateGroups: [] });
+    alert(`🎉 Đã tự động dọn sạch ${removeIds.size} chapter trùng lặp!`);
+  };
+
+  // Đánh số lại toàn bộ chapters từ 1 -> N
+  const handleReindexAllChapters = () => {
+    if (!confirm('Bạn có muốn đánh số lại toàn bộ chapters theo thứ tự 1, 2, 3... N chuẩn không?')) return;
+    setMangaData(prev => {
+      const sorted = [...(prev.chapters || [])].sort((a, b) => {
+        const numA = extractChapterNumericValue(a) ?? 999999;
+        const numB = extractChapterNumericValue(b) ?? 999999;
+        if (numA !== numB) return numA - numB;
+        return naturalSort(a.title || '', b.title || '');
+      });
+      const reindexed = sorted.map((c, i) => ({
+        ...c,
+        number: i + 1
+      }));
+      return { ...prev, chapters: reindexed };
+    });
+    alert('Đã đánh số lại toàn bộ chapters theo thứ tự 1 -> N thành công!');
   };
 
   // Start upload of all checked parsed chapters
@@ -1937,50 +2081,120 @@ function MangaForm({
                   gap: '1rem'
                 }}>
                   {/* Summary & Toolbar */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--color-border)' }}>
-                    <div>
-                      <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                        <Check size={18} color="#52c41a" />
-                        Đã nạp {parsedChapters.filter(c => c.checked !== false).length} / {parsedChapters.length} chapter
-                        <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--color-accent)' }}>
-                          (Tổng {parsedChapters.filter(c => c.checked !== false).reduce((s, c) => s + c.files.length, 0)} ảnh)
-                        </span>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                        Kiểm tra danh sách bên dưới, bỏ tích nếu không muốn upload, hoặc bấm nút upload để đưa vào truyện.
-                      </span>
-                    </div>
+                  {(() => {
+                    const parsedExistingDuplicatesCount = parsedChapters.filter(ch => (mangaData.chapters || []).some(existing => isSameChapter(existing, ch))).length;
 
-                    <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleAllParsedChapters(true)}
-                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', color: 'var(--color-text-light)', padding: '0.3rem 0.65rem', borderRadius: '6px', fontSize: '0.76rem', cursor: 'pointer' }}
-                      >
-                        ✓ Chọn tất cả
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleAllParsedChapters(false)}
-                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', padding: '0.3rem 0.65rem', borderRadius: '6px', fontSize: '0.76rem', cursor: 'pointer' }}
-                      >
-                        ☐ Bỏ chọn
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSortParsedChapters}
-                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', color: 'var(--color-accent)', padding: '0.3rem 0.65rem', borderRadius: '6px', fontSize: '0.76rem', cursor: 'pointer' }}
-                        title="Sắp xếp lại theo số thứ tự Chapter (1 -> 9)"
-                      >
-                        1→9 Sắp xếp
-                      </button>
-                    </div>
-                  </div>
+                    return (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--color-border)' }}>
+                          <div>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                              <Check size={18} color="#52c41a" />
+                              Đã nạp {parsedChapters.filter(c => c.checked !== false).length} / {parsedChapters.length} chapter
+                              <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--color-accent)' }}>
+                                (Tổng {parsedChapters.filter(c => c.checked !== false).reduce((s, c) => s + c.files.length, 0)} ảnh)
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                              Kiểm tra danh sách bên dưới, bỏ tích nếu không muốn upload, hoặc bấm nút upload để đưa vào truyện.
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleAllParsedChapters(true)}
+                              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', color: 'var(--color-text-light)', padding: '0.3rem 0.65rem', borderRadius: '6px', fontSize: '0.76rem', cursor: 'pointer' }}
+                            >
+                              ✓ Chọn tất cả
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleAllParsedChapters(false)}
+                              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', padding: '0.3rem 0.65rem', borderRadius: '6px', fontSize: '0.76rem', cursor: 'pointer' }}
+                            >
+                              ☐ Bỏ chọn
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSortParsedChapters}
+                              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', color: 'var(--color-accent)', padding: '0.3rem 0.65rem', borderRadius: '6px', fontSize: '0.76rem', cursor: 'pointer' }}
+                              title="Sắp xếp lại theo số thứ tự Chapter (1 -> 9)"
+                            >
+                              1→9 Sắp xếp
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Duplicate Alert Banner in Parsed List */}
+                        {parsedExistingDuplicatesCount > 0 && (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.65rem 0.9rem',
+                            backgroundColor: 'rgba(234, 179, 8, 0.12)',
+                            border: '1px solid rgba(234, 179, 8, 0.35)',
+                            borderRadius: '8px',
+                            fontSize: '0.8rem',
+                            color: '#facc15',
+                            gap: '0.8rem',
+                            flexWrap: 'wrap'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <ShieldAlert size={18} color="#facc15" />
+                              <span>
+                                Phát hiện <strong>{parsedExistingDuplicatesCount} chapter</strong> đã có sẵn trong truyện này.
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={handleUncheckDuplicateParsedChapters}
+                                style={{
+                                  backgroundColor: '#facc15',
+                                  color: '#000',
+                                  fontWeight: 700,
+                                  fontSize: '0.74rem',
+                                  padding: '0.28rem 0.65rem',
+                                  border: 'none',
+                                  borderRadius: '5px',
+                                  cursor: 'pointer'
+                                }}
+                                title="Tự động bỏ tích các chapter đã có để chỉ upload các chapter mới"
+                              >
+                                ⚡ Bỏ tích các chap đã có ({parsedExistingDuplicatesCount})
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleRemoveDuplicateParsedChapters}
+                                style={{
+                                  backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                                  color: '#f87171',
+                                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                                  fontSize: '0.74rem',
+                                  padding: '0.28rem 0.65rem',
+                                  borderRadius: '5px',
+                                  cursor: 'pointer'
+                                }}
+                                title="Xóa các chapter trùng khỏi danh sách chờ"
+                              >
+                                🗑️ Xóa khỏi danh sách
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
 
                   {/* Chapters List */}
                   <div style={{ maxHeight: '380px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingRight: '0.25rem' }}>
                     {parsedChapters.map((ch, i) => {
                       const isChecked = ch.checked !== false;
+                      const existingMatch = (mangaData.chapters || []).find(existing => isSameChapter(existing, ch));
+                      const isDup = Boolean(existingMatch);
+
                       return (
                         <div
                           key={ch.id || i}
@@ -1990,8 +2204,14 @@ function MangaForm({
                             gap: '0.75rem',
                             padding: '0.65rem 0.85rem',
                             borderRadius: '8px',
-                            background: isChecked ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.2)',
-                            border: `1px solid ${isChecked ? 'rgba(82, 196, 26, 0.3)' : 'var(--color-border)'}`,
+                            background: isDup
+                              ? (isChecked ? 'rgba(234, 179, 8, 0.1)' : 'rgba(234, 179, 8, 0.04)')
+                              : (isChecked ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.2)'),
+                            border: `1px solid ${
+                              isDup
+                                ? 'rgba(234, 179, 8, 0.45)'
+                                : (isChecked ? 'rgba(82, 196, 26, 0.3)' : 'var(--color-border)')
+                            }`,
                             opacity: isChecked ? 1 : 0.6,
                             transition: 'all 0.15s ease'
                           }}
@@ -2000,25 +2220,41 @@ function MangaForm({
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => handleToggleParsedChapter(i)}
-                            style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#52c41a' }}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: isDup ? '#facc15' : '#52c41a' }}
                           />
 
                           <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', width: '28px', textAlign: 'center' }}>
                             #{i + 1}
                           </div>
 
-                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0, flexWrap: 'wrap' }}>
                             <input
                               type="text"
                               className="input-field"
                               value={ch.name}
                               onChange={(e) => handleUpdateParsedChapterName(i, e.target.value)}
-                              style={{ margin: 0, padding: '0.35rem 0.65rem', fontSize: '0.85rem', fontWeight: 600, flex: 1 }}
+                              style={{ margin: 0, padding: '0.35rem 0.65rem', fontSize: '0.85rem', fontWeight: 600, flex: 1, minWidth: '130px' }}
                               placeholder="Tên chapter..."
                             />
                             {ch.folderName && (
-                              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }} title={`Thư mục gốc: ${ch.folderName}`}>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '160px' }} title={`Thư mục gốc: ${ch.folderName}`}>
                                 📁 {ch.folderName}
+                              </span>
+                            )}
+                            {existingMatch && (
+                              <span style={{
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '10px',
+                                backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                                color: '#fde047',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem',
+                                whiteSpace: 'nowrap'
+                              }} title={`Chapter này đã có trong truyện: Ch. ${existingMatch.number} (${existingMatch.images?.length || 0} ảnh)`}>
+                                ⚠️ Đã có trên web ({existingMatch.images?.length || 0} ảnh)
                               </span>
                             )}
                           </div>
@@ -2378,104 +2614,182 @@ function MangaForm({
           )}
 
           {/* Existing Chapters */}
-          {(mangaData.chapters || []).length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
-              <h4 style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>Chapters đã thêm:</h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                {(mangaData.chapters || []).map((ch, chIdx) => (
-                  <div key={ch.id} style={{ borderRadius: '6px', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '0.5rem 0.8rem', backgroundColor: 'var(--color-bg-secondary)', cursor: 'pointer'
-                    }} onClick={() => toggleChapter(ch.id)}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
-                        {expandedChapters[ch.id] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        <strong style={{ color: 'var(--color-text-light)' }}>Ch. {ch.number}</strong>
-                        <span style={{ color: 'var(--color-text-muted)' }}>{ch.title}</span>
-                        <span style={{ color: 'var(--color-accent)', fontSize: '0.75rem' }}>({ch.images?.length || 0} ảnh)</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openSupplementModal(ch, chIdx);
-                          }}
-                          className="btn btn-sm"
-                          style={{
-                            padding: '0.25rem 0.6rem',
-                            fontSize: '0.74rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.3rem',
-                            backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                            color: '#60a5fa',
-                            border: '1px solid rgba(59, 130, 246, 0.35)',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontWeight: 600
-                          }}
-                          title="Kiểm tra thư mục gốc hoặc chọn file để bổ sung các trang ảnh còn thiếu cho chapter này"
-                        >
-                          <Plus size={12} /> Bổ sung ảnh thiếu
-                        </button>
-                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteChapter(ch.id); }}
-                          style={{ background: 'none', border: 'none', color: '#ff4d4f', cursor: 'pointer', padding: '0.2rem' }}>
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                    {expandedChapters[ch.id] && (
-                      <div style={{ padding: '0.5rem 0.8rem', maxHeight: '250px', overflowY: 'auto' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(85px, 1fr))', gap: '0.5rem' }}>
-                          {(ch.images || []).map((url, pi) => {
-                            const isCover = mangaData.cover === url;
-                            return (
-                              <div
-                                key={pi}
-                                onClick={() => setMangaData(prev => ({ ...prev, cover: url }))}
-                                style={{
-                                  position: 'relative',
-                                  height: '110px',
-                                  borderRadius: '4px',
-                                  overflow: 'hidden',
-                                  cursor: 'pointer',
-                                  border: isCover ? '2px solid var(--color-accent)' : '1px solid var(--color-border)',
-                                  backgroundColor: '#000'
-                                }}
-                                title={isCover ? 'Ảnh này đang là ảnh bìa' : 'Click để chọn ảnh này làm ảnh bìa'}
-                              >
-                                <img
-                                  src={url}
-                                  alt={`p${pi + 1}`}
-                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                  onError={e => { e.target.style.display = 'none'; }}
-                                />
-                                <div style={{
-                                  position: 'absolute',
-                                  bottom: 0,
-                                  left: 0,
-                                  right: 0,
-                                  padding: '2px 4px',
-                                  fontSize: '0.65rem',
-                                  textAlign: 'center',
-                                  background: isCover ? 'var(--color-accent)' : 'rgba(0,0,0,0.75)',
-                                  color: isCover ? '#000' : '#fff',
-                                  fontWeight: 600
-                                }}>
-                                  {isCover ? '✓ Ảnh bìa' : `Trang ${pi + 1}`}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+          {(mangaData.chapters || []).length > 0 && (() => {
+            const existingDuplicateGroups = findDuplicateChapters(mangaData.chapters || []);
+            const hasDuplicates = existingDuplicateGroups.length > 0;
+
+            return (
+              <div style={{ marginTop: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', margin: 0 }}>
+                    Chapters đã thêm ({(mangaData.chapters || []).length}):
+                  </h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                    <button
+                      type="button"
+                      onClick={handleCheckExistingDuplicates}
+                      className="btn btn-sm"
+                      style={{
+                        padding: '0.25rem 0.65rem',
+                        fontSize: '0.74rem',
+                        backgroundColor: hasDuplicates ? 'rgba(234, 179, 8, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                        color: hasDuplicates ? '#fde047' : 'var(--color-text-muted)',
+                        border: `1px solid ${hasDuplicates ? 'rgba(234, 179, 8, 0.45)' : 'var(--color-border)'}`,
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        fontWeight: hasDuplicates ? 700 : 400
+                      }}
+                      title="Kiểm tra các chapter bị trùng tên hoặc trùng số thứ tự"
+                    >
+                      <Search size={13} color={hasDuplicates ? '#facc15' : 'currentColor'} />
+                      {hasDuplicates ? `⚠️ Trùng ${existingDuplicateGroups.length} nhóm chapter` : '🔍 Check trùng lặp'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleReindexAllChapters}
+                      className="btn btn-sm"
+                      style={{
+                        padding: '0.25rem 0.65rem',
+                        fontSize: '0.74rem',
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                        color: 'var(--color-text-muted)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem'
+                      }}
+                      title="Đánh số lại thứ tự các chapter 1, 2, 3... N chuẩn"
+                    >
+                      1→N Đánh số lại
+                    </button>
                   </div>
-                ))}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {(mangaData.chapters || []).map((ch, chIdx) => {
+                    const isDupChapter = existingDuplicateGroups.some(g => g.chapters.some(c => c.id === ch.id));
+
+                    return (
+                      <div
+                        key={ch.id}
+                        style={{
+                          borderRadius: '6px',
+                          border: `1px solid ${isDupChapter ? 'rgba(234, 179, 8, 0.5)' : 'var(--color-border)'}`,
+                          backgroundColor: isDupChapter ? 'rgba(234, 179, 8, 0.03)' : 'transparent',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        <div style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '0.5rem 0.8rem', backgroundColor: isDupChapter ? 'rgba(234, 179, 8, 0.08)' : 'var(--color-bg-secondary)', cursor: 'pointer'
+                        }} onClick={() => toggleChapter(ch.id)}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                            {expandedChapters[ch.id] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            <strong style={{ color: isDupChapter ? '#fde047' : 'var(--color-text-light)' }}>Ch. {ch.number}</strong>
+                            <span style={{ color: 'var(--color-text-muted)' }}>{ch.title}</span>
+                            <span style={{ color: 'var(--color-accent)', fontSize: '0.75rem' }}>({ch.images?.length || 0} ảnh)</span>
+                            {isDupChapter && (
+                              <span style={{
+                                padding: '0.1rem 0.45rem',
+                                borderRadius: '10px',
+                                backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                                color: '#fde047',
+                                fontSize: '0.7rem',
+                                fontWeight: 700
+                              }}>
+                                ⚠️ Trùng lặp
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openSupplementModal(ch, chIdx);
+                              }}
+                              className="btn btn-sm"
+                              style={{
+                                padding: '0.25rem 0.6rem',
+                                fontSize: '0.74rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.3rem',
+                                backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                                color: '#60a5fa',
+                                border: '1px solid rgba(59, 130, 246, 0.35)',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: 600
+                              }}
+                              title="Kiểm tra thư mục gốc hoặc chọn file để bổ sung các trang ảnh còn thiếu cho chapter này"
+                            >
+                              <Plus size={12} /> Bổ sung ảnh thiếu
+                            </button>
+                            <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteChapter(ch.id); }}
+                              style={{ background: 'none', border: 'none', color: '#ff4d4f', cursor: 'pointer', padding: '0.2rem' }}>
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        {expandedChapters[ch.id] && (
+                          <div style={{ padding: '0.5rem 0.8rem', maxHeight: '250px', overflowY: 'auto' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(85px, 1fr))', gap: '0.5rem' }}>
+                              {(ch.images || []).map((url, pi) => {
+                                const isCover = mangaData.cover === url;
+                                return (
+                                  <div
+                                    key={pi}
+                                    onClick={() => setMangaData(prev => ({ ...prev, cover: url }))}
+                                    style={{
+                                      position: 'relative',
+                                      height: '110px',
+                                      borderRadius: '4px',
+                                      overflow: 'hidden',
+                                      cursor: 'pointer',
+                                      border: isCover ? '2px solid var(--color-accent)' : '1px solid var(--color-border)',
+                                      backgroundColor: '#000'
+                                    }}
+                                    title={isCover ? 'Ảnh này đang là ảnh bìa' : 'Click để chọn ảnh này làm ảnh bìa'}
+                                  >
+                                    <img
+                                      src={url}
+                                      alt={`p${pi + 1}`}
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                      onError={e => { e.target.style.display = 'none'; }}
+                                    />
+                                    <div style={{
+                                      position: 'absolute',
+                                      bottom: 0,
+                                      left: 0,
+                                      right: 0,
+                                      padding: '2px 4px',
+                                      fontSize: '0.65rem',
+                                      textAlign: 'center',
+                                      background: isCover ? 'var(--color-accent)' : 'rgba(0,0,0,0.75)',
+                                      color: isCover ? '#000' : '#fff',
+                                      fontWeight: 600
+                                    }}>
+                                      {isCover ? '✓ Ảnh bìa' : `Trang ${pi + 1}`}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Submit */}
@@ -2875,6 +3189,251 @@ function MangaForm({
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Chapters Management Modal */}
+      {duplicateModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(6px)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem'
+        }} onClick={() => setDuplicateModal({ isOpen: false, duplicateGroups: [] })}>
+          <div style={{
+            backgroundColor: 'var(--color-bg-primary, #1e1e24)',
+            border: '1px solid var(--color-border, #3b4252)',
+            borderRadius: '14px',
+            width: '100%',
+            maxWidth: '750px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.7)',
+            color: 'var(--color-text-light, #f8fafc)'
+          }} onClick={e => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '1.1rem 1.4rem',
+              borderBottom: '1px solid var(--color-border, #333)',
+              backgroundColor: 'rgba(255,255,255,0.02)'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#facc15' }}>
+                  <ShieldAlert size={20} /> Quản Lý & Dọn Dẹp Chapter Trùng Lặp
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted, #94a3b8)' }}>
+                  Phát hiện <strong>{duplicateModal.duplicateGroups.length} nhóm chapter trùng</strong> trong bộ truyện này.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDuplicateModal({ isOpen: false, duplicateGroups: [] })}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted, #94a3b8)', cursor: 'pointer', padding: '0.4rem' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '1.2rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{
+                padding: '0.8rem 1rem',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(234, 179, 8, 0.08)',
+                border: '1px solid rgba(234, 179, 8, 0.25)',
+                fontSize: '0.82rem',
+                color: '#fef08a'
+              }}>
+                💡 <strong>Tự động đề xuất:</strong> Bạn có thể chọn giữ lại bản có số lượng trang ảnh đầy đủ nhất và xóa các bản rác thừa, hoặc gộp toàn bộ ảnh của các bản trùng lại với nhau.
+              </div>
+
+              {duplicateModal.duplicateGroups.map((group, gIdx) => {
+                const sortedByImages = [...group.chapters].sort((a, b) => (b.images?.length || 0) - (a.images?.length || 0));
+                const maxImgCount = sortedByImages[0]?.images?.length || 0;
+
+                return (
+                  <div key={group.key || gIdx} style={{
+                    borderRadius: '10px',
+                    border: '1px solid rgba(234, 179, 8, 0.3)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    padding: '1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.8rem'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <strong style={{ fontSize: '0.95rem', color: '#fde047', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        📖 {group.label} ({group.chapters.length} bản trùng)
+                      </strong>
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleKeepBestChapterInGroup(group)}
+                          className="btn btn-sm"
+                          style={{
+                            padding: '0.25rem 0.65rem',
+                            fontSize: '0.75rem',
+                            backgroundColor: '#facc15',
+                            color: '#000',
+                            fontWeight: 700,
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                          }}
+                          title="Giữ lại bản nhiều ảnh nhất và xóa các bản trùng còn lại"
+                        >
+                          ✨ Giữ bản {maxImgCount} ảnh
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMergeChapterGroup(group)}
+                          className="btn btn-sm"
+                          style={{
+                            padding: '0.25rem 0.65rem',
+                            fontSize: '0.75rem',
+                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                            color: '#60a5fa',
+                            border: '1px solid rgba(59, 130, 246, 0.4)',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                          }}
+                          title="Gộp tất cả các ảnh của các bản trùng thành 1 chapter duy nhất"
+                        >
+                          🔗 Gộp ảnh làm 1
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                      {group.chapters.map((ch, cIdx) => {
+                        const isBest = (ch.images?.length || 0) === maxImgCount;
+                        return (
+                          <div key={ch.id || cIdx} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.55rem 0.8rem',
+                            borderRadius: '6px',
+                            backgroundColor: isBest ? 'rgba(34, 197, 94, 0.08)' : 'rgba(0, 0, 0, 0.2)',
+                            border: `1px solid ${isBest ? 'rgba(34, 197, 94, 0.3)' : 'var(--color-border)'}`
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.84rem' }}>
+                              <strong style={{ color: isBest ? '#4ade80' : 'var(--color-text-light)' }}>
+                                Ch. {ch.number}
+                              </strong>
+                              <span style={{ color: 'var(--color-text-muted)' }}>{ch.title}</span>
+                              <span style={{
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '10px',
+                                backgroundColor: isBest ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                                color: isBest ? '#4ade80' : 'var(--color-text-muted)',
+                                fontSize: '0.74rem',
+                                fontWeight: 700
+                              }}>
+                                {ch.images?.length || 0} ảnh {isBest && '★ Nhiều nhất'}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleDeleteChapter(ch.id);
+                                setDuplicateModal(prev => {
+                                  const updatedMangaChapters = (mangaData.chapters || []).filter(c => c.id !== ch.id);
+                                  const newGroups = findDuplicateChapters(updatedMangaChapters);
+                                  return { ...prev, duplicateGroups: newGroups, isOpen: newGroups.length > 0 };
+                                });
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#f87171',
+                                cursor: 'pointer',
+                                padding: '0.2rem 0.4rem',
+                                fontSize: '0.75rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.2rem'
+                              }}
+                              title="Xóa riêng bản này"
+                            >
+                              <Trash2 size={13} /> Xóa
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '1rem 1.4rem',
+              borderTop: '1px solid var(--color-border, #333)',
+              backgroundColor: 'rgba(255,255,255,0.02)',
+              flexWrap: 'wrap',
+              gap: '0.8rem'
+            }}>
+              <div style={{ display: 'flex', gap: '0.6rem' }}>
+                <button
+                  type="button"
+                  onClick={handleAutoCleanAllDuplicates}
+                  className="btn"
+                  style={{
+                    backgroundColor: '#facc15',
+                    color: '#000',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    padding: '0.45rem 1rem',
+                    borderRadius: '6px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
+                  }}
+                >
+                  <CheckCheck size={16} /> Tự động giữ bản đầy đủ nhất ({duplicateModal.duplicateGroups.length} nhóm)
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.6rem' }}>
+                <button
+                  type="button"
+                  onClick={handleReindexAllChapters}
+                  className="btn btn-outline"
+                  style={{ padding: '0.45rem 0.9rem', fontSize: '0.82rem' }}
+                >
+                  1→N Đánh số lại
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDuplicateModal({ isOpen: false, duplicateGroups: [] })}
+                  className="btn btn-outline"
+                  style={{ padding: '0.45rem 1rem', fontSize: '0.82rem' }}
+                >
+                  Đóng
+                </button>
+              </div>
             </div>
           </div>
         </div>
