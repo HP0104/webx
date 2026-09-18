@@ -15,13 +15,17 @@ import {
   FolderCheck,
   Key,
   RefreshCw,
-  Settings
+  Settings,
+  ExternalLink,
+  Link2,
+  Globe
 } from 'lucide-react';
 import { useAppContext } from '../App';
 import VideoForm from '../components/Admin/VideoForm';
 import { getVideoThumbnail } from '../utils/videoUtils';
 import { 
   uploadVideoToStreamHG,
+  remoteUploadUrlToStreamHG,
   TARGET_FOLDER_NAME,
   getStreamHGKey,
   saveStreamHGKey,
@@ -103,6 +107,42 @@ function UploaderDashboard() {
     setKeyCheckResult(null);
     setKeySavedBanner(true);
     setTimeout(() => setKeySavedBanner(false), 3500);
+  };
+
+  // Remote URL Upload state
+  const [remoteUrlInput, setRemoteUrlInput] = useState('');
+  const [isRemoteUploading, setIsRemoteUploading] = useState(false);
+  const [remoteUploadStatus, setRemoteUploadStatus] = useState({ type: '', text: '' });
+
+  const handleRemoteUpload = async () => {
+    if (!remoteUrlInput.trim()) {
+      alert('Vui lòng nhập link video trực tiếp (vd: https://domain/video.mp4)');
+      return;
+    }
+    try {
+      setIsRemoteUploading(true);
+      setRemoteUploadStatus({ type: 'info', text: 'Đang yêu cầu StreamHG tải video từ link...' });
+
+      const res = await remoteUploadUrlToStreamHG(remoteUrlInput.trim(), TARGET_FOLDER_NAME);
+      setRemoteUploadStatus({
+        type: 'success',
+        text: `Đã gửi link tới StreamHG thành công! Mã file: ${res.filecode}. Đã tự động điền link vào form bên dưới.`
+      });
+
+      setVideoData(prev => ({
+        ...prev,
+        videoUrl: res.embedUrl,
+        thumbnail: prev.thumbnail || res.thumbnailUrl
+      }));
+      setRemoteUrlInput('');
+    } catch (err) {
+      setRemoteUploadStatus({
+        type: 'error',
+        text: `Lỗi Remote Upload: ${err.message}`
+      });
+    } finally {
+      setIsRemoteUploading(false);
+    }
   };
 
   // Filter videos belonging to this uploader (or all if admin toggles it)
@@ -531,7 +571,7 @@ function UploaderDashboard() {
               Tải file video trực tiếp vào thư mục {TARGET_FOLDER_NAME}
             </div>
             <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', maxWidth: '380px' }}>
-              Chọn file video từ máy tính (.mp4, .mkv, .avi, .webm) để tải trực tiếp lên máy chủ StreamHG vào thư mục <strong style={{ color: '#00d2d3' }}>{TARGET_FOLDER_NAME}</strong>.
+              Chọn file video từ máy tính (.mp4, .mkv, .avi, .webm) để tải lên máy chủ StreamHG vào thư mục <strong style={{ color: '#00d2d3' }}>{TARGET_FOLDER_NAME}</strong>.
             </div>
 
             <input
@@ -604,15 +644,86 @@ function UploaderDashboard() {
                 marginTop: '0.5rem',
                 fontSize: '0.85rem',
                 display: 'flex',
-                alignItems: 'flex-start',
-                textAlign: 'left',
-                gap: '0.4rem',
+                flexDirection: 'column',
+                gap: '0.6rem',
+                alignItems: 'center',
                 color: uploadStatus.type === 'success' ? '#52c41a' : uploadStatus.type === 'error' ? '#ff4d4f' : '#66c0f4'
               }}>
-                {uploadStatus.type === 'success' ? <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />}
-                <div>{uploadStatus.text}</div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', textAlign: 'left', gap: '0.4rem' }}>
+                  {uploadStatus.type === 'success' ? <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />}
+                  <div>{uploadStatus.text}</div>
+                </div>
+
+                {uploadStatus.type === 'error' && (
+                  <a
+                    href="https://streamhg.com/?op=my_files"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-primary"
+                    style={{
+                      backgroundColor: '#00d2d3',
+                      color: '#000',
+                      fontWeight: 700,
+                      fontSize: '0.85rem',
+                      padding: '0.5rem 1rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      textDecoration: 'none',
+                      borderRadius: '6px'
+                    }}
+                  >
+                    <ExternalLink size={15} /> Mở StreamHG để kéo thả video lên ngay ↗
+                  </a>
+                )}
               </div>
             )}
+
+            {/* Quick Remote URL Upload inside File Upload Box */}
+            <div style={{
+              marginTop: '0.75rem',
+              paddingTop: '0.75rem',
+              borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+              width: '100%',
+              textAlign: 'left'
+            }}>
+              <div style={{ fontSize: '0.8rem', color: '#00d2d3', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.4rem' }}>
+                <Link2 size={14} /> Hoặc Remote Upload từ link video (.mp4):
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <input
+                  type="url"
+                  value={remoteUrlInput}
+                  onChange={(e) => setRemoteUrlInput(e.target.value)}
+                  placeholder="Dán URL video trực tiếp (vd: https://.../clip.mp4)"
+                  className="form-control"
+                  style={{ flex: 1, minWidth: '220px', fontSize: '0.8rem', padding: '0.4rem 0.6rem' }}
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoteUpload}
+                  disabled={isRemoteUploading}
+                  className="btn btn-outline"
+                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.75rem', borderColor: '#00d2d3', color: '#00d2d3' }}
+                >
+                  {isRemoteUploading ? 'Đang gửi...' : 'Tải về StreamHG'}
+                </button>
+              </div>
+
+              {remoteUploadStatus.text && (
+                <div style={{
+                  marginTop: '0.4rem',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  color: remoteUploadStatus.type === 'success' ? '#52c41a' : remoteUploadStatus.type === 'error' ? '#ff4d4f' : '#66c0f4'
+                }}>
+                  {remoteUploadStatus.type === 'success' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                  {remoteUploadStatus.text}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Guidelines Box */}
@@ -627,22 +738,42 @@ function UploaderDashboard() {
             gap: '0.75rem'
           }}>
             <div style={{ fontWeight: 600, color: '#00d2d3', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <HelpCircle size={16} /> Hướng dẫn đăng phim & lưu ý:
+              <HelpCircle size={16} /> Cách tải phim lên nhanh và mượt nhất:
             </div>
             <ul style={{ paddingLeft: '1.2rem', color: 'var(--color-text-muted)', lineHeight: '1.6' }}>
               <li>
-                <strong style={{ color: '#ff7875' }}>Lỗi "Wrong auth"?</strong> Nguyên nhân do tài khoản Webmaster trên StreamHG vẫn đang ở trạng thái <em>Pending duyệt</em> (StreamHG khóa API upload cho tới khi được duyệt) hoặc API Key bị đổi.
+                <strong style={{ color: '#52c41a' }}>Cách 1 (Tốt nhất cho file lớn):</strong> Mở <a href="https://streamhg.com/?op=my_files" target="_blank" rel="noopener noreferrer" style={{ color: '#00d2d3', textDecoration: 'underline', fontWeight: 600 }}>StreamHG (streamhg.com) ↗</a>, đăng nhập tài khoản của bạn, kéo thả video vào thư mục <code style={{ color: '#00d2d3' }}>{TARGET_FOLDER_NAME}</code>. Sau khi upload xong, copy link video (dạng <code style={{ color: '#66c0f4' }}>https://streamhg.com/e/...</code>) rồi dán vào ô <strong>"Link Video"</strong> ở form bên dưới.
               </li>
               <li>
-                <strong style={{ color: '#52c41a' }}>Cách khắc phục ngay lập tức:</strong> Bạn chỉ cần mở <a href="https://streamhg.com" target="_blank" rel="noopener noreferrer" style={{ color: '#00d2d3', textDecoration: 'underline' }}>streamhg.com</a>, tải video trực tiếp lên web StreamHG vào thư mục <code style={{ color: '#00d2d3' }}>{TARGET_FOLDER_NAME}</code>, rồi copy link video (ví dụ: <code style={{ color: '#66c0f4' }}>https://streamhg.com/e/...</code>) dán vào form bên dưới là xong!
+                <strong style={{ color: '#00d2d3' }}>Cách 2:</strong> Dùng ô <strong>Remote Upload</strong> bên cạnh nếu bạn có link video trực tiếp trên mạng. StreamHG sẽ tự tải video về server trong nền.
               </li>
               <li>
-                Hệ thống tự động nhận diện ID video StreamHG và tự động lấy ảnh bìa từ <strong style={{ color: '#fff' }}>huntrexus.com/ID.jpg</strong>.
-              </li>
-              <li>
-                Hỗ trợ cả dán link các máy chủ khác: <strong style={{ color: '#fff' }}>Filemoon, VOE, YouTube, Doodstream</strong>.
+                <strong style={{ color: '#e5e7eb' }}>Tự động hóa hoàn toàn:</strong> Khi bạn dán link StreamHG vào form dưới, hệ thống sẽ tự động bắt mã ID, tự động lấy ảnh bìa từ <strong style={{ color: '#fff' }}>huntrexus.com/ID.jpg</strong> mà bạn không cần phải chụp hay tải ảnh lên thủ công!
               </li>
             </ul>
+
+            <div style={{ marginTop: 'auto', paddingTop: '0.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.06)', textAlign: 'center' }}>
+              <a
+                href="https://streamhg.com/?op=my_files"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-outline"
+                style={{
+                  width: '100%',
+                  fontSize: '0.8rem',
+                  padding: '0.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                  borderColor: 'rgba(0, 210, 211, 0.4)',
+                  color: '#00d2d3',
+                  textDecoration: 'none'
+                }}
+              >
+                <ExternalLink size={14} /> Truy cập nhanh thư mục StreamHG (web18p.xyz)
+              </a>
+            </div>
           </div>
         </div>
       </div>

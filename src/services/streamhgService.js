@@ -156,19 +156,19 @@ export async function uploadVideoToStreamHG(file, onProgress, targetFolderName =
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
-    formData.append('api_key', key);
+    formData.append('key', key);
     formData.append('file', file);
     if (folderId) {
       formData.append('fld_id', folderId);
     }
 
     if (xhr.upload && onProgress) {
-      xhr.upload.addEventListener('progress', (e) => {
+      xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
           const percent = Math.round((e.loaded / e.total) * 100);
           onProgress(percent);
         }
-      });
+      };
     }
 
     xhr.onreadystatechange = () => {
@@ -176,12 +176,18 @@ export async function uploadVideoToStreamHG(file, onProgress, targetFolderName =
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const data = JSON.parse(xhr.responseText);
-            if (data.status === 200 && Array.isArray(data.result) && data.result.length > 0) {
-              const res = data.result[0];
+            // StreamHG API trả về files: [...] hoặc result: [...]
+            const fileList = data.files || data.result;
+            if (data.status === 200 && Array.isArray(fileList) && fileList.length > 0) {
+              const res = fileList[0];
               const filecode = res.filecode;
+              if (!filecode) {
+                reject(new Error(res.status || 'Máy chủ StreamHG từ chối file này.'));
+                return;
+              }
               resolve({
                 filecode: filecode,
-                fn: res.fn || file.name,
+                fn: res.filename || res.fn || file.name,
                 embedUrl: `https://streamhg.com/e/${filecode}`,
                 thumbnailUrl: `https://huntrexus.com/${filecode}.jpg`,
                 directUrl: `https://streamhg.com/${filecode}.html`
@@ -192,17 +198,57 @@ export async function uploadVideoToStreamHG(file, onProgress, targetFolderName =
           } catch (e) {
             reject(new Error('Phản hồi từ StreamHG không hợp lệ: ' + e.message));
           }
+        } else if (xhr.status === 0) {
+          reject(new Error('Trình duyệt bị chặn CORS bởi máy chủ lưu trữ CDN StreamHG (không cho phép tải file lớn từ web bên ngoài). Bạn hãy tải file trực tiếp trên streamhg.com vào thư mục web18p.xyz rồi dán link vào form bên dưới'));
         } else {
-          reject(new Error(`Tải lên StreamHG thất bại (${xhr.status}). Kiểm tra API key hoặc CORS.`));
+          reject(new Error(`Tải lên StreamHG thất bại (${xhr.status}). Kiểm tra API key hoặc đường truyền.`));
         }
       }
     };
 
     xhr.onerror = () => {
-      reject(new Error('Lỗi kết nối khi tải file lên StreamHG.'));
+      reject(new Error('Trình duyệt bị chặn CORS bởi máy chủ lưu trữ CDN StreamHG (không cho phép tải file lớn từ web bên ngoài). Bạn hãy tải file trực tiếp trên streamhg.com vào thư mục web18p.xyz rồi dán link vào form bên dưới'));
     };
 
     xhr.open('POST', uploadServerUrl, true);
     xhr.send(formData);
   });
+}
+
+/**
+ * Tải video lên StreamHG từ đường link URL trực tiếp (Remote Upload)
+ * Hoạt động 100% không bị CORS vì gọi qua API StreamHG!
+ * @param {string} videoUrl 
+ * @param {string} targetFolderName 
+ * @returns {Promise<{filecode: string, embedUrl: string, thumbnailUrl: string}>}
+ */
+export async function remoteUploadUrlToStreamHG(videoUrl, targetFolderName = TARGET_FOLDER_NAME) {
+  const key = getStreamHGKey();
+  if (!key) {
+    throw new Error('Chưa cấu hình API Key StreamHG.');
+  }
+
+  const folderId = await getFolderId(key, targetFolderName);
+  let apiUrl = `${STREAMHG_API_URL}/upload/url?key=${encodeURIComponent(key)}&url=${encodeURIComponent(videoUrl.trim())}`;
+  if (folderId) {
+    apiUrl += `&fld_id=${encodeURIComponent(folderId)}`;
+  }
+
+  const response = await fetch(apiUrl);
+  if (!response.ok) {
+    throw new Error(`Lỗi kết nối StreamHG: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (data.status === 200 && data.result && data.result.filecode) {
+    const filecode = data.result.filecode;
+    return {
+      filecode,
+      embedUrl: `https://streamhg.com/e/${filecode}`,
+      thumbnailUrl: `https://huntrexus.com/${filecode}.jpg`,
+      directUrl: `https://streamhg.com/${filecode}.html`
+    };
+  }
+
+  throw new Error(data.msg || 'Không thể Remote Upload URL lên StreamHG.');
 }
