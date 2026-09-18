@@ -18,7 +18,10 @@ function checkScriptLoad(src, validationFn = null, timeout = 4000) {
     const done = (blocked) => {
       if (resolved) return;
       resolved = true;
-      script.remove();
+      // Trì hoãn gỡ bỏ thẻ script để thư viện (như ad-provider.js) không bị lỗi null document.currentScript
+      setTimeout(() => {
+        try { script.remove(); } catch (e) {}
+      }, 2000);
       resolve(blocked);
     };
 
