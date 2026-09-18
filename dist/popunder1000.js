@@ -123,6 +123,8 @@
         shouldShow: function() {
             if (window.disablePopunder) return false;
             if (window.__popupSuccessfullyOpened) return false;
+            // Ngừng thử sau khi bị chặn quá nhiều lần (tránh popup liên tiếp)
+            if (popMagic._blockedAttempts >= 3) return false;
             return true;
         },
         venorShouldShow: function() {
@@ -276,6 +278,11 @@
                 }
                 popMagic._lastTrigger = now;
 
+                // Cooldown 30s sau mỗi lần bị chặn
+                if (popMagic._lastBlockedTime && (now - popMagic._lastBlockedTime < 30000)) {
+                    return true;
+                }
+
                 // Open the REAL ad URL directly so Cốc Cốc / browser evaluates the ad domain immediately
                 var targetUrl = popMagic.url || ("https://" + popMagic.config.syndication_host + "/v1/link.php?idzone=" + popMagic.config.idzone);
 
@@ -288,18 +295,13 @@
 
                 // If popup was blocked synchronously
                 if (!win || win.closed || typeof win.closed === "undefined") {
-                    if (!window.disablePopunder && !window.__popupSuccessfullyOpened) {
-                        window.__popupBlockedDetected = true;
-                        window.dispatchEvent(new CustomEvent("adblock:popup-blocked", {
-                            detail: { url: targetUrl, reason: "popmagic_popup_blocked" }
-                        }));
-                    }
+                    popMagic._blockedAttempts = (popMagic._blockedAttempts || 0) + 1;
+                    popMagic._lastBlockedTime = now;
+                    console.log('[Popunder] Popup blocked by browser (attempt ' + popMagic._blockedAttempts + '/3)');
                     return true;
                 }
 
-                // Note: If win was created, do NOT mark success synchronously at t=0!
-                // Cốc Cốc Mobile closes/suppresses the blocked popup tab within 150-350ms.
-                // The global window.open monitor in AdBanner.jsx will verify if win remains open after 1000ms.
+                // Popup opened successfully
                 return true;
             }
         }

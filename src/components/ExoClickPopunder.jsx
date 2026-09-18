@@ -34,13 +34,7 @@ export default function ExoClickPopunder() {
     script.src = '/popunder1000.js';
     script.async = true;
     script.onerror = () => {
-      console.warn('[AdBlock] /popunder1000.js failed to load (blocked by browser or ad blocker)');
-      if (!window.disablePopunder && !window.__popupSuccessfullyOpened) {
-        window.__popupBlockedDetected = true;
-        window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
-          detail: { reason: 'popunder_script_blocked' }
-        }));
-      }
+      console.warn('[ExoClick] /popunder1000.js failed to load (may be blocked or network issue)');
     };
     document.head.appendChild(script);
 

@@ -119,19 +119,17 @@ async function detectAdBlocker() {
   }
 
   // ── Check 3: Fetch Check (catches network-level blockers like Brave Shields) ──
+  // Chỉ test ExoClick URL vì site dùng ExoClick, KHÔNG dùng Google AdSense
   const fetchBlocked = await (async () => {
     try {
-      await Promise.all([
-        fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', { method: 'HEAD', mode: 'no-cors', cache: 'no-store' }),
-        fetch('https://a.magsrv.com/popunder1000.js', { method: 'HEAD', mode: 'no-cors', cache: 'no-store' })
-      ]);
+      await fetch('https://a.magsrv.com/ad-provider.js', { method: 'HEAD', mode: 'no-cors', cache: 'no-store' });
       return false;
     } catch {
       return true;
     }
   })();
   if (fetchBlocked) {
-    console.warn('[AdBlock] Blocked by Check 3 (Network fetch)');
+    console.warn('[AdBlock] Blocked by Check 3 (Network fetch - ExoClick blocked)');
     return true;
   }
 
@@ -144,11 +142,12 @@ async function detectAdBlocker() {
   }
 
   // ── Check 5: Script load check (catches script-level blocking) ──
+  // Yêu cầu CẢ HAI đều bị chặn mới trigger (tránh false positive do mạng chậm)
   const [exoBlocked, baitBlocked] = await Promise.all([
     checkScriptLoad(EXOCLICK_PROVIDER_SRC),
     checkScriptLoad('/ads.js', () => window.__adblockerBait === true)
   ]);
-  if (exoBlocked || baitBlocked) {
+  if (exoBlocked && baitBlocked) {
     console.warn('[AdBlock] Blocked by Check 5 (Script load): exo=' + exoBlocked + ', bait=' + baitBlocked);
     return true;
   }
@@ -156,27 +155,15 @@ async function detectAdBlocker() {
   return false;
 }
 
-// ─── Global Popup & Creative Monitor ────────────────────────────────
+// ─── Global Popup State ─────────────────────────────────────────────
+// Chỉ khởi tạo state flags, KHÔNG override window.open
+// Popup blocker của trình duyệt KHÔNG phải ad blocker → không cần monitor
 if (typeof window !== 'undefined' && !window.__popupMonitorInstalled) {
   window.__popupMonitorInstalled = true;
   window.__popupBlockedDetected = false;
   window.__popupSuccessfullyOpened = false;
 
-  let marking = false;
-  const markPopupSuccess = () => {
-    if (marking) return;
-    marking = true;
-    window.__popupSuccessfullyOpened = true;
-    window.__popupBlockedDetected = false;
-    try {
-      if (typeof window.popMagic !== 'undefined' && typeof window.popMagic.setAsOpened === 'function') {
-        window.popMagic.setAsOpened();
-      }
-    } catch (err) {}
-    marking = false;
-  };
-
-  // Listen for ExoClick creative display events on document
+  // Listen for ExoClick creative display events (popup thành công)
   document.addEventListener('creativeDisplayed-6004200', () => {
     window.__popupSuccessfullyOpened = true;
     window.__popupBlockedDetected = false;
@@ -194,91 +181,6 @@ if (typeof window !== 'undefined' && !window.__popupMonitorInstalled) {
       window.__popupBlockedDetected = false;
     }
     return origDispatch.apply(this, arguments);
-  };
-
-  const _originalWindowOpen = window.open;
-  window.__originalOpen = _originalWindowOpen;
-
-  window.open = function(...args) {
-    const target = args[1] || '_blank';
-
-    // Ignore self / top / parent navigations (internal navigations)
-    if (target === '_self' || target === '_top' || target === '_parent') {
-      return _originalWindowOpen.apply(this, args);
-    }
-
-    // Ignore internal test probes
-    if (args[0] === 'about:blank') {
-      return _originalWindowOpen.apply(this, args);
-    }
-
-    // If user has ALREADY opened a popup or route has popunder disabled, NEVER block user!
-    if (window.__popupSuccessfullyOpened === true || window.disablePopunder) {
-      return _originalWindowOpen.apply(this, args);
-    }
-
-    let win;
-    try {
-      win = _originalWindowOpen.apply(this, args);
-    } catch (e) {
-      win = null;
-    }
-
-    // Case 1: Browser blocked synchronously (win is null or undefined)
-    if (!win) {
-      window.__popupBlockedDetected = true;
-      window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
-        detail: { url: args[0], reason: 'popup_blocked_null' }
-      }));
-      return win;
-    }
-
-    // Case 2: Browser created a dummy window that is already closed
-    try {
-      if (win.closed) {
-        window.__popupBlockedDetected = true;
-        window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
-          detail: { url: args[0], reason: 'popup_closed_immediately' }
-        }));
-        return win;
-      }
-    } catch (e) {}
-
-    // Case 3: Mobile Cốc Cốc / Chromium asynchronously closes/destroys the blocked popup tab
-    // within 150-400ms upon evaluating the third-party ad URL.
-    let checkCount = 0;
-    const interval = setInterval(() => {
-      checkCount++;
-      let isClosed = false;
-      try {
-        isClosed = win.closed;
-      } catch (e) {
-        // Cross-origin restriction -> Window navigated to remote ad destination -> Success!
-        clearInterval(interval);
-        markPopupSuccess();
-        return;
-      }
-
-      if (isClosed) {
-        clearInterval(interval);
-        // Closed in < 1 second -> Automated browser popup blocker intervention!
-        if (!window.__popupSuccessfullyOpened && !window.disablePopunder) {
-          window.__popupBlockedDetected = true;
-          window.dispatchEvent(new CustomEvent('adblock:popup-blocked', {
-            detail: { url: args[0], reason: 'popup_closed_by_browser' }
-          }));
-        }
-        return;
-      }
-
-      // If still open after 1000ms (5 * 200ms) -> Genuine popup success!
-      if (checkCount >= 5) {
-        clearInterval(interval);
-        markPopupSuccess();
-      }
-    }, 200);
-
-    return win;
   };
 }
 
@@ -368,18 +270,7 @@ export function AdBlockWall() {
     checkAdBlock();
   }, [checkAdBlock]);
 
-  // Popup bị chặn bởi trình duyệt (Cốc Cốc, Chrome, v.v.) KHÔNG phải ad blocker
-  // → KHÔNG trigger AdBlockWall khi popup bị chặn
-  // Chỉ log để debug
-  useEffect(() => {
-    const onPopupBlocked = (e) => {
-      console.log('[AdBlockWall] Popup blocked by browser, NOT triggering wall:', e?.detail?.reason);
-    };
-    window.addEventListener('adblock:popup-blocked', onPopupBlocked);
-    return () => {
-      window.removeEventListener('adblock:popup-blocked', onPopupBlocked);
-    };
-  }, []);
+  // Popup bị chặn bởi trình duyệt KHÔNG phải ad blocker → không cần listener
 
   useEffect(() => {
     if (blocked && !checking) {
