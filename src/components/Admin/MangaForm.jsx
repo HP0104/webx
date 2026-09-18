@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { BookOpen, Upload, Link as LinkIcon, Trash2, Plus, FolderOpen, ImageIcon, ChevronDown, ChevronUp, Eye, X, Loader, Layers, Check, FileArchive, Sparkles, Clock, AlertCircle } from 'lucide-react';
+import { BookOpen, Upload, Link as LinkIcon, Trash2, Plus, FolderOpen, ImageIcon, ChevronDown, ChevronUp, Eye, X, Loader, Layers, Check, FileArchive, Sparkles, Clock, AlertCircle, RefreshCw, AlertTriangle, FileCheck, CheckCircle2 } from 'lucide-react';
 import {
   MANGA_GENRES,
   MANGA_STATUS,
@@ -22,7 +22,9 @@ import {
   parseArchiveFiles,
   extractArchiveToChapters,
   scanDirectoryEntries,
-  naturalSort
+  naturalSort,
+  isImageFile,
+  parseMangaTitleAndChapter
 } from '../../utils/mangaUtils';
 
 function MangaForm({
@@ -48,6 +50,25 @@ function MangaForm({
   const [imgbbSummary, setImgbbSummary] = useState(() => getImgBBUsageSummary(imgbbKey));
   const [isFolderDragging, setIsFolderDragging] = useState(false);
 
+  // Quản lý bổ sung ảnh còn thiếu cho chapter
+  const [supplementModal, setSupplementModal] = useState({
+    isOpen: false,
+    chapter: null,
+    chapterIdx: -1,
+    detectedTotal: 0,
+    existingCount: 0,
+    missingFiles: [],
+    missingCount: 0,
+    missingStartPage: 0,
+    missingEndPage: 0,
+    folderName: '',
+    statusMessage: '',
+    isUploading: false,
+    uploadProgress: null,
+    userCustomTotal: ''
+  });
+  const [resumeInfo, setResumeInfo] = useState(null);
+
   // Ticking every 1s for live countdown of quotas & cooldowns
   useEffect(() => {
     if (storageProvider !== 'imgbb') return;
@@ -68,6 +89,8 @@ function MangaForm({
   const chapterFolderInputRef = useRef(null);
   const archiveInputRef = useRef(null);
   const chapterArchiveInputRef = useRef(null);
+  const supplementFolderInputRef = useRef(null);
+  const supplementFilesInputRef = useRef(null);
 
   // Change storage provider
   const handleProviderChange = (newProvider) => {
@@ -136,8 +159,13 @@ function MangaForm({
     const currentMangaTitle = (customTitle || mangaData.title || '').trim();
     const currentApiKey = storageProvider === 'catbox' ? '' : (storageProvider === 'freeimage' ? freeimageKey : imgbbKey);
 
+    let currentChapterUrls = [];
+    let currentChapterIdx = 0;
+
     try {
       for (let ci = 0; ci < chaptersToUpload.length; ci++) {
+        currentChapterIdx = ci;
+        currentChapterUrls = [];
         const ch = chaptersToUpload[ci];
         const chapterNumber = (mangaData.chapters?.length || 0) + addedChapters.length + 1;
 
@@ -174,6 +202,10 @@ function MangaForm({
             mangaTitle: currentMangaTitle,
             chapterTitle: ch.name || chapterLabel,
             threadId: telegramThreadId,
+            delayBetweenAlbums: 1500,
+            onChunkSuccess: ({ allUrls }) => {
+              currentChapterUrls = [...allUrls];
+            },
             nameGenerator: (file, idx) => {
               const padLen = ch.files.length >= 100 ? 3 : 2;
               const numStr = String(idx + 1).padStart(padLen, '0');
@@ -199,20 +231,64 @@ function MangaForm({
 
       setParsedChapters([]);
       setUploadProgress(null);
+      setResumeInfo(null);
       const serverLabel = storageProvider === 'telegram' ? 'Telegram CDN' : (storageProvider === 'catbox' ? 'Catbox.moe' : (storageProvider === 'freeimage' ? 'FreeImage.host' : 'ImgBB'));
       alert(`Đã upload thành công ${addedChapters.length} chapter lên ${serverLabel}!`);
       return addedChapters;
     } catch (err) {
       console.error('Upload chapters error:', err);
-      if (err.message.includes('Rate limit')) {
+
+      // Lưu giữ an toàn các ảnh đã upload một phần của chapter đang dở
+      const partialUrls = currentChapterUrls.length > 0 ? currentChapterUrls : (err.partialUrls || []);
+      const currentCh = chaptersToUpload[currentChapterIdx];
+      let partialChNumber = null;
+
+      if (currentCh && partialUrls.length > 0) {
+        partialChNumber = (mangaData.chapters?.length || 0) + addedChapters.length + 1;
+        const partialChapter = {
+          id: `ch-${Date.now()}-${currentChapterIdx}`,
+          number: partialChNumber,
+          title: currentCh.name || `Chapter ${partialChNumber}`,
+          images: partialUrls,
+          createdAt: new Date().toISOString()
+        };
+        addedChapters.push(partialChapter);
+
+        setResumeInfo({
+          chapterId: partialChapter.id,
+          chapterNumber: partialChNumber,
+          chapterTitle: partialChapter.title,
+          existingCount: partialUrls.length,
+          totalExpected: currentCh.files.length,
+          missingFiles: currentCh.files.slice(partialUrls.length),
+          missingStartPage: partialUrls.length + 1,
+          missingEndPage: currentCh.files.length
+        });
+      }
+
+      if (addedChapters.length > 0) {
+        setMangaData(prev => {
+          const merged = [...(prev.chapters || []), ...addedChapters];
+          const firstImg = !prev.cover && merged[0]?.images?.[0] ? merged[0].images[0] : prev.cover;
+          return { ...prev, chapters: merged, cover: firstImg };
+        });
+      }
+
+      if (err.message?.includes('Rate limit')) {
         alert(
           `⚠️ LỖI RATE LIMIT (ImgBB):\n\n${err.message}\n\n` +
           `👉 Mẹo: Tài khoản ImgBB của key này tạm hết lượt trong giờ này. Bạn có thể lấy thêm 1 key miễn phí tại api.imgbb.com hoặc dán nhiều key cách nhau bằng dấu phẩy (key1, key2) để tự động luân phiên!`
         );
-      } else if (err.message.includes('forbidden') || err.message.includes('FreeImage')) {
+      } else if (err.message?.includes('forbidden') || err.message?.includes('FreeImage')) {
         alert(
           `❌ LỖI PROXY FREEIMAGE:\n\n${err.message}\n\n` +
           `👉 GIẢI PHÁP: Vui lòng chuyển sang chọn server "ImgBB", dán API Key (lấy miễn phí tại api.imgbb.com) rồi bấm Upload lại!`
+        );
+      } else if (partialUrls.length > 0) {
+        alert(
+          `⚠️ Quá trình upload bị gián đoạn: ${err.message}\n\n` +
+          `✅ Hệ thống ĐÃ LƯU AN TOÀN ${partialUrls.length}/${currentCh?.files?.length} ảnh của Chapter ${partialChNumber}!\n` +
+          `👉 Bạn có thể bấm nút "Bổ sung ảnh thiếu" hoặc thanh thông báo màu vàng để tải nốt các ảnh còn lại bất cứ lúc nào.`
         );
       } else {
         alert('Upload lỗi: ' + err.message);
@@ -512,6 +588,8 @@ function MangaForm({
     const prefix = [currentMangaTitle, chTitle].filter(Boolean).join(' ');
     const currentApiKey = storageProvider === 'catbox' ? '' : (storageProvider === 'freeimage' ? freeimageKey : imgbbKey);
 
+    let newlyUploaded = [];
+
     try {
       setUploadProgress({ current: 0, total: imageFiles.length, file: '', chapterIdx: 1, chapterTotal: 1, chapterName: `Chapter ${chapterNumber}` });
 
@@ -534,6 +612,10 @@ function MangaForm({
           mangaTitle: currentMangaTitle,
           chapterTitle: chTitle,
           threadId: telegramThreadId,
+          delayBetweenAlbums: 1500,
+          onChunkSuccess: ({ allUrls }) => {
+            newlyUploaded = [...allUrls];
+          },
           nameGenerator: (file, idx) => {
             const padLen = imageFiles.length >= 100 ? 3 : 2;
             const numStr = String(idx + 1).padStart(padLen, '0');
@@ -557,9 +639,42 @@ function MangaForm({
       });
       setManualChapterTitle('');
       setUploadProgress(null);
+      setResumeInfo(null);
       alert(`Upload thành công chapter ${chapterNumber}!`);
     } catch (err) {
-      alert('Upload lỗi: ' + err.message);
+      console.error('Single chapter upload error:', err);
+      const partialUrls = newlyUploaded.length > 0 ? newlyUploaded : (err.partialUrls || []);
+      if (partialUrls.length > 0) {
+        const partialChapter = {
+          id: `ch-${Date.now()}`,
+          number: chapterNumber,
+          title: manualChapterTitle || chTitle,
+          images: partialUrls,
+          createdAt: new Date().toISOString()
+        };
+        setMangaData(prev => {
+          const chapters = [...(prev.chapters || []), partialChapter];
+          const firstImg = !prev.cover && partialUrls[0] ? partialUrls[0] : prev.cover;
+          return { ...prev, chapters, cover: firstImg };
+        });
+        setResumeInfo({
+          chapterId: partialChapter.id,
+          chapterNumber,
+          chapterTitle: partialChapter.title,
+          existingCount: partialUrls.length,
+          totalExpected: imageFiles.length,
+          missingFiles: imageFiles.slice(partialUrls.length),
+          missingStartPage: partialUrls.length + 1,
+          missingEndPage: imageFiles.length
+        });
+        alert(
+          `⚠️ Upload bị gián đoạn: ${err.message}\n\n` +
+          `✅ Hệ thống ĐÃ LƯU LẠI toàn bộ ${partialUrls.length}/${imageFiles.length} ảnh đã upload thành công của Chapter ${chapterNumber}!\n` +
+          `👉 Bạn có thể bấm nút "Bổ sung ảnh thiếu" ở danh sách chapter để tải nốt ${imageFiles.length - partialUrls.length} ảnh còn lại bất cứ lúc nào.`
+        );
+      } else {
+        alert('Upload lỗi: ' + err.message);
+      }
     } finally {
       setIsUploading(false);
     }
@@ -605,6 +720,262 @@ function MangaForm({
   // Toggle chapter expand
   const toggleChapter = (chId) => {
     setExpandedChapters(prev => ({ ...prev, [chId]: !prev[chId] }));
+  };
+
+  // ============ BỔ SUNG ẢNH CÒN THIẾU CHO CHAPTER ============
+  const openSupplementModal = (chapter, chapterIdx, initialMissingFiles = null, initialTotal = 0) => {
+    const existingCount = chapter.images?.length || 0;
+    const missing = initialMissingFiles || [];
+    const detectedTotal = initialTotal || (existingCount + missing.length);
+
+    setSupplementModal({
+      isOpen: true,
+      chapter,
+      chapterIdx,
+      detectedTotal,
+      existingCount,
+      missingFiles: missing,
+      missingCount: missing.length,
+      missingStartPage: existingCount + 1,
+      missingEndPage: detectedTotal,
+      folderName: '',
+      statusMessage: missing.length > 0
+        ? `✅ Sẵn sàng upload tiếp ${missing.length} trang còn thiếu (từ trang ${existingCount + 1} đến ${detectedTotal})!`
+        : `Chapter này hiện có ${existingCount} ảnh trên hệ thống. Hãy chọn Thư mục gốc Chapter để bot tự quét và lọc ra các ảnh còn thiếu!`,
+      isUploading: false,
+      uploadProgress: null,
+      userCustomTotal: detectedTotal > existingCount ? String(detectedTotal) : ''
+    });
+  };
+
+  const closeSupplementModal = () => {
+    if (supplementModal.isUploading) {
+      if (!confirm('Đang upload ảnh bổ sung, bạn có chắc muốn đóng? Các trang đã tải lên trước đó vẫn được lưu an toàn trên hệ thống.')) {
+        return;
+      }
+    }
+    setSupplementModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const handleSupplementFolderSelected = (e) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    const allImages = Array.from(fileList)
+      .filter(isImageFile)
+      .sort((a, b) => naturalSort(a.name, b.name));
+
+    if (allImages.length === 0) {
+      alert('Không tìm thấy tệp ảnh nào trong thư mục đã chọn!');
+      return;
+    }
+
+    const { chapter, existingCount } = supplementModal;
+    const totalFound = allImages.length;
+
+    if (totalFound <= existingCount) {
+      setSupplementModal(prev => ({
+        ...prev,
+        detectedTotal: totalFound,
+        missingFiles: [],
+        missingCount: 0,
+        missingStartPage: 0,
+        missingEndPage: 0,
+        statusMessage: `ℹ️ Thư mục này có ${totalFound} ảnh, chapter này đã có đủ ${existingCount} ảnh. Không phát hiện ảnh nào bị thiếu! (Nếu bạn muốn thêm các ảnh mới ngoài thư mục, hãy chọn cách 2: Chọn các file ảnh lẻ).`
+      }));
+      return;
+    }
+
+    // Tự động cắt từ index existingCount đến hết -> đây chính là các file còn thiếu!
+    const missing = allImages.slice(existingCount);
+    const startPage = existingCount + 1;
+    const endPage = totalFound;
+
+    setSupplementModal(prev => ({
+      ...prev,
+      detectedTotal: totalFound,
+      missingFiles: missing,
+      missingCount: missing.length,
+      missingStartPage: startPage,
+      missingEndPage: endPage,
+      userCustomTotal: String(totalFound),
+      folderName: fileList[0]?.webkitRelativePath ? fileList[0].webkitRelativePath.split('/')[0] : '',
+      statusMessage: `✅ Tự động phát hiện: Thư mục có tổng ${totalFound} ảnh. Chapter hiện có ${existingCount} ảnh. Bot đã tự động chọn đúng ${missing.length} ảnh còn thiếu (từ trang ${startPage} đến ${endPage})!`
+    }));
+  };
+
+  const handleSupplementFilesSelected = (e) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    const images = Array.from(fileList)
+      .filter(isImageFile)
+      .sort((a, b) => naturalSort(a.name, b.name));
+
+    if (images.length === 0) {
+      alert('Không tìm thấy tệp ảnh nào trong các file đã chọn!');
+      return;
+    }
+
+    const { existingCount } = supplementModal;
+    const startPage = existingCount + 1;
+    const endPage = existingCount + images.length;
+    const defaultTotal = endPage;
+
+    setSupplementModal(prev => ({
+      ...prev,
+      detectedTotal: defaultTotal,
+      missingFiles: images,
+      missingCount: images.length,
+      missingStartPage: startPage,
+      missingEndPage: endPage,
+      userCustomTotal: String(defaultTotal),
+      statusMessage: `✅ Đã chọn ${images.length} file ảnh bổ sung. Sẽ bắt đầu từ trang ${startPage} đến ${endPage}. Bạn có thể chỉnh sửa "Tổng số trang gốc" bên dưới nếu cần.`
+    }));
+  };
+
+  const handleStartSupplementUpload = async () => {
+    const { chapter, missingFiles, detectedTotal, existingCount, userCustomTotal } = supplementModal;
+    if (!chapter) return;
+    if (!missingFiles || missingFiles.length === 0) {
+      alert('Không có ảnh nào cần bổ sung!');
+      return;
+    }
+
+    const finalTotal = parseInt(userCustomTotal || detectedTotal, 10) || (existingCount + missingFiles.length);
+
+    setSupplementModal(prev => ({
+      ...prev,
+      isUploading: true,
+      uploadProgress: { current: 0, total: missingFiles.length, text: 'Bắt đầu nén và chuẩn bị upload lên server...' }
+    }));
+
+    const currentMangaTitle = (mangaData.title || '').trim();
+    const chTitle = chapter.title || `Chapter ${chapter.number}`;
+    const currentApiKey = storageProvider === 'catbox' ? '' : (storageProvider === 'freeimage' ? freeimageKey : imgbbKey);
+
+    let newlyUploadedUrls = [];
+
+    try {
+      await uploadMultipleMangaImages(
+        missingFiles,
+        (uploaded, total, fileName) => {
+          setSupplementModal(prev => ({
+            ...prev,
+            uploadProgress: {
+              current: uploaded,
+              total,
+              text: fileName
+            }
+          }));
+        },
+        {
+          provider: storageProvider,
+          apiKey: currentApiKey,
+          isNsfw: true,
+          mangaTitle: currentMangaTitle,
+          chapterTitle: chTitle,
+          threadId: telegramThreadId,
+          pageOffset: existingCount,
+          totalOriginalPages: finalTotal,
+          delayBetweenAlbums: 1500,
+          onChunkSuccess: ({ newUrls, allUrls }) => {
+            newlyUploadedUrls = [...allUrls];
+            // Lưu giữ trực tiếp ngay khi từng album (10 trang) thành công
+            setMangaData(prev => {
+              const chapters = (prev.chapters || []).map(c => {
+                if (c.id === chapter.id || c.number === chapter.number) {
+                  const existingSet = new Set(c.images || []);
+                  const toAppend = newUrls.filter(u => !existingSet.has(u));
+                  return {
+                    ...c,
+                    images: [...(c.images || []), ...toAppend]
+                  };
+                }
+                return c;
+              });
+              return { ...prev, chapters };
+            });
+          }
+        }
+      );
+
+      // Cập nhật state lần cuối cùng
+      let finalCount = 0;
+      setMangaData(prev => {
+        const chapters = (prev.chapters || []).map(c => {
+          if (c.id === chapter.id || c.number === chapter.number) {
+            const existingUrls = [...(c.images || [])];
+            for (const u of newlyUploadedUrls) {
+              if (!existingUrls.includes(u)) existingUrls.push(u);
+            }
+            finalCount = existingUrls.length;
+            return {
+              ...c,
+              images: existingUrls
+            };
+          }
+          return c;
+        });
+        return { ...prev, chapters };
+      });
+
+      setResumeInfo(null);
+      alert(`🎉 Đã bổ sung thành công ${missingFiles.length} ảnh vào ${chTitle}! Hiện có đủ ${finalCount || (existingCount + missingFiles.length)} trang.`);
+      setSupplementModal(prev => ({ ...prev, isOpen: false, isUploading: false, uploadProgress: null }));
+    } catch (err) {
+      console.error('Lỗi bổ sung ảnh:', err);
+
+      const targetChapter = (mangaData.chapters || []).find(c => c.id === chapter.id || c.number === chapter.number);
+      const currentImagesCount = targetChapter?.images?.length || (existingCount + newlyUploadedUrls.length);
+
+      if (newlyUploadedUrls.length > 0) {
+        setMangaData(prev => {
+          const chapters = (prev.chapters || []).map(c => {
+            if (c.id === chapter.id || c.number === chapter.number) {
+              const existingUrls = [...(c.images || [])];
+              for (const u of newlyUploadedUrls) {
+                if (!existingUrls.includes(u)) existingUrls.push(u);
+              }
+              return { ...c, images: existingUrls };
+            }
+            return c;
+          });
+          return { ...prev, chapters };
+        });
+      }
+
+      const remainingFiles = missingFiles.slice(newlyUploadedUrls.length);
+
+      setResumeInfo({
+        chapterId: chapter.id,
+        chapterNumber: chapter.number,
+        chapterTitle: chTitle,
+        existingCount: currentImagesCount,
+        totalExpected: finalTotal,
+        missingFiles: remainingFiles,
+        missingStartPage: currentImagesCount + 1,
+        missingEndPage: finalTotal
+      });
+
+      alert(
+        `⚠️ Quá trình bổ sung bị gián đoạn: ${err.message}\n\n` +
+        (newlyUploadedUrls.length > 0
+          ? `✅ ĐÃ LƯU AN TOÀN ${newlyUploadedUrls.length} ảnh vừa upload thành công (Hiện có ${currentImagesCount}/${finalTotal} trang)!\n\n`
+          : '') +
+        `👉 Bạn có thể bấm nút "Tiếp tục upload ngay" ở thanh thông báo màu vàng để tải nốt các trang còn lại bất cứ lúc nào.`
+      );
+
+      setSupplementModal(prev => ({
+        ...prev,
+        isUploading: false,
+        existingCount: currentImagesCount,
+        missingFiles: remainingFiles,
+        missingStartPage: currentImagesCount + 1,
+        missingEndPage: finalTotal,
+        uploadProgress: null
+      }));
+    }
   };
 
   // Genre toggle
@@ -1938,12 +2309,80 @@ function MangaForm({
             </div>
           )}
 
+          {/* Resume banner if upload was interrupted */}
+          {resumeInfo && (
+            <div style={{
+              marginTop: '1rem',
+              padding: '0.9rem 1.1rem',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(234, 179, 8, 0.12)',
+              border: '1px solid rgba(234, 179, 8, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
+                <AlertCircle size={22} color="#facc15" />
+                <div>
+                  <strong style={{ color: '#fde047', fontSize: '0.88rem' }}>
+                    ⚠️ Phát hiện tiến trình dở: Chapter {resumeInfo.chapterNumber} ({resumeInfo.chapterTitle})
+                  </strong>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#e2e8f0' }}>
+                    Đã lưu {resumeInfo.existingCount} trang. Còn thiếu {resumeInfo.missingFiles?.length || (resumeInfo.totalExpected - resumeInfo.existingCount)} trang (từ trang {resumeInfo.existingCount + 1} đến {resumeInfo.totalExpected}).
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetCh = (mangaData.chapters || []).find(c => c.id === resumeInfo.chapterId || c.number === resumeInfo.chapterNumber);
+                    if (targetCh) {
+                      openSupplementModal(
+                        targetCh,
+                        (mangaData.chapters || []).indexOf(targetCh),
+                        resumeInfo.missingFiles,
+                        resumeInfo.totalExpected
+                      );
+                    }
+                  }}
+                  className="btn"
+                  style={{
+                    backgroundColor: '#facc15',
+                    color: '#000',
+                    fontWeight: 700,
+                    fontSize: '0.8rem',
+                    padding: '0.4rem 0.9rem',
+                    borderRadius: '6px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                >
+                  <Sparkles size={14} /> Tiếp tục upload ngay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setResumeInfo(null)}
+                  style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: '0.2rem' }}
+                  title="Ẩn thông báo này"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Existing Chapters */}
           {(mangaData.chapters || []).length > 0 && (
             <div style={{ marginTop: '1rem' }}>
               <h4 style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>Chapters đã thêm:</h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                {(mangaData.chapters || []).map((ch) => (
+                {(mangaData.chapters || []).map((ch, chIdx) => (
                   <div key={ch.id} style={{ borderRadius: '6px', border: '1px solid var(--color-border)', overflow: 'hidden' }}>
                     <div style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1955,10 +2394,36 @@ function MangaForm({
                         <span style={{ color: 'var(--color-text-muted)' }}>{ch.title}</span>
                         <span style={{ color: 'var(--color-accent)', fontSize: '0.75rem' }}>({ch.images?.length || 0} ảnh)</span>
                       </div>
-                      <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteChapter(ch.id); }}
-                        style={{ background: 'none', border: 'none', color: '#ff4d4f', cursor: 'pointer', padding: '0.2rem' }}>
-                        <Trash2 size={14} />
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openSupplementModal(ch, chIdx);
+                          }}
+                          className="btn btn-sm"
+                          style={{
+                            padding: '0.25rem 0.6rem',
+                            fontSize: '0.74rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                            color: '#60a5fa',
+                            border: '1px solid rgba(59, 130, 246, 0.35)',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontWeight: 600
+                          }}
+                          title="Kiểm tra thư mục gốc hoặc chọn file để bổ sung các trang ảnh còn thiếu cho chapter này"
+                        >
+                          <Plus size={12} /> Bổ sung ảnh thiếu
+                        </button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteChapter(ch.id); }}
+                          style={{ background: 'none', border: 'none', color: '#ff4d4f', cursor: 'pointer', padding: '0.2rem' }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                     {expandedChapters[ch.id] && (
                       <div style={{ padding: '0.5rem 0.8rem', maxHeight: '250px', overflowY: 'auto' }}>
@@ -2132,6 +2597,284 @@ function MangaForm({
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supplement Missing Images Modal */}
+      {supplementModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(6px)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '1rem'
+        }} onClick={closeSupplementModal}>
+          <div style={{
+            backgroundColor: 'var(--color-bg-primary, #1e1e24)',
+            border: '1px solid var(--color-border, #3b4252)',
+            borderRadius: '14px',
+            width: '100%',
+            maxWidth: '680px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.7)',
+            color: 'var(--color-text-light, #f8fafc)'
+          }} onClick={e => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '1.1rem 1.4rem',
+              borderBottom: '1px solid var(--color-border, #333)',
+              backgroundColor: 'rgba(255,255,255,0.02)'
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#60a5fa' }}>
+                  <Sparkles size={20} /> Bổ Sung Ảnh Còn Thiếu Cho Chapter
+                </h3>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: 'var(--color-text-muted, #94a3b8)' }}>
+                  {supplementModal.chapter?.title || `Chapter ${supplementModal.chapter?.number}`}
+                  {' • '}
+                  <strong style={{ color: '#4ade80' }}>Hiện có: {supplementModal.existingCount} ảnh</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSupplementModal}
+                disabled={supplementModal.isUploading}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted, #94a3b8)', cursor: 'pointer', padding: '0.4rem' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '1.3rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+              {/* How it works banner */}
+              <div style={{
+                padding: '0.85rem 1rem',
+                borderRadius: '8px',
+                backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                fontSize: '0.82rem',
+                lineHeight: '1.45',
+                color: '#93c5fd'
+              }}>
+                💡 <strong>Cách hoạt động thông minh:</strong> Khi bạn chọn thư mục của chapter (ví dụ 290 ảnh), bot sẽ tự động nhận biết hệ thống đã có <strong>{supplementModal.existingCount} ảnh</strong>, và sẽ <strong>chỉ upload tiếp các ảnh còn thiếu (từ trang {supplementModal.existingCount + 1})</strong> lên Telegram mà không bao giờ phải tải lại từ trang 1!
+              </div>
+
+              {/* Selection cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0.8rem' }}>
+                {/* Method 1: Choose chapter folder */}
+                <div
+                  onClick={() => supplementFolderInputRef.current?.click()}
+                  style={{
+                    padding: '1.1rem',
+                    borderRadius: '10px',
+                    border: '1px dashed #3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    textAlign: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.12)'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.05)'}
+                >
+                  <FolderOpen size={32} color="#60a5fa" />
+                  <strong style={{ fontSize: '0.92rem', color: '#93c5fd' }}>1. Chọn Thư Mục Gốc Chapter</strong>
+                  <span style={{ fontSize: '0.76rem', color: 'var(--color-text-muted, #94a3b8)' }}>
+                    (Khuyên dùng) Chọn folder chứa toàn bộ ảnh chapter. Bot tự quét và cắt đúng các trang còn thiếu.
+                  </span>
+                  <input
+                    type="file"
+                    ref={supplementFolderInputRef}
+                    webkitdirectory=""
+                    directory=""
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={handleSupplementFolderSelected}
+                  />
+                </div>
+
+                {/* Method 2: Choose individual files */}
+                <div
+                  onClick={() => supplementFilesInputRef.current?.click()}
+                  style={{
+                    padding: '1.1rem',
+                    borderRadius: '10px',
+                    border: '1px dashed #10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    textAlign: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.12)'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.05)'}
+                >
+                  <Upload size={32} color="#34d399" />
+                  <strong style={{ fontSize: '0.92rem', color: '#6ee7b7' }}>2. Chọn Các File Ảnh Còn Thiếu</strong>
+                  <span style={{ fontSize: '0.76rem', color: 'var(--color-text-muted, #94a3b8)' }}>
+                    Nếu bạn đã lọc riêng các file ảnh bị thiếu (ví dụ 40 file), bấm vào đây để chọn nhanh.
+                  </span>
+                  <input
+                    type="file"
+                    ref={supplementFilesInputRef}
+                    multiple
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={handleSupplementFilesSelected}
+                  />
+                </div>
+              </div>
+
+              {/* Status & Analysis summary */}
+              {supplementModal.statusMessage && (
+                <div style={{
+                  padding: '0.9rem 1rem',
+                  borderRadius: '8px',
+                  backgroundColor: supplementModal.missingFiles.length > 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(234, 179, 8, 0.1)',
+                  border: `1px solid ${supplementModal.missingFiles.length > 0 ? 'rgba(34, 197, 94, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
+                  fontSize: '0.84rem'
+                }}>
+                  <div style={{ color: supplementModal.missingFiles.length > 0 ? '#4ade80' : '#fde047', fontWeight: 600, marginBottom: '0.3rem' }}>
+                    {supplementModal.statusMessage}
+                  </div>
+                  {supplementModal.missingFiles.length > 0 && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', marginTop: '0.6rem', fontSize: '0.78rem', color: '#cbd5e1' }}>
+                      <div>🔹 Số ảnh sẽ upload: <strong style={{ color: '#fff' }}>{supplementModal.missingFiles.length} trang</strong></div>
+                      <div>🔹 Bắt đầu từ: <strong style={{ color: '#fff' }}>Trang {supplementModal.missingStartPage} → {supplementModal.missingEndPage}</strong></div>
+                      <div>🔹 Tổng số trang Chapter: <strong style={{ color: '#fff' }}>{supplementModal.userCustomTotal || supplementModal.detectedTotal} trang</strong></div>
+                      <div>🔹 Máy chủ lưu trữ: <strong style={{ color: '#60a5fa' }}>{storageProvider === 'telegram' ? 'Telegram CDN' : storageProvider}</strong></div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Editable Total Pages (Optional refinement) */}
+              {supplementModal.missingFiles.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', padding: '0.7rem 0.9rem', backgroundColor: 'var(--color-bg-secondary, #25252d)', borderRadius: '6px' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted, #94a3b8)', whiteSpace: 'nowrap' }}>
+                    🎯 Tổng số trang gốc Chapter (hiển thị trên caption Telegram):
+                  </span>
+                  <input
+                    type="number"
+                    min={supplementModal.missingEndPage}
+                    value={supplementModal.userCustomTotal || supplementModal.detectedTotal || ''}
+                    onChange={e => setSupplementModal(prev => ({ ...prev, userCustomTotal: e.target.value }))}
+                    style={{
+                      width: '90px',
+                      padding: '0.3rem 0.5rem',
+                      borderRadius: '4px',
+                      border: '1px solid var(--color-border, #444)',
+                      backgroundColor: 'var(--color-bg-primary, #18181f)',
+                      color: '#fff',
+                      fontSize: '0.85rem'
+                    }}
+                  />
+                  <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>(mặc định: {supplementModal.detectedTotal || (supplementModal.existingCount + supplementModal.missingFiles.length)})</span>
+                </div>
+              )}
+
+              {/* Upload Progress Bar */}
+              {supplementModal.isUploading && supplementModal.uploadProgress && (
+                <div style={{
+                  padding: '1rem',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                    <span style={{ color: '#93c5fd', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang upload bổ sung...
+                    </span>
+                    <strong style={{ color: '#fff' }}>
+                      {supplementModal.uploadProgress.current}/{supplementModal.uploadProgress.total} trang
+                    </strong>
+                  </div>
+
+                  <div style={{ height: '8px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${Math.round((supplementModal.uploadProgress.current / Math.max(1, supplementModal.uploadProgress.total)) * 100)}%`,
+                      backgroundColor: '#3b82f6',
+                      transition: 'width 0.3s ease'
+                    }} />
+                  </div>
+
+                  <div style={{ fontSize: '0.76rem', color: supplementModal.uploadProgress.text?.includes('FloodWait') ? '#fde047' : '#94a3b8' }}>
+                    {supplementModal.uploadProgress.text}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '0.8rem',
+              padding: '1rem 1.4rem',
+              borderTop: '1px solid var(--color-border, #333)',
+              backgroundColor: 'rgba(255,255,255,0.02)'
+            }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={supplementModal.isUploading}
+                onClick={closeSupplementModal}
+                style={{ padding: '0.45rem 1rem', fontSize: '0.85rem' }}
+              >
+                Đóng
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={supplementModal.isUploading || supplementModal.missingFiles.length === 0}
+                onClick={handleStartSupplementUpload}
+                style={{
+                  padding: '0.45rem 1.2rem',
+                  fontSize: '0.85rem',
+                  backgroundColor: supplementModal.missingFiles.length > 0 ? '#3b82f6' : '#475569',
+                  color: '#fff',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  cursor: supplementModal.missingFiles.length > 0 ? 'pointer' : 'not-allowed'
+                }}
+              >
+                {supplementModal.isUploading ? (
+                  <>
+                    <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> Đang tải lên...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} /> Bắt đầu Bổ sung ({supplementModal.missingFiles.length} ảnh)
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
