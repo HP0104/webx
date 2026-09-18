@@ -157,6 +157,73 @@ function RouteAdBannerBottom() {
   return <AdBanner key={routeKey} config={ADS_CONFIG.slot2} />;
 }
 
+function AppContent({ user }) {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  const isUploaderRoute = location.pathname.startsWith('/uploader');
+  const isMangaReaderRoute = location.pathname.includes('/chapter/');
+  const isDashboardRoute = isAdminRoute || isUploaderRoute;
+  const isFullWidthRoute = isDashboardRoute || isMangaReaderRoute;
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <AdBlockWall />
+      <Navbar />
+      <NotificationBanner />
+
+      {!isDashboardRoute && (
+        <div className="container" style={{ paddingBottom: 0, paddingTop: '1rem', maxWidth: '1600px' }}>
+          <RouteAdBanner />
+        </div>
+      )}
+
+      <div className={`app-layout ${isFullWidthRoute ? 'app-layout-full' : ''}`} style={{ paddingTop: isDashboardRoute ? '0.5rem' : '1rem' }}>
+        <main className={`main-content ${isFullWidthRoute ? 'main-content-full' : ''}`}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/category/:categoryType" element={<Category />} />
+            <Route path="/games" element={<Category />} />
+            <Route path="/game/:gameSlug" element={<GameDetail />} />
+            <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
+            <Route path="/wallet" element={user ? <Wallet /> : <Navigate to="/auth" />} />
+            <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
+            <Route path="/admin" element={user?.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
+            <Route path="/uploader" element={(user?.role === 'uploader' || user?.role === 'admin') ? <UploaderDashboard /> : <Navigate to={user ? "/" : "/auth"} />} />
+            <Route path="/blog" element={<Blog />} />
+            <Route path="/report" element={<Report />} />
+            <Route path="/ai-search" element={<GameSearch />} />
+            <Route path="/videos/:category" element={<Videos />} />
+            <Route path="/video/:videoId" element={<VideoDetail />} />
+            <Route path="/manga" element={<MangaList />} />
+            <Route path="/manga/:mangaId" element={<MangaDetail />} />
+            <Route path="/manga/:mangaId/chapter/:chapterId" element={<MangaReader />} />
+          </Routes>
+
+          {!isDashboardRoute && (
+            <div className="container" style={{ paddingTop: 0, marginTop: '2rem' }}>
+              <RouteAdBannerBottom />
+            </div>
+          )}
+        </main>
+
+        {!isFullWidthRoute && (
+          <aside className="sidebar">
+            <ChatBox />
+            <div style={{ marginTop: '1.5rem' }}>
+              <VideoAdBanner config={ADS_CONFIG.sidebar_video} />
+            </div>
+            <div style={{ marginTop: '1.5rem' }}>
+              <AdBanner config={ADS_CONFIG.sidebar} />
+            </div>
+          </aside>
+        )}
+      </div>
+      <MobileBottomNav />
+      <DMCABadge />
+    </div>
+  );
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(0);
@@ -531,56 +598,7 @@ function App() {
       <Router>
         <ExoClickPopunder />
         <PageTitle games={games} />
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-          <AdBlockWall />
-          <Navbar />
-          <NotificationBanner />
-
-          <div className="container" style={{ paddingBottom: 0, paddingTop: '1rem', maxWidth: '1600px' }}>
-            <RouteAdBanner />
-          </div>
-
-          <div className="app-layout" style={{ paddingTop: '1rem' }}>
-            <main className="main-content">
-
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/category/:categoryType" element={<Category />} />
-                <Route path="/games" element={<Category />} />
-                <Route path="/game/:gameSlug" element={<GameDetail />} />
-                <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
-                <Route path="/wallet" element={user ? <Wallet /> : <Navigate to="/auth" />} />
-                <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
-                <Route path="/admin" element={user?.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
-                <Route path="/uploader" element={(user?.role === 'uploader' || user?.role === 'admin') ? <UploaderDashboard /> : <Navigate to={user ? "/" : "/auth"} />} />
-                <Route path="/blog" element={<Blog />} />
-                <Route path="/report" element={<Report />} />
-                <Route path="/ai-search" element={<GameSearch />} />
-                <Route path="/videos/:category" element={<Videos />} />
-                <Route path="/video/:videoId" element={<VideoDetail />} />
-                <Route path="/manga" element={<MangaList />} />
-                <Route path="/manga/:mangaId" element={<MangaDetail />} />
-                <Route path="/manga/:mangaId/chapter/:chapterId" element={<MangaReader />} />
-              </Routes>
-
-              <div className="container" style={{ paddingTop: 0, marginTop: '2rem' }}>
-                <RouteAdBannerBottom />
-              </div>
-            </main>
-
-            <aside className="sidebar">
-              <ChatBox />
-              <div style={{ marginTop: '1.5rem' }}>
-                <VideoAdBanner config={ADS_CONFIG.sidebar_video} />
-              </div>
-              <div style={{ marginTop: '1.5rem' }}>
-                <AdBanner config={ADS_CONFIG.sidebar} />
-              </div>
-            </aside>
-          </div>
-          <MobileBottomNav />
-          <DMCABadge />
-        </div>
+        <AppContent user={user} />
       </Router>
     </AppContext.Provider>
   );

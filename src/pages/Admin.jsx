@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { Users, Gamepad2, Film, AlertTriangle, BarChart3, BookOpen } from 'lucide-react';
+import { Users, Gamepad2, Film, AlertTriangle, BarChart3, BookOpen, Home, MessageSquare, RefreshCw, ShieldCheck, X } from 'lucide-react';
 
 import AdminStats from '../components/Admin/AdminStats';
 import UserManager from '../components/Admin/UserManager';
@@ -13,6 +14,7 @@ import VideoList from '../components/Admin/VideoList';
 import ErrorReportManager from '../components/Admin/ErrorReportManager';
 import MangaForm from '../components/Admin/MangaForm';
 import MangaListAdmin from '../components/Admin/MangaListAdmin';
+import ChatBox from '../components/ChatBox';
 
 const GEMINI_API_KEY_STORAGE_KEY = 'web18p_gemini_api_key';
 
@@ -42,8 +44,10 @@ const INITIAL_FORM_STATE = {
 };
 
 function Admin() {
-  const { games, addGameToStore, deleteGameFromStore, updateGameInStore, revenue, videos, addVideoToStore, deleteVideoFromStore, updateVideoInStore, manga = [], addMangaToStore, deleteMangaFromStore, updateMangaInStore } = useAppContext();
+  const { user, games, addGameToStore, deleteGameFromStore, updateGameInStore, revenue, videos, addVideoToStore, deleteVideoFromStore, updateVideoInStore, manga = [], addMangaToStore, deleteMangaFromStore, updateMangaInStore } = useAppContext();
   const [users, setUsers] = useState([]);
+  const [reportsCount, setReportsCount] = useState(0);
+  const [showChatDrawer, setShowChatDrawer] = useState(false);
   const [editingGameId, setEditingGameId] = useState(null);
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY) || '');
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -94,6 +98,17 @@ function Admin() {
         usersList.push({ id: doc.id, ...doc.data() });
       });
       setUsers(usersList);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Realtime subscription to error reports count
+  useEffect(() => {
+    const q = query(collection(db, 'error_reports'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setReportsCount(snapshot.size || 0);
+    }, (err) => {
+      console.warn("Could not fetch reports count:", err);
     });
     return () => unsubscribe();
   }, []);
@@ -216,10 +231,63 @@ function Admin() {
   };
 
   return (
-    <div className="admin-page container" style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      <h1 style={{ color: 'var(--color-text-light)', borderBottom: '1px solid var(--color-border)', paddingBottom: '1rem' }}>
-        Bảng điều khiển Quản trị
-      </h1>
+    <div className="admin-page container" style={{ maxWidth: '1600px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '1rem 1.5rem' }}>
+      {/* Modern Admin Header */}
+      <div className="admin-header-bar">
+        <div className="admin-header-title">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+              <h1 style={{ color: 'var(--color-text-light)', margin: 0, fontSize: '1.45rem', fontWeight: 800 }}>
+                Bảng điều khiển Quản trị
+              </h1>
+              <span className="admin-badge-shield">
+                <ShieldCheck size={14} />
+                Quản trị viên
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', color: '#10b981', fontWeight: 600, marginLeft: '0.3rem' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981', display: 'inline-block', boxShadow: '0 0 8px #10b981' }}></span>
+                Hệ thống hoạt động
+              </span>
+            </div>
+            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.82rem' }}>
+              Trung tâm điều hành nội dung Game, Phim, Truyện & Thành viên WEB18P
+            </span>
+          </div>
+        </div>
+
+        <div className="admin-actions-group">
+          <Link to="/" className="btn btn-outline" style={{ fontSize: '0.82rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Home size={15} />
+            Trang chủ
+          </Link>
+          {(user?.role === 'uploader' || user?.role === 'admin') && (
+            <Link to="/uploader" className="btn btn-outline" style={{ fontSize: '0.82rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: 'rgba(0, 210, 211, 0.4)', color: '#00d2d3' }}>
+              <Film size={15} />
+              Studio
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowChatDrawer(true)}
+            className="btn btn-outline"
+            style={{ fontSize: '0.82rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: 'rgba(59, 130, 246, 0.4)', color: '#60a5fa' }}
+            title="Mở thanh chat cộng đồng dạng ngăn kéo"
+          >
+            <MessageSquare size={15} />
+            Chat Cộng đồng
+          </button>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="btn btn-outline"
+            style={{ fontSize: '0.82rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+            title="Tải lại dữ liệu"
+          >
+            <RefreshCw size={15} />
+            Làm mới
+          </button>
+        </div>
+      </div>
 
       <div className="admin-dashboard">
         {/* Admin Sidebar Navigation */}
@@ -230,7 +298,7 @@ function Admin() {
             { id: 'games', label: 'Quản lý Game', icon: Gamepad2, count: games.length, color: '#f8b319' },
             { id: 'videos', label: 'Quản lý Phim', icon: Film, count: videos?.length || 0, color: '#ec4899' },
             { id: 'manga', label: 'Quản lý Truyện', icon: BookOpen, count: manga?.length || 0, color: '#a855f7' },
-            { id: 'reports', label: 'Báo lỗi', icon: AlertTriangle, color: '#ff4d4f' }
+            { id: 'reports', label: 'Báo lỗi', icon: AlertTriangle, count: reportsCount, color: '#ff4d4f' }
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -241,9 +309,9 @@ function Admin() {
                 className={`admin-nav-item ${isActive ? 'active' : ''}`}
                 style={{ '--active-color': tab.color }}
               >
-                <Icon size={20} style={{ color: isActive ? tab.color : 'inherit' }} />
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span>{tab.label}</span>
+                <Icon size={20} style={{ color: isActive ? tab.color : 'inherit', flexShrink: 0 }} />
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0, gap: '0.5rem' }}>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.label}</span>
                   {tab.count !== undefined && (
                     <span style={{
                       padding: '0.15rem 0.5rem',
@@ -251,7 +319,8 @@ function Admin() {
                       fontSize: '0.75rem',
                       fontWeight: 700,
                       backgroundColor: isActive ? `${tab.color}25` : 'rgba(255,255,255,0.06)',
-                      color: isActive ? tab.color : 'var(--color-text-muted)'
+                      color: isActive ? tab.color : 'var(--color-text-muted)',
+                      flexShrink: 0
                     }}>
                       {tab.count}
                     </span>
@@ -267,7 +336,7 @@ function Admin() {
           {/* Tab Content */}
           <div style={{ animation: 'fadeIn 0.3s ease' }}>
             {activeTab === 'dashboard' && (
-              <AdminStats usersCount={users.length} gamesCount={games.length} videosCount={videos?.length || 0} mangaCount={manga?.length || 0} />
+              <AdminStats usersCount={users.length} gamesCount={games.length} videosCount={videos?.length || 0} mangaCount={manga?.length || 0} onNavigateTab={setActiveTab} />
             )}
 
             {activeTab === 'users' && (
@@ -333,6 +402,31 @@ function Admin() {
           </div>
         </main>
       </div>
+
+      {/* Slide-over Community Chat Drawer for Admin */}
+      {showChatDrawer && (
+        <div className="admin-chat-drawer-backdrop" onClick={() => setShowChatDrawer(false)}>
+          <div className="admin-chat-drawer-content" onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.9rem 1.2rem', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-primary)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontWeight: 700, color: 'var(--color-text-light)', fontSize: '0.95rem' }}>
+                <MessageSquare size={18} color="var(--color-accent)" />
+                Cộng đồng Chat (Xem & Quản trị)
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowChatDrawer(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: '0.3rem', display: 'flex', alignItems: 'center' }}
+                title="Đóng chat"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              <ChatBox />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
