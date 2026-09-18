@@ -135,11 +135,12 @@ async function detectAdBlocker() {
     return true;
   }
 
-  // ── Check 4: Popup Blocker Detection ──
-  // Only flagged if genuinely blocked by browser/Cốc Cốc on click AND popup not already allowed
+  // ── Check 4: Popup Blocker Detection ── (DISABLED)
+  // Popup blocker là tính năng mặc định của trình duyệt (Cốc Cốc, Chrome, v.v.)
+  // KHÔNG phải ad blocker → KHÔNG trigger AdBlockWall
+  // Chỉ log warning để debug, không return true
   if (window.__popupBlockedDetected === true && !window.__popupSuccessfullyOpened && !window.disablePopunder) {
-    console.warn('[AdBlock] Blocked by Check 4 (Popup blocked)');
-    return true;
+    console.warn('[AdBlock] Popup blocked by browser (NOT ad blocker — skipping)');
   }
 
   // ── Check 5: Script load check (catches script-level blocking) ──
@@ -367,14 +368,12 @@ export function AdBlockWall() {
     checkAdBlock();
   }, [checkAdBlock]);
 
-  // Lắng nghe sự kiện chặn popup (chỉ chặn khi chưa từng có popup nào mở thành công)
+  // Popup bị chặn bởi trình duyệt (Cốc Cốc, Chrome, v.v.) KHÔNG phải ad blocker
+  // → KHÔNG trigger AdBlockWall khi popup bị chặn
+  // Chỉ log để debug
   useEffect(() => {
-    const onPopupBlocked = () => {
-      if (window.__popupSuccessfullyOpened === true || window.disablePopunder) {
-        return;
-      }
-      setBlocked(true);
-      setChecking(false);
+    const onPopupBlocked = (e) => {
+      console.log('[AdBlockWall] Popup blocked by browser, NOT triggering wall:', e?.detail?.reason);
     };
     window.addEventListener('adblock:popup-blocked', onPopupBlocked);
     return () => {
