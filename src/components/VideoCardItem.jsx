@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Eye, Calendar, Tag, Film } from 'lucide-react';
 import { getVideoThumbnail } from '../pages/VideoDetail';
+import { toEmbedUrl } from '../utils/videoUtils';
 
 export default function VideoCardItem({ video }) {
   const rawUrl = video.videoUrl || video.streamtapeUrl;
@@ -11,11 +12,36 @@ export default function VideoCardItem({ video }) {
   }
   thumbnail = thumbnail || 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail';
 
+  const handleMouseEnter = () => {
+    if (!rawUrl) return;
+    try {
+      let hostOrigin = '';
+      if (rawUrl.trim().toLowerCase().startsWith('<iframe')) {
+        const match = rawUrl.match(/src\s*=\s*["']([^"']+)["']/i);
+        if (match) hostOrigin = new URL(match[1]).origin;
+      } else {
+        const embed = toEmbedUrl(rawUrl);
+        if (embed) hostOrigin = new URL(embed.startsWith('http') ? embed : `https://${embed}`).origin;
+      }
+      if (hostOrigin && hostOrigin.startsWith('http')) {
+        if (!window.__prefetchedVideoOrigins) window.__prefetchedVideoOrigins = new Set();
+        if (!window.__prefetchedVideoOrigins.has(hostOrigin)) {
+          window.__prefetchedVideoOrigins.add(hostOrigin);
+          const link = document.createElement('link');
+          link.rel = 'dns-prefetch';
+          link.href = hostOrigin;
+          document.head.appendChild(link);
+        }
+      }
+    } catch (e) {}
+  };
+
   return (
     <Link
       to={`/video/${video.id}`}
       className="video-card"
       style={{ textDecoration: 'none' }}
+      onMouseEnter={handleMouseEnter}
     >
       <div className="video-card-thumbnail">
         {video.thumbnail || getVideoThumbnail(rawUrl) ? (

@@ -35,25 +35,25 @@ function MangaReader() {
 
   const images = currentChapter?.images || [];
 
-  // 1. Preload the first 5 images of current chapter immediately
+  // 1. Preload the first 10 images of current chapter immediately for instant reading
   useEffect(() => {
     if (images.length === 0) return;
-    images.slice(0, 5).forEach(preloadImageUrl);
+    images.slice(0, 10).forEach(preloadImageUrl);
   }, [images]);
 
   // 2. Preload subsequent pages as user scrolls through chapter
   const handlePageVisible = useCallback((index) => {
-    // Preload next 4 images ahead of current scroll
-    for (let i = 1; i <= 4; i++) {
+    // Preload next 5 images ahead of current scroll
+    for (let i = 1; i <= 5; i++) {
       const nextIdx = index + i;
       if (nextIdx < images.length) {
         preloadImageUrl(images[nextIdx]);
       }
     }
 
-    // If near the end of chapter, preload first 3 images of NEXT chapter
-    if (index >= images.length - 3 && nextChapter?.images?.length) {
-      nextChapter.images.slice(0, 3).forEach(preloadImageUrl);
+    // Proactively preload first 5 images of NEXT chapter when reader reaches 65% or last 5 pages
+    if (images.length > 0 && (index >= Math.floor(images.length * 0.65) || index >= images.length - 5) && nextChapter?.images?.length) {
+      nextChapter.images.slice(0, 5).forEach(preloadImageUrl);
     }
   }, [images, nextChapter]);
 
@@ -336,7 +336,8 @@ function LazyImage({ src, alt, index, total, onVisible }) {
               src={imageSrc}
               alt={alt}
               decoding="async"
-              loading="lazy"
+              loading={index < 5 ? "eager" : "auto"}
+              fetchPriority={index < 3 ? "high" : "auto"}
               className={`manga-reader-page-img ${loaded ? 'loaded' : 'loading'}`}
               onLoad={() => setLoaded(true)}
               onError={() => setHasError(true)}

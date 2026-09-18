@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
-import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, Download } from 'lucide-react';
+import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getDownloadUrl } from '../utils/videoUtils';
 import ErrorReportButton from '../components/ErrorReportButton';
 import { doc, updateDoc, increment, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -20,6 +20,7 @@ function VideoDetail() {
   const { videos = [], user } = useAppContext();
   const navigate = useNavigate();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [iframeLoading, setIframeLoading] = useState(false);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -177,6 +178,45 @@ function VideoDetail() {
     };
   }, []);
 
+  // Tự động Preconnect & DNS-Prefetch tới máy chủ video để tối ưu tốc độ kết nối luồng
+  useEffect(() => {
+    const raw = video?.videoUrl || video?.streamtapeUrl;
+    if (!raw) return;
+    try {
+      let hostOrigin = '';
+      if (raw.trim().toLowerCase().startsWith('<iframe')) {
+        const match = raw.match(/src\s*=\s*["']([^"']+)["']/i);
+        if (match) hostOrigin = new URL(match[1]).origin;
+      } else {
+        const embed = toEmbedUrl(raw);
+        if (embed) {
+          hostOrigin = new URL(embed.startsWith('http') ? embed : `https://${embed}`).origin;
+        }
+      }
+      if (hostOrigin && hostOrigin.startsWith('http')) {
+        const linkDns = document.createElement('link');
+        linkDns.rel = 'dns-prefetch';
+        linkDns.href = hostOrigin;
+        document.head.appendChild(linkDns);
+
+        const linkPre = document.createElement('link');
+        linkPre.rel = 'preconnect';
+        linkPre.href = hostOrigin;
+        linkPre.crossOrigin = 'anonymous';
+        document.head.appendChild(linkPre);
+
+        return () => {
+          try {
+            document.head.removeChild(linkDns);
+            document.head.removeChild(linkPre);
+          } catch (e) {}
+        };
+      }
+    } catch (e) {
+      // Ignore parse error
+    }
+  }, [video?.videoUrl, video?.streamtapeUrl]);
+
   if (!video) {
     return (
       <div className="container" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
@@ -214,7 +254,7 @@ function VideoDetail() {
 
       {/* Video Player */}
       <div className="video-detail-player-wrapper">
-        <div className="video-detail-player">
+        <div className="video-detail-player" style={{ position: 'relative', overflow: 'hidden' }}>
           {!isPlaying && thumbnail ? (
             <div 
               className="video-player-overlay" 
@@ -232,9 +272,13 @@ function VideoDetail() {
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
+                justifyContent: 'center',
+                zIndex: 2
               }}
-              onClick={() => setIsPlaying(true)}
+              onClick={() => {
+                setIsPlaying(true);
+                setIframeLoading(true);
+              }}
             >
               <div style={{
                 position: 'absolute',
@@ -245,17 +289,18 @@ function VideoDetail() {
                 justifyContent: 'center'
               }}>
                 <div style={{
-                  width: '60px',
-                  height: '60px',
+                  width: '64px',
+                  height: '64px',
                   borderRadius: '50%',
                   backgroundColor: 'var(--color-accent)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
-                  transition: 'transform 0.2s ease'
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
+                  transition: 'transform 0.2s ease',
+                  cursor: 'pointer'
                 }}>
-                  <Play size={30} color="white" style={{ marginLeft: '4px' }} />
+                  <Play size={32} color="white" style={{ marginLeft: '4px' }} />
                 </div>
               </div>
             </div>
@@ -287,16 +332,41 @@ function VideoDetail() {
                   const isTrusted = TRUSTED_DOMAINS.some(domain => hostname === domain || hostname.endsWith('.' + domain));
                   if (isTrusted) {
                     return (
-                      <iframe
-                        src={iframeSrc.includes('?') ? `${iframeSrc}&autoplay=1` : `${iframeSrc}?autoplay=1`}
-                        width="100%"
-                        height="100%"
-                        allowFullScreen
-                        frameBorder="0"
-                        scrolling="no"
-                        allow="autoplay; encrypted-media"
-                        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
-                      />
+                      <>
+                        {iframeLoading && (
+                          <div style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            backgroundColor: '#0d1117',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 1,
+                            gap: '0.8rem',
+                            color: 'var(--color-text-light)'
+                          }}>
+                            <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
+                            <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Đang kết nối luồng phát video...</span>
+                          </div>
+                        )}
+                        <iframe
+                          src={iframeSrc.includes('?') ? `${iframeSrc}&autoplay=1` : `${iframeSrc}?autoplay=1`}
+                          width="100%"
+                          height="100%"
+                          allowFullScreen
+                          frameBorder="0"
+                          scrolling="no"
+                          loading="eager"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                          onLoad={() => setIframeLoading(false)}
+                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+                        />
+                      </>
                     );
                   }
                 }
@@ -310,16 +380,41 @@ function VideoDetail() {
               );
             })()
           ) : (
-            <iframe
-              src={embedUrl ? (embedUrl.includes('?') ? `${embedUrl}&autoplay=1` : `${embedUrl}?autoplay=1`) : ''}
-              width="100%"
-              height="100%"
-              allowFullScreen
-              frameBorder="0"
-              scrolling="no"
-              allow="autoplay; encrypted-media"
-              style={{ border: 'none' }}
-            />
+            <>
+              {iframeLoading && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  backgroundColor: '#0d1117',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 1,
+                  gap: '0.8rem',
+                  color: 'var(--color-text-light)'
+                }}>
+                  <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
+                  <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Đang kết nối luồng phát video...</span>
+                </div>
+              )}
+              <iframe
+                src={embedUrl ? (embedUrl.includes('?') ? `${embedUrl}&autoplay=1` : `${embedUrl}?autoplay=1`) : ''}
+                width="100%"
+                height="100%"
+                allowFullScreen
+                frameBorder="0"
+                scrolling="no"
+                loading="eager"
+                referrerPolicy="no-referrer-when-downgrade"
+                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                onLoad={() => setIframeLoading(false)}
+                style={{ border: 'none' }}
+              />
+            </>
           )}
         </div>
       </div>
