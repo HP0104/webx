@@ -1801,3 +1801,223 @@ export async function parseArchiveFiles(files, onProgress) {
   };
 }
 
+/**
+ * Phân tích cấu trúc Caption Telegram có cấu trúc
+ * Ví dụ:
+ * 📚 #VO_TOI_NHIEM_NHIEM
+ * 📖 #Chuong_9 | 📄 Trang 241-250/290
+ * 🔖 VỢ TÔI NHIỄM NHIỄM - Chương 9 (Album 10 trang)
+ */
+export function parseTelegramCaption(caption = '') {
+  const data = {
+    mangaTitle: '',
+    chapterTitle: '',
+    startPage: 1,
+    endPage: 1,
+    totalPages: 0,
+    hasStructure: false
+  };
+
+  if (!caption || typeof caption !== 'string') return data;
+
+  // 1. Dòng Bookmark: 🔖 Tên truyện - Chapter ...
+  const bookmarkMatch = caption.match(/🔖\s*([^\n-]+)(?:\s*-\s*([^\n\(\)]+))?/i);
+  if (bookmarkMatch) {
+    data.mangaTitle = bookmarkMatch[1].trim();
+    if (bookmarkMatch[2]) {
+      data.chapterTitle = bookmarkMatch[2].trim();
+    }
+    data.hasStructure = true;
+  }
+
+  // 2. Hashtags fallback
+  if (!data.mangaTitle) {
+    const mangaTagMatch = caption.match(/📚\s*#([a-zA-Z0-9_]+)/i);
+    if (mangaTagMatch) {
+      data.mangaTitle = mangaTagMatch[1].replace(/_/g, ' ').trim();
+      data.hasStructure = true;
+    }
+  }
+
+  if (!data.chapterTitle) {
+    const chapTagMatch = caption.match(/📖\s*#([a-zA-Z0-9_]+)/i);
+    if (chapTagMatch) {
+      data.chapterTitle = chapTagMatch[1].replace(/_/g, ' ').trim();
+      data.hasStructure = true;
+    }
+  }
+
+  // 3. Số trang: Trang 1-10/276 hoặc Trang 1/276
+  const pageRangeMatch = caption.match(/Trang\s*(\d+)(?:\s*-\s*(\d+))?(?:\s*\/\s*(\d+))?/i);
+  if (pageRangeMatch) {
+    data.startPage = parseInt(pageRangeMatch[1], 10);
+    data.endPage = pageRangeMatch[2] ? parseInt(pageRangeMatch[2], 10) : data.startPage;
+    if (pageRangeMatch[3]) {
+      data.totalPages = parseInt(pageRangeMatch[3], 10);
+    }
+    data.hasStructure = true;
+  }
+
+  return data;
+}
+
+/**
+ * Phân tích file export Telegram Desktop (result.json) hoặc JSON backup
+ * Tự động gom nhóm các ảnh theo Truyện và Chapter, sắp xếp trang 1..N
+ */
+export function parseTelegramExportJson(rawJson, cdnDomain = TELEGRAM_CDN_DOMAIN) {
+  let data = rawJson;
+  if (typeof rawJson === 'string') {
+    try {
+      data = JSON.parse(rawJson);
+    } catch (e) {
+      throw new Error('Định dạng JSON không hợp lệ: ' + e.message);
+    }
+  }
+
+  // Nếu là format đã restored từ script (array mangas hoặc object manga)
+  if (Array.isArray(data) && data[0]?.chapters) {
+    return { mangas: data };
+  }
+  if (data?.chapters && Array.isArray(data.chapters)) {
+    return { mangas: [data] };
+  }
+
+  // Nếu là file result.json từ Telegram Desktop Export
+  const messages = data.messages || (Array.isArray(data) ? data : []);
+  if (!Array.isArray(messages) || messages.length === 0) {
+    throw new Error('Không tìm thấy danh sách tin nhắn nào trong file JSON export Telegram.');
+  }
+
+  const mangasMap = new Map();
+  let currentGroupContext = null;
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    const photo = msg.photo;
+    let text = msg.text || '';
+    if (Array.isArray(text)) {
+      text = text.map(item => (typeof item === 'string' ? item : item?.text || '')).join('');
+    }
+
+    if (!photo) continue;
+
+    const parsedCap = parseTelegramCaption(text);
+    if (parsedCap.hasStructure) {
+      currentGroupContext = {
+        mangaTitle: parsedCap.mangaTitle || currentGroupContext?.mangaTitle || 'Truyện Telegram',
+        chapterTitle: parsedCap.chapterTitle || currentGroupContext?.chapterTitle || 'Chapter 1',
+        startPage: parsedCap.startPage,
+        endPage: parsedCap.endPage,
+        totalPages: parsedCap.totalPages,
+        mediaGroupId: msg.media_group_id || null,
+        counter: 0
+      };
+    } else if (msg.media_group_id && currentGroupContext && currentGroupContext.mediaGroupId === msg.media_group_id) {
+      currentGroupContext.counter += 1;
+    } else if (!currentGroupContext) {
+      currentGroupContext = {
+        mangaTitle: 'Truyện Telegram',
+        chapterTitle: 'Chapter 1',
+        startPage: 1,
+        endPage: 1,
+        totalPages: 0,
+        counter: 0
+      };
+    }
+
+    const mangaName = currentGroupContext.mangaTitle || 'Truyện Telegram';
+    const chapName = currentGroupContext.chapterTitle || 'Chapter 1';
+    const fileId = typeof photo === 'string' ? photo.split(/[\/\\]/).pop().replace(/\.[^/.]+$/, '') : (photo.file_id || `photo_${msg.id}`);
+    
+    // Tính số trang
+    let pageNum = currentGroupContext.startPage + (currentGroupContext.counter || 0);
+
+    // Xây dựng URL CDN
+    const mangaSlug = slugify(mangaName);
+    const chapSlug = slugify(chapName);
+    const pageStr = `p${String(pageNum).padStart(2, '0')}`;
+    const cdnUrl = `${cdnDomain.replace(/\/+$/, '')}/file/${mangaSlug}/${chapSlug}/${pageStr}_${fileId}.jpg`;
+
+    if (!mangasMap.has(mangaName)) {
+      mangasMap.set(mangaName, new Map());
+    }
+    const chaptersMap = mangasMap.get(mangaName);
+    if (!chaptersMap.has(chapName)) {
+      chaptersMap.set(chapName, {
+        title: chapName,
+        pages: [],
+        expectedTotal: currentGroupContext.totalPages || 0
+      });
+    }
+
+    const chapObj = chaptersMap.get(chapName);
+    if (currentGroupContext.totalPages > chapObj.expectedTotal) {
+      chapObj.expectedTotal = currentGroupContext.totalPages;
+    }
+
+    chapObj.pages.push({
+      page: pageNum,
+      url: cdnUrl,
+      fileId,
+      messageId: msg.id,
+      date: msg.date
+    });
+  }
+
+  // Format sang danh sách chuẩn webx
+  const formattedMangas = [];
+  mangasMap.forEach((chaptersMap, mangaTitle) => {
+    const chaptersList = [];
+    chaptersMap.forEach((chData, chapTitle) => {
+      // Sắp xếp các trang theo số trang
+      chData.pages.sort((a, b) => a.page - b.page);
+
+      // Loại bỏ trang trùng lặp nếu có
+      const uniquePages = [];
+      const seenPages = new Set();
+      chData.pages.forEach(p => {
+        if (!seenPages.has(p.page)) {
+          seenPages.add(p.page);
+          uniquePages.push(p);
+        }
+      });
+
+      const totalImages = uniquePages.length;
+      const expected = chData.expectedTotal || totalImages;
+      const isMissing = expected > totalImages;
+      const missingCount = Math.max(0, expected - totalImages);
+
+      chaptersList.push({
+        id: `ch-restored-${slugify(chapTitle)}-${Date.now()}`,
+        number: extractChapterNumericValue({ title: chapTitle, name: chapTitle }),
+        title: chapTitle,
+        images: uniquePages.map(p => p.url),
+        totalImages,
+        expectedTotal: expected,
+        isMissing,
+        missingCount,
+        missingRange: isMissing ? `${totalImages + 1} - ${expected}` : null
+      });
+    });
+
+    // Sắp xếp chapters theo thứ tự 1..N
+    chaptersList.sort((a, b) => {
+      const numA = a.number ?? 999999;
+      const numB = b.number ?? 999999;
+      return numA - numB;
+    });
+
+    formattedMangas.push({
+      title: mangaTitle,
+      slug: slugify(mangaTitle),
+      cover: chaptersList[0]?.images?.[0] || '',
+      totalChapters: chaptersList.length,
+      chapters: chaptersList
+    });
+  });
+
+  return { mangas: formattedMangas };
+}
+
+
