@@ -9,7 +9,7 @@
 const STREAMHG_API_URL = 'https://streamhgapi.com/api';
 
 // Hệ thống sử dụng API Key tập trung từ cấu hình máy chủ/hệ thống, uploader không cần nhập key cá nhân.
-export const SYSTEM_STREAMHG_API_KEY = import.meta.env.VITE_STREAMHG_API_KEY || '32607e9gruy10gmto2nr';
+export const SYSTEM_STREAMHG_API_KEY = import.meta.env.VITE_STREAMHG_API_KEY || '32607fuhmbj2uyd39be1h';
 export const TARGET_FOLDER_NAME = import.meta.env.VITE_STREAMHG_FOLDER || 'web18p.xyz';
 
 export function getStreamHGKey() {
