@@ -20,7 +20,9 @@ import {
   parseFolderStructure,
   countTotalImages,
   parseArchiveFiles,
-  extractArchiveToChapters
+  extractArchiveToChapters,
+  scanDirectoryEntries,
+  naturalSort
 } from '../../utils/mangaUtils';
 
 function MangaForm({
@@ -44,6 +46,7 @@ function MangaForm({
   const [coverUploading, setCoverUploading] = useState(false);
   const [showCoverSelector, setShowCoverSelector] = useState(false);
   const [imgbbSummary, setImgbbSummary] = useState(() => getImgBBUsageSummary(imgbbKey));
+  const [isFolderDragging, setIsFolderDragging] = useState(false);
 
   // Ticking every 1s for live countdown of quotas & cooldowns
   useEffect(() => {
@@ -60,6 +63,7 @@ function MangaForm({
   const [manualChapterUrls, setManualChapterUrls] = useState('');
 
   const folderInputRef = useRef(null);
+  const appendFolderInputRef = useRef(null);
   const coverInputRef = useRef(null);
   const chapterFolderInputRef = useRef(null);
   const archiveInputRef = useRef(null);
@@ -305,13 +309,15 @@ function MangaForm({
     }
   };
 
-  // Handle folder selection (auto starts upload)
-  const handleFolderSelect = async (e) => {
+  // Handle folder selection from directory picker (e.g. parent folder like 'tạm')
+  const handleFolderSelect = (e) => {
     const fileList = e.target.files;
     if (!fileList || fileList.length === 0) return;
 
     const { mangaTitle, chapters } = parseFolderStructure(fileList);
-    if (chapters.length === 0) return alert('Không tìm thấy tệp ảnh nào trong thư mục đã chọn!');
+    if (!chapters || chapters.length === 0) {
+      return alert('Không tìm thấy tệp ảnh nào trong thư mục đã chọn!');
+    }
 
     const detectedTitle = mangaData.title || mangaTitle || '';
     if (mangaTitle && !mangaData.title) {
@@ -319,12 +325,148 @@ function MangaForm({
     }
 
     setParsedChapters(chapters);
-    await uploadChaptersList(chapters, detectedTitle);
+  };
+
+  // Append another folder as new chapter(s)
+  const handleAppendFolderSelect = (e) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    const { mangaTitle, chapters } = parseFolderStructure(fileList);
+    if (!chapters || chapters.length === 0) {
+      return alert('Không tìm thấy tệp ảnh nào trong thư mục vừa chọn!');
+    }
+
+    if (mangaTitle && !mangaData.title) {
+      setMangaData(prev => ({ ...prev, title: mangaTitle }));
+    }
+
+    setParsedChapters(prev => {
+      const merged = [...prev];
+      for (const ch of chapters) {
+        const existingIdx = merged.findIndex(c => c.name === ch.name || (ch.folderName && c.folderName === ch.folderName));
+        if (existingIdx >= 0) {
+          merged[existingIdx] = { ...ch, checked: true };
+        } else {
+          merged.push({ ...ch, checked: true });
+        }
+      }
+      return merged.sort((a, b) => naturalSort(a.name, b.name));
+    });
+  };
+
+  // Drag and drop folders handler
+  const handleFolderDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsFolderDragging(true);
+  };
+
+  const handleFolderDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsFolderDragging(false);
+  };
+
+  const handleFolderDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsFolderDragging(false);
+
+    const items = e.dataTransfer?.items;
+    if (!items || items.length === 0) return;
+
+    setIsExtracting(true);
+    setExtractProgress({ message: 'Đang đọc các thư mục được kéo thả...' });
+
+    try {
+      const files = await scanDirectoryEntries(items);
+      if (!files || files.length === 0) {
+        alert('Không tìm thấy tệp ảnh nào trong các thư mục vừa kéo thả!');
+        return;
+      }
+
+      const { mangaTitle, chapters } = parseFolderStructure(files);
+      if (!chapters || chapters.length === 0) {
+        alert('Không nhận diện được chapter nào!');
+        return;
+      }
+
+      if (mangaTitle && !mangaData.title) {
+        setMangaData(prev => ({ ...prev, title: mangaTitle }));
+      }
+
+      setParsedChapters(prev => {
+        const merged = [...prev];
+        for (const ch of chapters) {
+          const existingIdx = merged.findIndex(c => c.name === ch.name || (ch.folderName && c.folderName === ch.folderName));
+          if (existingIdx >= 0) {
+            merged[existingIdx] = { ...ch, checked: true };
+          } else {
+            merged.push({ ...ch, checked: true });
+          }
+        }
+        return merged.sort((a, b) => naturalSort(a.name, b.name));
+      });
+    } catch (err) {
+      alert('Lỗi đọc thư mục kéo thả: ' + err.message);
+    } finally {
+      setIsExtracting(false);
+      setExtractProgress(null);
+    }
+  };
+
+  // Toggle chapter in parsedChapters
+  const handleToggleParsedChapter = (idx) => {
+    setParsedChapters(prev => prev.map((ch, i) => i === idx ? { ...ch, checked: !ch.checked } : ch));
+  };
+
+  // Toggle all parsed chapters
+  const handleToggleAllParsedChapters = (checked) => {
+    setParsedChapters(prev => prev.map(ch => ({ ...ch, checked })));
+  };
+
+  // Rename a parsed chapter
+  const handleUpdateParsedChapterName = (idx, newName) => {
+    setParsedChapters(prev => prev.map((ch, i) => i === idx ? { ...ch, name: newName } : ch));
+  };
+
+  // Move parsed chapter up / down
+  const handleMoveParsedChapter = (idx, direction) => {
+    setParsedChapters(prev => {
+      const copy = [...prev];
+      const targetIdx = idx + direction;
+      if (targetIdx < 0 || targetIdx >= copy.length) return prev;
+      const temp = copy[idx];
+      copy[idx] = copy[targetIdx];
+      copy[targetIdx] = temp;
+      return copy;
+    });
+  };
+
+  // Remove a parsed chapter
+  const handleRemoveParsedChapter = (idx) => {
+    setParsedChapters(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // Sort parsed chapters by name 1 -> 9
+  const handleSortParsedChapters = () => {
+    setParsedChapters(prev => [...prev].sort((a, b) => naturalSort(a.name, b.name)));
+  };
+
+  // Start upload of all checked parsed chapters
+  const handleUploadCheckedChapters = async () => {
+    const checkedList = parsedChapters.filter(ch => ch.checked !== false);
+    if (checkedList.length === 0) {
+      alert('Vui lòng tích chọn ít nhất 1 chapter để upload!');
+      return;
+    }
+    await uploadChaptersList(checkedList, mangaData.title);
   };
 
   // Manual trigger if needed
   const handleUploadAll = async () => {
-    await uploadChaptersList(parsedChapters, mangaData.title);
+    await handleUploadCheckedChapters();
   };
 
   // Upload single chapter folder
@@ -1303,65 +1445,284 @@ function MangaForm({
 
           {/* Folder Upload Mode */}
           {uploadMode === 'folder' && (
-            <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: 'rgba(82, 196, 26, 0.06)', border: '1px dashed rgba(82, 196, 26, 0.3)' }}>
-              <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: '0.8rem' }}>
-                📁 Chọn <strong>thư mục truyện lớn</strong> — mỗi subfolder sẽ tự nhận diện thành 1 chapter.
-              </p>
-              <button
-                type="button"
-                onClick={() => folderInputRef.current?.click()}
-                disabled={isUploading}
-                className="btn"
-                style={{ background: '#52c41a', color: '#fff', border: 'none', padding: '0.6rem 1.2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, cursor: 'pointer' }}
-              >
-                <FolderOpen size={16} /> Chọn Thư Mục Truyện
-              </button>
-              <input
-                ref={el => {
-                  folderInputRef.current = el;
-                  if (el) {
-                    el.setAttribute('webkitdirectory', '');
-                    el.setAttribute('directory', '');
-                  }
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Drag and Drop Zone */}
+              <div
+                onDragOver={handleFolderDragOver}
+                onDragLeave={handleFolderDragLeave}
+                onDrop={handleFolderDrop}
+                style={{
+                  padding: '1.75rem 1.25rem',
+                  borderRadius: '12px',
+                  backgroundColor: isFolderDragging ? 'rgba(82, 196, 26, 0.15)' : 'rgba(82, 196, 26, 0.05)',
+                  border: isFolderDragging ? '2px dashed #52c41a' : '2px dashed rgba(82, 196, 26, 0.35)',
+                  textAlign: 'center',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.6rem'
                 }}
-                type="file"
-                hidden
-                multiple
-                onClick={(e) => { e.target.value = ''; }}
-                onChange={handleFolderSelect}
-              />
+                onClick={() => folderInputRef.current?.click()}
+              >
+                <div style={{
+                  width: '52px',
+                  height: '52px',
+                  borderRadius: '50%',
+                  background: 'rgba(82, 196, 26, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#52c41a'
+                }}>
+                  <FolderOpen size={28} />
+                </div>
+                <div>
+                  <h4 style={{ margin: '0 0 0.3rem 0', color: 'var(--color-text-light)', fontSize: '1rem', fontWeight: 700 }}>
+                    Kéo & Thả nhiều thư mục Chapter vào đây
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--color-text-muted)', maxWidth: '540px' }}>
+                    Bạn có thể bôi đen nhiều thư mục cùng lúc (ví dụ Chương 1 đến Chương 9) trong Windows Explorer rồi thả vào đây, hoặc bấm các nút bên dưới.
+                  </p>
+                </div>
 
-              {/* Parsed Preview */}
-              {parsedChapters.length > 0 && (
-                <div style={{ marginTop: '1rem' }}>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--color-success)', fontWeight: 600, marginBottom: '0.5rem' }}>
-                    ✓ Tìm thấy {parsedChapters.length} chapter, tổng {countTotalImages(parsedChapters)} ảnh
-                  </div>
-                  <div style={{ maxHeight: '200px', overflowY: 'auto', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                    {parsedChapters.map((ch, i) => (
-                      <div key={i} style={{ padding: '0.3rem 0', borderBottom: '1px solid var(--color-border)' }}>
-                        📂 {ch.name} — {ch.files.length} ảnh
-                      </div>
-                    ))}
-                  </div>
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'center', marginTop: '0.5rem' }} onClick={e => e.stopPropagation()}>
                   <button
                     type="button"
-                    onClick={handleUploadAll}
-                    disabled={isUploading}
+                    onClick={() => folderInputRef.current?.click()}
+                    disabled={isUploading || isExtracting}
+                    className="btn"
+                    style={{ background: '#52c41a', color: '#fff', border: 'none', padding: '0.55rem 1.2rem', display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontWeight: 600, fontSize: '0.86rem', cursor: 'pointer', borderRadius: '8px' }}
+                  >
+                    <FolderOpen size={16} /> Chọn Thư Mục Cha (chứa các chương)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => appendFolderInputRef.current?.click()}
+                    disabled={isUploading || isExtracting}
+                    className="btn"
+                    style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--color-text-light)', border: '1px solid var(--color-border)', padding: '0.55rem 1.1rem', display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontWeight: 600, fontSize: '0.86rem', cursor: 'pointer', borderRadius: '8px' }}
+                    title="Chọn thêm từng thư mục chapter cộng dồn vào danh sách"
+                  >
+                    <Plus size={16} color="#52c41a" /> Chọn Thêm Thư Mục Chapter
+                  </button>
+
+                  {parsedChapters.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setParsedChapters([])}
+                      disabled={isUploading}
+                      className="btn"
+                      style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.55rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.84rem', cursor: 'pointer', borderRadius: '8px' }}
+                    >
+                      <Trash2 size={15} /> Xóa danh sách chờ
+                    </button>
+                  )}
+                </div>
+
+                <input
+                  ref={el => {
+                    folderInputRef.current = el;
+                    if (el) {
+                      el.setAttribute('webkitdirectory', '');
+                      el.setAttribute('directory', '');
+                    }
+                  }}
+                  type="file"
+                  hidden
+                  multiple
+                  onClick={(e) => { e.target.value = ''; }}
+                  onChange={handleFolderSelect}
+                />
+
+                <input
+                  ref={el => {
+                    appendFolderInputRef.current = el;
+                    if (el) {
+                      el.setAttribute('webkitdirectory', '');
+                      el.setAttribute('directory', '');
+                    }
+                  }}
+                  type="file"
+                  hidden
+                  multiple
+                  onClick={(e) => { e.target.value = ''; }}
+                  onChange={handleAppendFolderSelect}
+                />
+              </div>
+
+              {/* Parsed Chapters Checklist and Preview */}
+              {parsedChapters.length > 0 && (
+                <div style={{
+                  background: 'var(--color-bg-secondary)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '12px',
+                  padding: '1.2rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1rem'
+                }}>
+                  {/* Summary & Toolbar */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--color-border)' }}>
+                    <div>
+                      <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        <Check size={18} color="#52c41a" />
+                        Đã nạp {parsedChapters.filter(c => c.checked !== false).length} / {parsedChapters.length} chapter
+                        <span style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--color-accent)' }}>
+                          (Tổng {parsedChapters.filter(c => c.checked !== false).reduce((s, c) => s + c.files.length, 0)} ảnh)
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                        Kiểm tra danh sách bên dưới, bỏ tích nếu không muốn upload, hoặc bấm nút upload để đưa vào truyện.
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAllParsedChapters(true)}
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', color: 'var(--color-text-light)', padding: '0.3rem 0.65rem', borderRadius: '6px', fontSize: '0.76rem', cursor: 'pointer' }}
+                      >
+                        ✓ Chọn tất cả
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleAllParsedChapters(false)}
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', padding: '0.3rem 0.65rem', borderRadius: '6px', fontSize: '0.76rem', cursor: 'pointer' }}
+                      >
+                        ☐ Bỏ chọn
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSortParsedChapters}
+                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--color-border)', color: 'var(--color-accent)', padding: '0.3rem 0.65rem', borderRadius: '6px', fontSize: '0.76rem', cursor: 'pointer' }}
+                        title="Sắp xếp lại theo số thứ tự Chapter (1 -> 9)"
+                      >
+                        1→9 Sắp xếp
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Chapters List */}
+                  <div style={{ maxHeight: '380px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingRight: '0.25rem' }}>
+                    {parsedChapters.map((ch, i) => {
+                      const isChecked = ch.checked !== false;
+                      return (
+                        <div
+                          key={ch.id || i}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.65rem 0.85rem',
+                            borderRadius: '8px',
+                            background: isChecked ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.2)',
+                            border: `1px solid ${isChecked ? 'rgba(82, 196, 26, 0.3)' : 'var(--color-border)'}`,
+                            opacity: isChecked ? 1 : 0.6,
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleParsedChapter(i)}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#52c41a' }}
+                          />
+
+                          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text-muted)', width: '28px', textAlign: 'center' }}>
+                            #{i + 1}
+                          </div>
+
+                          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
+                            <input
+                              type="text"
+                              className="input-field"
+                              value={ch.name}
+                              onChange={(e) => handleUpdateParsedChapterName(i, e.target.value)}
+                              style={{ margin: 0, padding: '0.35rem 0.65rem', fontSize: '0.85rem', fontWeight: 600, flex: 1 }}
+                              placeholder="Tên chapter..."
+                            />
+                            {ch.folderName && (
+                              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }} title={`Thư mục gốc: ${ch.folderName}`}>
+                                📁 {ch.folderName}
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: '12px',
+                            backgroundColor: 'rgba(102, 192, 244, 0.12)',
+                            color: 'var(--color-accent)',
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {ch.files.length} ảnh
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveParsedChapter(i, -1)}
+                              disabled={i === 0}
+                              style={{ background: 'none', border: 'none', color: i === 0 ? 'rgba(255,255,255,0.1)' : 'var(--color-text-muted)', cursor: i === 0 ? 'default' : 'pointer', padding: '2px' }}
+                              title="Di chuyển lên"
+                            >
+                              <ChevronUp size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleMoveParsedChapter(i, 1)}
+                              disabled={i === parsedChapters.length - 1}
+                              style={{ background: 'none', border: 'none', color: i === parsedChapters.length - 1 ? 'rgba(255,255,255,0.1)' : 'var(--color-text-muted)', cursor: i === parsedChapters.length - 1 ? 'default' : 'pointer', padding: '2px' }}
+                              title="Di chuyển xuống"
+                            >
+                              <ChevronDown size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveParsedChapter(i)}
+                              style={{ background: 'none', border: 'none', color: '#ff4d4f', cursor: 'pointer', padding: '2px', marginLeft: '0.25rem' }}
+                              title="Xóa chapter này"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Primary Start Upload Button */}
+                  <button
+                    type="button"
+                    onClick={handleUploadCheckedChapters}
+                    disabled={isUploading || isExtracting || parsedChapters.filter(c => c.checked !== false).length === 0}
                     className="btn"
                     style={{
-                      marginTop: '0.8rem',
-                      background: storageProvider === 'freeimage' ? '#10b981' : 'var(--color-accent)',
-                      color: '#000',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: '#fff',
                       border: 'none',
-                      padding: '0.6rem 1.5rem',
+                      padding: '0.75rem 1.5rem',
                       fontWeight: 700,
+                      fontSize: '0.95rem',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '0.5rem'
+                      justifyContent: 'center',
+                      gap: '0.6rem',
+                      borderRadius: '8px',
+                      cursor: isUploading || isExtracting || parsedChapters.filter(c => c.checked !== false).length === 0 ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 4px 16px rgba(16, 185, 129, 0.3)'
                     }}
                   >
-                    <Upload size={16} /> {isUploading ? 'Đang upload...' : `Upload tất cả lên ${storageProvider === 'freeimage' ? 'FreeImage.host' : 'ImgBB'}`}
+                    <Upload size={18} />
+                    {isUploading
+                      ? 'Đang tiến hành tải lên...'
+                      : `Bắt đầu Upload ${parsedChapters.filter(c => c.checked !== false).length} Chapter (${parsedChapters.filter(c => c.checked !== false).reduce((s, c) => s + c.files.length, 0)} ảnh)`}
                   </button>
                 </div>
               )}

@@ -1202,9 +1202,81 @@ const TECHNICAL_DIRS = new Set([
  *   - Any numbering scheme (starting from 0, 1, or arbitrary numbers like 791)
  *   - Arbitrary subfolder layouts (e.g. Manga/Chapter/webp/01_1.webp or Chapter/00001.webp)
  *   - Auto-detection of chapter names and manga titles from folder names
+/**
+ * Recursively read all files from DataTransferItemList (drag-and-drop folders).
+ * Ensures webkitRelativePath is assigned so parseFolderStructure understands folder hierarchy.
+ * Handles Chrome's chunked readEntries (100 files max per call).
+ */
+export async function scanDirectoryEntries(dataTransferItems) {
+  const items = Array.from(dataTransferItems || []);
+  const allFiles = [];
+
+  const readAllEntriesFromReader = async (dirReader) => {
+    const entries = [];
+    const readBatch = () => new Promise((resolve) => {
+      dirReader.readEntries(resolve, () => resolve([]));
+    });
+    while (true) {
+      const batch = await readBatch();
+      if (!batch || batch.length === 0) break;
+      entries.push(...batch);
+    }
+    return entries;
+  };
+
+  const scanFilesFromEntry = async (entry, path = '') => {
+    if (!entry) return [];
+    if (entry.isFile) {
+      return new Promise((resolve) => {
+        entry.file((file) => {
+          try {
+            Object.defineProperty(file, 'webkitRelativePath', {
+              value: path + file.name,
+              writable: true,
+              configurable: true
+            });
+          } catch {
+            // ignore if already defined
+          }
+          resolve([file]);
+        }, () => resolve([]));
+      });
+    }
+    if (entry.isDirectory) {
+      const dirReader = entry.createReader();
+      const subEntries = await readAllEntriesFromReader(dirReader);
+      const results = await Promise.all(
+        subEntries.map((e) => scanFilesFromEntry(e, `${path}${entry.name}/`))
+      );
+      return results.flat();
+    }
+    return [];
+  };
+
+  for (const item of items) {
+    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+    if (entry) {
+      const files = await scanFilesFromEntry(entry);
+      allFiles.push(...files);
+    } else if (item.kind === 'file') {
+      const file = item.getAsFile ? item.getAsFile() : null;
+      if (file) allFiles.push(file);
+    }
+  }
+
+  return allFiles;
+}
+
+/**
+ * Parse a FileList or Array of Files from folder inputs / drag-and-drop into chapter structure.
+ * Supports:
+ *   - Any numbering scheme (starting from 0, 1, or arbitrary numbers like 791)
+ *   - Arbitrary subfolder layouts (e.g. Manga/Chapter/webp/01_1.webp or Chapter/00001.webp)
+ *   - Auto-detection of chapter names and manga titles from folder names
+ *   - Dominant manga title detection with smart checkbox defaults
  *
- * @param {FileList} fileList - Files from <input webkitdirectory>
- * @returns {{ mangaTitle: string, chapters: Array<{name: string, files: File[]}> }}
+ * @param {FileList|File[]} fileList - Files from <input webkitdirectory> or scanDirectoryEntries
+ * @returns {{ mangaTitle: string, chapters: Array<{id: string, name: string, mangaTitle: string, folderName: string, checked: boolean, files: File[]}> }}
  */
 export function parseFolderStructure(fileList) {
   const allFiles = Array.from(fileList || []);
@@ -1222,8 +1294,8 @@ export function parseFolderStructure(fileList) {
     return { file: f, parts };
   });
 
-  let detectedMangaTitle = '';
-  const chapterMap = new Map();
+  const titleFrequency = new Map();
+  const chapterMap = new Map(); // uniqueKey -> { name, mangaTitle, folderName, files }
 
   for (const { file, parts } of pathParts) {
     const rawFolders = parts.slice(0, -1);
@@ -1232,6 +1304,7 @@ export function parseFolderStructure(fileList) {
 
     let chapterName = 'Chapter 1';
     let currentMangaTitle = '';
+    let folderKey = '';
 
     if (cleanFolders.length >= 2) {
       // e.g. [ParentFolder, ChapterFolder] or [MangaTitle, ChapterFolder]
@@ -1252,34 +1325,70 @@ export function parseFolderStructure(fileList) {
           currentMangaTitle = cleanFolders[0];
         }
       }
+      folderKey = lastFolder;
     } else if (cleanFolders.length === 1) {
       // Selected a single chapter folder, e.g. "VỢ-TÔI-NHIỄM-NHIỄM-CHƯƠNG-1_anh_da_gan_hardsub"
       const folder = cleanFolders[0];
       const parsed = parseMangaTitleAndChapter(folder);
       chapterName = parsed.chapterName || 'Chapter 1';
       currentMangaTitle = parsed.title || folder;
+      folderKey = folder;
     } else {
       chapterName = 'Chapter 1';
+      folderKey = 'root';
     }
 
-    if (currentMangaTitle && !detectedMangaTitle) {
-      detectedMangaTitle = currentMangaTitle;
+    if (currentMangaTitle) {
+      const slug = slugify(currentMangaTitle);
+      const existing = titleFrequency.get(slug);
+      titleFrequency.set(slug, {
+        title: existing?.title || currentMangaTitle,
+        count: (existing?.count || 0) + 1
+      });
     }
 
-    if (!chapterMap.has(chapterName)) {
-      chapterMap.set(chapterName, []);
+    const uniqueKey = folderKey || chapterName;
+    if (!chapterMap.has(uniqueKey)) {
+      chapterMap.set(uniqueKey, {
+        name: chapterName,
+        mangaTitle: currentMangaTitle,
+        folderName: folderKey,
+        files: []
+      });
     }
-    chapterMap.get(chapterName).push(file);
+    chapterMap.get(uniqueKey).files.push(file);
   }
 
-  // Sort chapter names naturally, and sort files naturally within each chapter (supports 0, 1, 791, 01_1...)
-  const chapterNames = [...chapterMap.keys()].sort(naturalSort);
-  const chapters = chapterNames.map(name => ({
-    name,
-    files: (chapterMap.get(name) || []).sort((a, b) => naturalSort(a.name, b.name))
-  }));
+  // Find dominant manga title based on file count
+  let dominantTitle = '';
+  let maxCount = 0;
+  for (const [, item] of titleFrequency) {
+    if (item.count > maxCount) {
+      maxCount = item.count;
+      dominantTitle = item.title;
+    }
+  }
 
-  return { mangaTitle: detectedMangaTitle, chapters };
+  const dominantSlug = dominantTitle ? slugify(dominantTitle) : '';
+
+  // Sort chapters naturally by chapter name
+  const chapterEntries = Array.from(chapterMap.values());
+  chapterEntries.sort((a, b) => naturalSort(a.name, b.name));
+
+  const chapters = chapterEntries.map((ch, idx) => {
+    const chSlug = ch.mangaTitle ? slugify(ch.mangaTitle) : '';
+    const isDominant = !dominantSlug || chSlug === dominantSlug;
+    return {
+      id: `ch-parsed-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`,
+      name: ch.name,
+      mangaTitle: ch.mangaTitle || dominantTitle,
+      folderName: ch.folderName,
+      checked: isDominant,
+      files: ch.files.sort((a, b) => naturalSort(a.name, b.name))
+    };
+  });
+
+  return { mangaTitle: dominantTitle, chapters };
 }
 
 /**
