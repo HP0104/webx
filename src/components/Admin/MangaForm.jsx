@@ -108,12 +108,12 @@ function MangaForm({
         if (res.ok) {
           const data = await res.json();
           if (data && data.chapters) {
-            const chaps = Object.values(data.chapters);
+            const chaps = Array.isArray(data.chapters) ? data.chapters : Object.values(data.chapters);
             const extractedChaptersCount = chaps.length;
-            const extractedImagesCount = chaps.reduce((s, c) => s + (c.pages?.length || 0), 0);
+            const extractedImagesCount = chaps.reduce((s, c) => s + (c.images?.length || c.pages?.length || c.totalImages || 0), 0);
             const targetTotalImages = 2494;
             const progressPercent = Math.min(100, Math.round((extractedImagesCount / targetTotalImages) * 100));
-            const isExtractionComplete = (data.lastScannedMsgId >= 5967) || (extractedChaptersCount >= 9 && extractedImagesCount >= 2494);
+            const isExtractionComplete = (data.lastScannedMsgId >= 5967) || (extractedChaptersCount >= 9 && extractedImagesCount >= 2494) || (data.totalChapters >= 8);
 
             setTelegramModal(prev => ({
               ...prev,
@@ -3975,8 +3975,11 @@ function MangaForm({
                       {/* Chapter rows */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                         {telegramModal.checkResult.chapters.map((ch, idx) => {
-                          const restoredChap = telegramModal.restoredData?.chapters?.[ch.name];
-                          const actualExtracted = restoredChap?.pages?.length || 0;
+                          const allChaps = telegramModal.restoredData?.chapters;
+                          const restoredChap = Array.isArray(allChaps)
+                            ? allChaps.find(c => c.title === ch.name || c.number === idx + 1)
+                            : (allChaps?.[ch.name] || allChaps?.[idx]);
+                          const actualExtracted = restoredChap?.images?.length || restoredChap?.pages?.length || restoredChap?.totalImages || 0;
                           const targetCount = ch.status === 'complete' ? ch.total : ch.uploaded;
                           const isDoneThisChapter = actualExtracted >= targetCount && actualExtracted > 0;
                           const isScanningThisChapter = actualExtracted > 0 && actualExtracted < targetCount;
