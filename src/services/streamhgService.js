@@ -8,12 +8,62 @@
 
 const STREAMHG_API_URL = 'https://streamhgapi.com/api';
 
-// Hệ thống sử dụng API Key tập trung từ cấu hình máy chủ/hệ thống, uploader không cần nhập key cá nhân.
+// Hệ thống sử dụng API Key tập trung từ cấu hình máy chủ/hệ thống, có thể ghi đè qua localStorage nếu đổi key mới.
 export const SYSTEM_STREAMHG_API_KEY = import.meta.env.VITE_STREAMHG_API_KEY || '32607fuhmbj2uyd39be1h';
 export const TARGET_FOLDER_NAME = import.meta.env.VITE_STREAMHG_FOLDER || 'web18p.xyz';
+export const STREAMHG_STORAGE_KEY = 'web18p_streamhg_api_key';
 
 export function getStreamHGKey() {
+  const customKey = localStorage.getItem(STREAMHG_STORAGE_KEY);
+  if (customKey && customKey.trim()) {
+    return customKey.trim();
+  }
   return SYSTEM_STREAMHG_API_KEY;
+}
+
+export function saveStreamHGKey(key) {
+  if (key && key.trim()) {
+    localStorage.setItem(STREAMHG_STORAGE_KEY, key.trim());
+  } else {
+    localStorage.removeItem(STREAMHG_STORAGE_KEY);
+  }
+}
+
+/**
+ * Kiểm tra xác thực API Key với StreamHG
+ * @param {string} apiKey 
+ * @returns {Promise<{ok: boolean, msg?: string, data?: any, status?: number}>}
+ */
+export async function checkStreamHGAuth(apiKey) {
+  const key = apiKey || getStreamHGKey();
+  if (!key) {
+    return { ok: false, msg: 'Chưa cấu hình API Key StreamHG.' };
+  }
+
+  try {
+    const response = await fetch(`${STREAMHG_API_URL}/account/info?key=${encodeURIComponent(key)}`);
+    const data = await response.json();
+
+    if (data.status === 200) {
+      return { ok: true, data: data.result };
+    }
+
+    if (data.msg === 'Wrong auth') {
+      return {
+        ok: false,
+        status: data.status,
+        msg: 'StreamHG trả về "Wrong auth". Nguyên nhân: Tài khoản Webmaster trên StreamHG đang ở trạng thái Pending duyệt, hoặc API Key đã bị thay đổi/tạo mới trên streamhg.com.'
+      };
+    }
+
+    return {
+      ok: false,
+      status: data.status,
+      msg: data.msg || 'Không thể xác thực API Key StreamHG.'
+    };
+  } catch (err) {
+    return { ok: false, msg: 'Lỗi kết nối tới StreamHG: ' + err.message };
+  }
 }
 
 let cachedFolderId = null;
@@ -74,6 +124,9 @@ export async function getUploadServer(apiKey) {
 
   const data = await response.json();
   if (data.status !== 200 || !data.result) {
+    if (data.msg === 'Wrong auth') {
+      throw new Error('Wrong auth (API Key không khớp hoặc tài khoản Webmaster trên StreamHG vẫn đang Pending chưa được kích hoạt API upload). Bạn có thể tải file trực tiếp trên trang streamhg.com rồi dán link vào bên dưới');
+    }
     throw new Error(data.msg || 'Không lấy được máy chủ upload từ StreamHG. Kiểm tra lại API Key.');
   }
 

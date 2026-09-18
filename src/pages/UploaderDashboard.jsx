@@ -12,14 +12,21 @@ import {
   HardDrive, 
   Layers, 
   HelpCircle,
-  FolderCheck
+  FolderCheck,
+  Key,
+  RefreshCw,
+  Settings
 } from 'lucide-react';
 import { useAppContext } from '../App';
 import VideoForm from '../components/Admin/VideoForm';
 import { getVideoThumbnail } from '../utils/videoUtils';
 import { 
   uploadVideoToStreamHG,
-  TARGET_FOLDER_NAME
+  TARGET_FOLDER_NAME,
+  getStreamHGKey,
+  saveStreamHGKey,
+  checkStreamHGAuth,
+  SYSTEM_STREAMHG_API_KEY
 } from '../services/streamhgService';
 
 const INITIAL_VIDEO_STATE = {
@@ -53,6 +60,50 @@ function UploaderDashboard() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState({ type: '', text: '' });
   const fileInputRef = useRef(null);
+
+  // StreamHG API Key Configuration & Testing
+  const [apiKeyInput, setApiKeyInput] = useState(() => getStreamHGKey());
+  const [showKeyConfig, setShowKeyConfig] = useState(false);
+  const [isCheckingKey, setIsCheckingKey] = useState(false);
+  const [keyCheckResult, setKeyCheckResult] = useState(null);
+  const [keySavedBanner, setKeySavedBanner] = useState(false);
+
+  const handleTestKey = async () => {
+    setIsCheckingKey(true);
+    setKeyCheckResult(null);
+    try {
+      const res = await checkStreamHGAuth(apiKeyInput);
+      if (res.ok) {
+        setKeyCheckResult({
+          type: 'success',
+          text: `Kết nối thành công! Tài khoản: ${res.data?.email || res.data?.login || 'Hợp lệ (Đã kích hoạt Webmaster)'}`
+        });
+      } else {
+        setKeyCheckResult({
+          type: 'error',
+          text: res.msg || 'Không thể xác thực API Key với StreamHG.'
+        });
+      }
+    } catch (err) {
+      setKeyCheckResult({ type: 'error', text: 'Lỗi kiểm tra: ' + err.message });
+    } finally {
+      setIsCheckingKey(false);
+    }
+  };
+
+  const handleSaveKey = () => {
+    saveStreamHGKey(apiKeyInput);
+    setKeySavedBanner(true);
+    setTimeout(() => setKeySavedBanner(false), 3500);
+  };
+
+  const handleResetDefaultKey = () => {
+    saveStreamHGKey(null);
+    setApiKeyInput(SYSTEM_STREAMHG_API_KEY);
+    setKeyCheckResult(null);
+    setKeySavedBanner(true);
+    setTimeout(() => setKeySavedBanner(false), 3500);
+  };
 
   // Filter videos belonging to this uploader (or all if admin toggles it)
   const myVideos = useMemo(() => {
@@ -354,9 +405,112 @@ function UploaderDashboard() {
 
       {/* StreamHG Upload Card (Direct File Upload & Tips) */}
       <div className="card" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', position: 'relative' }}>
-        <h2 style={{ color: 'var(--color-text-light)', fontSize: '1.2rem', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Upload size={20} color="#00d2d3" /> Tải Video Lên StreamHG Hoặc Dán Link
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.8rem' }}>
+          <h2 style={{ color: 'var(--color-text-light)', fontSize: '1.2rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Upload size={20} color="#00d2d3" /> Tải Video Lên StreamHG Hoặc Dán Link
+          </h2>
+
+          <button
+            type="button"
+            onClick={() => setShowKeyConfig(!showKeyConfig)}
+            className="btn btn-outline"
+            style={{
+              fontSize: '0.75rem',
+              padding: '0.35rem 0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              borderColor: showKeyConfig ? '#00d2d3' : 'rgba(255, 255, 255, 0.15)',
+              color: showKeyConfig ? '#00d2d3' : 'var(--color-text-muted)',
+              borderRadius: '6px'
+            }}
+          >
+            <Key size={14} /> {showKeyConfig ? 'Đóng cấu hình API' : 'Cấu hình API Key'}
+          </button>
+        </div>
+
+        {/* API Key Configuration Dropdown / Panel */}
+        {showKeyConfig && (
+          <div style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.35)',
+            border: '1px solid rgba(0, 210, 211, 0.25)',
+            borderRadius: '8px',
+            padding: '1rem 1.25rem',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.6rem'
+          }}>
+            <div style={{ fontWeight: 600, color: '#00d2d3', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <Key size={16} /> Quản Lý & Kiểm Tra API Key StreamHG
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: '1.5' }}>
+              Nếu gặp lỗi <code style={{ color: '#ff4d4f' }}>Wrong auth</code>: Thường do tài khoản Webmaster trên StreamHG vẫn đang ở trạng thái <strong>Pending</strong> chưa được kích hoạt API, hoặc bạn vừa tạo mới API Key trên <a href="https://streamhg.com" target="_blank" rel="noopener noreferrer" style={{ color: '#00d2d3', textDecoration: 'underline' }}>streamhg.com</a>. Bạn có thể dán key mới vào đây để kiểm tra và lưu ngay lập tức mà không cần build lại web.
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value.trim())}
+                placeholder="Nhập StreamHG API Key (vd: 32607...)"
+                className="form-control"
+                style={{ flex: 1, minWidth: '240px', fontSize: '0.85rem', padding: '0.45rem 0.75rem' }}
+              />
+              <button
+                type="button"
+                onClick={handleTestKey}
+                disabled={isCheckingKey}
+                className="btn btn-outline"
+                style={{ fontSize: '0.8rem', padding: '0.45rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <RefreshCw size={14} className={isCheckingKey ? 'spin' : ''} />
+                {isCheckingKey ? 'Đang kiểm tra...' : 'Kiểm tra kết nối'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveKey}
+                className="btn btn-primary"
+                style={{ fontSize: '0.8rem', padding: '0.45rem 0.9rem', backgroundColor: '#00d2d3', color: '#000', fontWeight: 700 }}
+              >
+                Lưu Key
+              </button>
+              <button
+                type="button"
+                onClick={handleResetDefaultKey}
+                className="btn btn-outline"
+                style={{ fontSize: '0.8rem', padding: '0.45rem 0.6rem', color: 'var(--color-text-muted)' }}
+                title="Khôi phục key mặc định hệ thống"
+              >
+                Mặc định
+              </button>
+            </div>
+
+            {keySavedBanner && (
+              <div style={{ color: '#52c41a', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <CheckCircle2 size={14} /> Đã lưu API Key thành công vào bộ nhớ trình duyệt!
+              </div>
+            )}
+
+            {keyCheckResult && (
+              <div style={{
+                marginTop: '0.3rem',
+                padding: '0.6rem 0.8rem',
+                borderRadius: '6px',
+                fontSize: '0.8rem',
+                backgroundColor: keyCheckResult.type === 'success' ? 'rgba(82, 196, 26, 0.1)' : 'rgba(255, 77, 79, 0.1)',
+                border: `1px solid ${keyCheckResult.type === 'success' ? 'rgba(82, 196, 26, 0.3)' : 'rgba(255, 77, 79, 0.3)'}`,
+                color: keyCheckResult.type === 'success' ? '#52c41a' : '#ff7875',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.4rem'
+              }}>
+                {keyCheckResult.type === 'success' ? <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />}
+                <div>{keyCheckResult.text}</div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem', marginBottom: '1rem' }}>
           {/* File Upload Box */}
@@ -450,12 +604,13 @@ function UploaderDashboard() {
                 marginTop: '0.5rem',
                 fontSize: '0.85rem',
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: 'flex-start',
+                textAlign: 'left',
                 gap: '0.4rem',
                 color: uploadStatus.type === 'success' ? '#52c41a' : uploadStatus.type === 'error' ? '#ff4d4f' : '#66c0f4'
               }}>
-                {uploadStatus.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-                {uploadStatus.text}
+                {uploadStatus.type === 'success' ? <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: '2px' }} /> : <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />}
+                <div>{uploadStatus.text}</div>
               </div>
             )}
           </div>
@@ -472,17 +627,20 @@ function UploaderDashboard() {
             gap: '0.75rem'
           }}>
             <div style={{ fontWeight: 600, color: '#00d2d3', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <HelpCircle size={16} /> Hướng dẫn đăng phim từ StreamHG:
+              <HelpCircle size={16} /> Hướng dẫn đăng phim & lưu ý:
             </div>
             <ul style={{ paddingLeft: '1.2rem', color: 'var(--color-text-muted)', lineHeight: '1.6' }}>
               <li>
-                Nếu bạn đã upload sẵn trên <strong style={{ color: '#fff' }}>streamhg.com</strong> trong thư mục <code style={{ color: '#00d2d3' }}>{TARGET_FOLDER_NAME}</code>, bạn chỉ cần copy link video (ví dụ: <code style={{ color: '#66c0f4' }}>https://streamhg.com/e/abcxyz</code> hoặc mã nhúng <code style={{ color: '#66c0f4' }}>&lt;iframe...&gt;</code>) rồi dán vào form bên dưới.
+                <strong style={{ color: '#ff7875' }}>Lỗi "Wrong auth"?</strong> Nguyên nhân do tài khoản Webmaster trên StreamHG vẫn đang ở trạng thái <em>Pending duyệt</em> (StreamHG khóa API upload cho tới khi được duyệt) hoặc API Key bị đổi.
+              </li>
+              <li>
+                <strong style={{ color: '#52c41a' }}>Cách khắc phục ngay lập tức:</strong> Bạn chỉ cần mở <a href="https://streamhg.com" target="_blank" rel="noopener noreferrer" style={{ color: '#00d2d3', textDecoration: 'underline' }}>streamhg.com</a>, tải video trực tiếp lên web StreamHG vào thư mục <code style={{ color: '#00d2d3' }}>{TARGET_FOLDER_NAME}</code>, rồi copy link video (ví dụ: <code style={{ color: '#66c0f4' }}>https://streamhg.com/e/...</code>) dán vào form bên dưới là xong!
               </li>
               <li>
                 Hệ thống tự động nhận diện ID video StreamHG và tự động lấy ảnh bìa từ <strong style={{ color: '#fff' }}>huntrexus.com/ID.jpg</strong>.
               </li>
               <li>
-                Bạn cũng có thể dán link các nền tảng khác: <strong style={{ color: '#fff' }}>Filemoon, VOE, YouTube, Doodstream</strong>.
+                Hỗ trợ cả dán link các máy chủ khác: <strong style={{ color: '#fff' }}>Filemoon, VOE, YouTube, Doodstream</strong>.
               </li>
             </ul>
           </div>
