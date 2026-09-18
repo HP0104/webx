@@ -159,11 +159,7 @@ function RouteAdBannerBottom() {
 
 function AppContent({ user }) {
   const location = useLocation();
-  const isAdminRoute = location.pathname.startsWith('/admin');
-  const isUploaderRoute = location.pathname.startsWith('/uploader');
   const isMangaReaderRoute = location.pathname.includes('/chapter/');
-  const isDashboardRoute = isAdminRoute || isUploaderRoute;
-  const isFullWidthRoute = isDashboardRoute || isMangaReaderRoute;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -171,14 +167,14 @@ function AppContent({ user }) {
       <Navbar />
       <NotificationBanner />
 
-      {!isDashboardRoute && (
-        <div className="container" style={{ paddingBottom: 0, paddingTop: '1rem', maxWidth: '1600px' }}>
+      {!isMangaReaderRoute && (
+        <div className="container" style={{ paddingBottom: 0, paddingTop: '1rem', maxWidth: '1720px' }}>
           <RouteAdBanner />
         </div>
       )}
 
-      <div className={`app-layout ${isFullWidthRoute ? 'app-layout-full' : ''}`} style={{ paddingTop: isDashboardRoute ? '0.5rem' : '1rem' }}>
-        <main className={`main-content ${isFullWidthRoute ? 'main-content-full' : ''}`}>
+      <div className={`app-layout ${isMangaReaderRoute ? 'app-layout-full' : ''}`} style={{ paddingTop: '1rem' }}>
+        <main className={`main-content ${isMangaReaderRoute ? 'main-content-full' : ''}`}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/category/:categoryType" element={<Category />} />
@@ -199,14 +195,14 @@ function AppContent({ user }) {
             <Route path="/manga/:mangaId/chapter/:chapterId" element={<MangaReader />} />
           </Routes>
 
-          {!isDashboardRoute && (
+          {!isMangaReaderRoute && (
             <div className="container" style={{ paddingTop: 0, marginTop: '2rem' }}>
               <RouteAdBannerBottom />
             </div>
           )}
         </main>
 
-        {!isFullWidthRoute && (
+        {!isMangaReaderRoute && (
           <aside className="sidebar">
             <ChatBox />
             <div style={{ marginTop: '1.5rem' }}>

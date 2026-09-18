@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { db } from '../firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
-import { Users, Gamepad2, Film, AlertTriangle, BarChart3, BookOpen, Home, MessageSquare, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { Users, Gamepad2, Film, AlertTriangle, BarChart3, BookOpen, Home, RefreshCw, ShieldCheck } from 'lucide-react';
 
 import AdminStats from '../components/Admin/AdminStats';
 import UserManager from '../components/Admin/UserManager';
@@ -14,7 +14,6 @@ import VideoList from '../components/Admin/VideoList';
 import ErrorReportManager from '../components/Admin/ErrorReportManager';
 import MangaForm from '../components/Admin/MangaForm';
 import MangaListAdmin from '../components/Admin/MangaListAdmin';
-import ChatBox from '../components/ChatBox';
 
 const GEMINI_API_KEY_STORAGE_KEY = 'web18p_gemini_api_key';
 
@@ -47,7 +46,6 @@ function Admin() {
   const { user, games, addGameToStore, deleteGameFromStore, updateGameInStore, revenue, videos, addVideoToStore, deleteVideoFromStore, updateVideoInStore, manga = [], addMangaToStore, deleteMangaFromStore, updateMangaInStore } = useAppContext();
   const [users, setUsers] = useState([]);
   const [reportsCount, setReportsCount] = useState(0);
-  const [showChatDrawer, setShowChatDrawer] = useState(false);
   const [editingGameId, setEditingGameId] = useState(null);
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY) || '');
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -231,7 +229,7 @@ function Admin() {
   };
 
   return (
-    <div className="admin-page container" style={{ maxWidth: '1600px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '1rem 1.5rem' }}>
+    <div className="admin-page" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Modern Admin Header */}
       <div className="admin-header-bar">
         <div className="admin-header-title">
@@ -268,16 +266,6 @@ function Admin() {
           )}
           <button
             type="button"
-            onClick={() => setShowChatDrawer(true)}
-            className="btn btn-outline"
-            style={{ fontSize: '0.82rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: 'rgba(59, 130, 246, 0.4)', color: '#60a5fa' }}
-            title="Mở thanh chat cộng đồng dạng ngăn kéo"
-          >
-            <MessageSquare size={15} />
-            Chat Cộng đồng
-          </button>
-          <button
-            type="button"
             onClick={() => window.location.reload()}
             className="btn btn-outline"
             style={{ fontSize: '0.82rem', padding: '0.45rem 0.85rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
@@ -289,144 +277,110 @@ function Admin() {
         </div>
       </div>
 
-      <div className="admin-dashboard">
-        {/* Admin Sidebar Navigation */}
-        <aside className="admin-sidebar">
-          {[
-            { id: 'dashboard', label: 'Tổng quan', icon: BarChart3, color: '#10b981' },
-            { id: 'users', label: 'Quản lý Người dùng', icon: Users, count: users.length, color: '#3b82f6' },
-            { id: 'games', label: 'Quản lý Game', icon: Gamepad2, count: games.length, color: '#f8b319' },
-            { id: 'videos', label: 'Quản lý Phim', icon: Film, count: videos?.length || 0, color: '#ec4899' },
-            { id: 'manga', label: 'Quản lý Truyện', icon: BookOpen, count: manga?.length || 0, color: '#a855f7' },
-            { id: 'reports', label: 'Báo lỗi', icon: AlertTriangle, count: reportsCount, color: '#ff4d4f' }
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`admin-nav-item ${isActive ? 'active' : ''}`}
-                style={{ '--active-color': tab.color }}
-              >
-                <Icon size={20} style={{ color: isActive ? tab.color : 'inherit', flexShrink: 0 }} />
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0, gap: '0.5rem' }}>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.label}</span>
-                  {tab.count !== undefined && (
-                    <span style={{
-                      padding: '0.15rem 0.5rem',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      backgroundColor: isActive ? `${tab.color}25` : 'rgba(255,255,255,0.06)',
-                      color: isActive ? tab.color : 'var(--color-text-muted)',
-                      flexShrink: 0
-                    }}>
-                      {tab.count}
-                    </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </aside>
+      {/* Admin Horizontal Tab Navigation */}
+      <nav className="admin-tabs-nav" aria-label="Admin Navigation">
+        {[
+          { id: 'dashboard', label: 'Tổng quan', icon: BarChart3, color: '#10b981' },
+          { id: 'users', label: 'Quản lý Người dùng', icon: Users, count: users.length, color: '#3b82f6' },
+          { id: 'games', label: 'Quản lý Game', icon: Gamepad2, count: games.length, color: '#f8b319' },
+          { id: 'videos', label: 'Quản lý Phim', icon: Film, count: videos?.length || 0, color: '#ec4899' },
+          { id: 'manga', label: 'Quản lý Truyện', icon: BookOpen, count: manga?.length || 0, color: '#a855f7' },
+          { id: 'reports', label: 'Báo lỗi', icon: AlertTriangle, count: reportsCount, color: '#ff4d4f' }
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`admin-tab-btn ${isActive ? 'active' : ''}`}
+              style={{ '--active-color': tab.color }}
+            >
+              <Icon size={18} style={{ color: isActive ? tab.color : 'inherit', flexShrink: 0 }} />
+              <span>{tab.label}</span>
+              {tab.count !== undefined && (
+                <span className="admin-tab-badge" style={{
+                  backgroundColor: isActive ? `${tab.color}25` : 'rgba(255,255,255,0.06)',
+                  color: isActive ? tab.color : 'var(--color-text-muted)',
+                }}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
 
-        {/* Admin Content Area */}
-        <main className="admin-content-area">
-          {/* Tab Content */}
-          <div style={{ animation: 'fadeIn 0.3s ease' }}>
-            {activeTab === 'dashboard' && (
-              <AdminStats usersCount={users.length} gamesCount={games.length} videosCount={videos?.length || 0} mangaCount={manga?.length || 0} onNavigateTab={setActiveTab} />
-            )}
+      {/* Admin Content Area */}
+      <main className="admin-content-area">
+        {/* Tab Content */}
+        <div style={{ animation: 'fadeIn 0.3s ease' }}>
+          {activeTab === 'dashboard' && (
+            <AdminStats usersCount={users.length} gamesCount={games.length} videosCount={videos?.length || 0} mangaCount={manga?.length || 0} onNavigateTab={setActiveTab} />
+          )}
 
-            {activeTab === 'users' && (
-              <UserManager users={users} games={games} />
-            )}
+          {activeTab === 'users' && (
+            <UserManager users={users} games={games} />
+          )}
 
-            {activeTab === 'games' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                <GameForm
-                  newGame={newGame}
-                  setNewGame={setNewGame}
-                  editingGameId={editingGameId}
-                  geminiApiKey={geminiApiKey}
-                  setGeminiApiKey={setGeminiApiKey}
-                  onSaveGame={handleSaveGame}
-                  onCancelEdit={handleCancelEdit}
-                />
-                <GameList
-                  games={games}
-                  onEditClick={handleEditClick}
-                  onDeleteClick={deleteGameFromStore}
-                />
-              </div>
-            )}
-
-            {activeTab === 'videos' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                <VideoForm
-                  videoData={videoData}
-                  setVideoData={setVideoData}
-                  editingVideoId={editingVideoId}
-                  onSaveVideo={handleSaveVideo}
-                  onCancelEdit={handleCancelVideoEdit}
-                />
-                <VideoList
-                  videos={videos || []}
-                  onEditClick={handleEditVideo}
-                  onDeleteClick={deleteVideoFromStore}
-                />
-              </div>
-            )}
-
-            {activeTab === 'reports' && (
-              <ErrorReportManager />
-            )}
-
-            {activeTab === 'manga' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                <MangaForm
-                  mangaData={mangaData}
-                  setMangaData={setMangaData}
-                  editingMangaId={editingMangaId}
-                  onSaveManga={handleSaveManga}
-                  onCancelEdit={handleCancelMangaEdit}
-                />
-                <MangaListAdmin
-                  mangaList={manga || []}
-                  onEditClick={handleEditManga}
-                  onDeleteClick={deleteMangaFromStore}
-                />
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
-
-      {/* Slide-over Community Chat Drawer for Admin */}
-      {showChatDrawer && (
-        <div className="admin-chat-drawer-backdrop" onClick={() => setShowChatDrawer(false)}>
-          <div className="admin-chat-drawer-content" onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.9rem 1.2rem', borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg-primary)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontWeight: 700, color: 'var(--color-text-light)', fontSize: '0.95rem' }}>
-                <MessageSquare size={18} color="var(--color-accent)" />
-                Cộng đồng Chat (Xem & Quản trị)
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowChatDrawer(false)}
-                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: '0.3rem', display: 'flex', alignItems: 'center' }}
-                title="Đóng chat"
-              >
-                <X size={20} />
-              </button>
+          {activeTab === 'games' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              <GameForm
+                newGame={newGame}
+                setNewGame={setNewGame}
+                editingGameId={editingGameId}
+                geminiApiKey={geminiApiKey}
+                setGeminiApiKey={setGeminiApiKey}
+                onSaveGame={handleSaveGame}
+                onCancelEdit={handleCancelEdit}
+              />
+              <GameList
+                games={games}
+                onEditClick={handleEditClick}
+                onDeleteClick={deleteGameFromStore}
+              />
             </div>
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-              <ChatBox />
+          )}
+
+          {activeTab === 'videos' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              <VideoForm
+                videoData={videoData}
+                setVideoData={setVideoData}
+                editingVideoId={editingVideoId}
+                onSaveVideo={handleSaveVideo}
+                onCancelEdit={handleCancelVideoEdit}
+              />
+              <VideoList
+                videos={videos || []}
+                onEditClick={handleEditVideo}
+                onDeleteClick={deleteVideoFromStore}
+              />
             </div>
-          </div>
+          )}
+
+          {activeTab === 'reports' && (
+            <ErrorReportManager />
+          )}
+
+          {activeTab === 'manga' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              <MangaForm
+                mangaData={mangaData}
+                setMangaData={setMangaData}
+                editingMangaId={editingMangaId}
+                onSaveManga={handleSaveManga}
+                onCancelEdit={handleCancelMangaEdit}
+              />
+              <MangaListAdmin
+                mangaList={manga || []}
+                onEditClick={handleEditManga}
+                onDeleteClick={deleteMangaFromStore}
+              />
+            </div>
+          )}
         </div>
-      )}
+      </main>
     </div>
   );
 }
