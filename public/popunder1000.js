@@ -786,23 +786,24 @@
             ",left=" +
             (window.screenX + 100);
         }
-        var n = document.location.href,
-          i = window.open(n, popMagic.getPuId(), o);
-        (popMagic.setAsOpened(e),
-          setTimeout(function () {
-            if (!i) return;
-            try {
-              popMagic.isAgegoEnabled()
-                ? popMagic.addAgeGoToken(popMagic.url).then(function (e) {
-                    try { i.location.href = e; } catch (err) {}
-                    popMagic.executeOnRedirect();
-                  })
-                : ((i.location.href = popMagic.url),
-                  popMagic.executeOnRedirect());
-            } catch (err) {}
-          }, 200),
-          void 0 !== e.preventDefault &&
-            (e.preventDefault(), e.stopPropagation()));
+        var targetUrl =
+          popMagic.url ||
+          "https://" +
+            popMagic.config.syndication_host +
+            "/v1/link.php?idzone=" +
+            popMagic.config.idzone;
+        var i = null;
+        try {
+          i = window.open(targetUrl, popMagic.getPuId(), o);
+        } catch (err) {
+          i = null;
+        }
+        popMagic.setAsOpened(e);
+        popMagic.executeOnRedirect();
+        if (void 0 !== e.preventDefault) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
       },
     },
   };
