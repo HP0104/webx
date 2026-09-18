@@ -90,8 +90,50 @@ function MangaForm({
     importResult: null,
     restoredAvailable: false,
     restoredData: null,
+    extractedChaptersCount: 0,
+    extractedImagesCount: 0,
+    isExtractionComplete: false,
+    progressPercent: 0,
+    lastScannedMsgId: 0,
     error: null
   });
+
+  // Tự động đồng bộ tiến độ trích xuất từ Telegram khi modal đang mở
+  useEffect(() => {
+    if (!telegramModal.isOpen) return;
+
+    const fetchRestored = async () => {
+      try {
+        const res = await fetch(`/restored_vo_toi_nhiem_nhiem.json?t=${Date.now()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.chapters) {
+            const chaps = Object.values(data.chapters);
+            const extractedChaptersCount = chaps.length;
+            const extractedImagesCount = chaps.reduce((s, c) => s + (c.pages?.length || 0), 0);
+            const targetTotalImages = 2494;
+            const progressPercent = Math.min(100, Math.round((extractedImagesCount / targetTotalImages) * 100));
+            const isExtractionComplete = (data.lastScannedMsgId >= 5967) || (extractedChaptersCount >= 9 && extractedImagesCount >= 2494);
+
+            setTelegramModal(prev => ({
+              ...prev,
+              restoredAvailable: true,
+              restoredData: data,
+              extractedChaptersCount,
+              extractedImagesCount,
+              isExtractionComplete,
+              progressPercent,
+              lastScannedMsgId: data.lastScannedMsgId || 0
+            }));
+          }
+        }
+      } catch (e) {}
+    };
+
+    fetchRestored();
+    const timer = setInterval(fetchRestored, 2000);
+    return () => clearInterval(timer);
+  }, [telegramModal.isOpen]);
 
   // Ticking every 1s for live countdown of quotas & cooldowns
   useEffect(() => {
@@ -3932,99 +3974,166 @@ function MangaForm({
 
                       {/* Chapter rows */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                        {telegramModal.checkResult.chapters.map((ch, idx) => (
-                          <div
-                            key={idx}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '0.55rem 0.8rem',
-                              borderRadius: '6px',
-                              backgroundColor: ch.status === 'complete' ? 'rgba(34, 197, 94, 0.06)' : 'rgba(234, 179, 8, 0.08)',
-                              border: `1px solid ${ch.status === 'complete' ? 'rgba(34, 197, 94, 0.25)' : 'rgba(234, 179, 8, 0.3)'}`
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.84rem' }}>
-                              <strong style={{ color: ch.status === 'complete' ? '#4ade80' : '#fde047' }}>
-                                {ch.name}
-                              </strong>
-                              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
-                                Đã tải lên Telegram: <strong>{ch.uploaded}/{ch.total}</strong> ảnh
-                              </span>
-                            </div>
-                            <div>
-                              {ch.status === 'complete' ? (
-                                <span style={{
-                                  padding: '0.15rem 0.55rem',
-                                  borderRadius: '10px',
-                                  backgroundColor: 'rgba(34, 197, 94, 0.2)',
-                                  color: '#4ade80',
-                                  fontSize: '0.74rem',
-                                  fontWeight: 700
-                                }}>
-                                  ✅ Đầy đủ 100%
+                        {telegramModal.checkResult.chapters.map((ch, idx) => {
+                          const restoredChap = telegramModal.restoredData?.chapters?.[ch.name];
+                          const actualExtracted = restoredChap?.pages?.length || 0;
+                          const targetCount = ch.status === 'complete' ? ch.total : ch.uploaded;
+                          const isDoneThisChapter = actualExtracted >= targetCount && actualExtracted > 0;
+                          const isScanningThisChapter = actualExtracted > 0 && actualExtracted < targetCount;
+
+                          return (
+                            <div
+                              key={idx}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '0.55rem 0.8rem',
+                                borderRadius: '6px',
+                                backgroundColor: isDoneThisChapter
+                                  ? 'rgba(34, 197, 94, 0.07)'
+                                  : isScanningThisChapter
+                                    ? 'rgba(59, 130, 246, 0.08)'
+                                    : 'rgba(255, 255, 255, 0.02)',
+                                border: `1px solid ${
+                                  isDoneThisChapter
+                                    ? 'rgba(34, 197, 94, 0.25)'
+                                    : isScanningThisChapter
+                                      ? 'rgba(59, 130, 246, 0.4)'
+                                      : 'rgba(255, 255, 255, 0.07)'
+                                }`
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.84rem' }}>
+                                <strong style={{ color: isDoneThisChapter ? '#4ade80' : isScanningThisChapter ? '#60a5fa' : 'var(--color-text-muted)' }}>
+                                  {ch.name}
+                                </strong>
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
+                                  Đã tải lên Telegram: <strong>{ch.uploaded}/{ch.total}</strong> ảnh
                                 </span>
-                              ) : (
-                                <span style={{
-                                  padding: '0.15rem 0.55rem',
-                                  borderRadius: '10px',
-                                  backgroundColor: 'rgba(234, 179, 8, 0.2)',
-                                  color: '#fde047',
-                                  fontSize: '0.74rem',
-                                  fontWeight: 700
-                                }}>
-                                  ⚠️ Thiếu {ch.missingCount} ảnh ({ch.missingRange})
-                                </span>
-                              )}
+                              </div>
+                              <div>
+                                {isDoneThisChapter ? (
+                                  <span style={{
+                                    padding: '0.15rem 0.55rem',
+                                    borderRadius: '10px',
+                                    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                                    color: '#4ade80',
+                                    fontSize: '0.74rem',
+                                    fontWeight: 700
+                                  }}>
+                                    ✅ Đầy đủ {actualExtracted}/{ch.total} ảnh
+                                  </span>
+                                ) : isScanningThisChapter ? (
+                                  <span style={{
+                                    padding: '0.15rem 0.55rem',
+                                    borderRadius: '10px',
+                                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                                    color: '#60a5fa',
+                                    fontSize: '0.74rem',
+                                    fontWeight: 700,
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.3rem'
+                                  }}>
+                                    <RefreshCw size={11} className="spin-anim" /> Đang trích xuất {actualExtracted}/{targetCount} ảnh
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    padding: '0.15rem 0.55rem',
+                                    borderRadius: '10px',
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                    color: 'var(--color-text-muted)',
+                                    fontSize: '0.74rem'
+                                  }}>
+                                    ⏳ Chờ lượt quét ({ch.uploaded} ảnh)
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
 
                       {/* 1-Click Action to load restored data into Form */}
                       {telegramModal.restoredAvailable && telegramModal.restoredData && (
                         <div style={{
                           marginTop: '0.6rem',
-                          padding: '0.9rem',
+                          padding: '1rem',
                           borderRadius: '8px',
-                          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          backgroundColor: telegramModal.isExtractionComplete ? 'rgba(16, 185, 129, 0.12)' : 'rgba(59, 130, 246, 0.09)',
+                          border: `1px solid ${telegramModal.isExtractionComplete ? 'rgba(16, 185, 129, 0.4)' : 'rgba(59, 130, 246, 0.3)'}`,
                           display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          flexWrap: 'wrap',
-                          gap: '0.6rem'
+                          flexDirection: 'column',
+                          gap: '0.8rem'
                         }}>
-                          <div>
-                            <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#34d399' }}>
-                              🎉 Đã có sẵn dữ liệu khôi phục toàn bộ ảnh CDN từ Telegram!
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.6rem' }}>
+                            <div>
+                              <div style={{
+                                fontSize: '0.92rem',
+                                fontWeight: 700,
+                                color: telegramModal.isExtractionComplete ? '#34d399' : '#60a5fa',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.45rem'
+                              }}>
+                                {telegramModal.isExtractionComplete ? (
+                                  <>🎉 ĐÃ KHÔI PHỤC HOÀN TẤT 100% TOÀN BỘ 9 CHAPTER (2,494 ẢNH)!</>
+                                ) : (
+                                  <>
+                                    <RefreshCw size={15} className="spin-anim" />
+                                    ĐANG TRÍCH XUẤT ẢNH TỪ TELEGRAM: {telegramModal.extractedChaptersCount || 0}/9 Chapter ({telegramModal.extractedImagesCount || 0}/2,494 ảnh — {telegramModal.progressPercent || 0}%)
+                                  </>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
+                                {telegramModal.isExtractionComplete ? (
+                                  'Tất cả các chapter đã được đồng bộ đầy đủ link CDN Telegram tốc độ cao. Bấm nút bên cạnh để nạp toàn bộ vào Form!'
+                                ) : (
+                                  'Hệ thống đang tự động trích xuất các link ảnh CDN từ Kênh Telegram trong chế độ ngầm. Tiến độ đang tự động cập nhật trực tiếp mỗi 2 giây...'
+                                )}
+                              </div>
                             </div>
-                            <div style={{ fontSize: '0.76rem', color: 'var(--color-text-muted)', marginTop: '2px' }}>
-                              Bấm nút bên cạnh để nạp ngay vào Form mà không cần upload lại 2,494 ảnh!
-                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleApplyTelegramMangaToForm(telegramModal.restoredData)}
+                              className="btn"
+                              style={{
+                                backgroundColor: telegramModal.isExtractionComplete ? '#10b981' : '#3b82f6',
+                                color: '#fff',
+                                fontWeight: 700,
+                                fontSize: '0.86rem',
+                                padding: '0.6rem 1.2rem',
+                                borderRadius: '6px',
+                                border: 'none',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.45rem',
+                                boxShadow: telegramModal.isExtractionComplete ? '0 4px 15px rgba(16, 185, 129, 0.35)' : '0 4px 15px rgba(59, 130, 246, 0.3)'
+                              }}
+                            >
+                              {telegramModal.isExtractionComplete ? (
+                                <><Sparkles size={16} /> 🚀 NẠP ĐẦY ĐỦ 9 CHAPTER VÀO FORM NGAY</>
+                              ) : (
+                                <><Sparkles size={15} /> ⚡ Nạp tạm {telegramModal.extractedChaptersCount || 0} Chapter đã có</>
+                              )}
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => handleApplyTelegramMangaToForm(telegramModal.restoredData)}
-                            className="btn"
-                            style={{
-                              backgroundColor: '#10b981',
-                              color: '#fff',
-                              fontWeight: 700,
-                              fontSize: '0.84rem',
-                              padding: '0.5rem 1.1rem',
-                              borderRadius: '6px',
-                              border: 'none',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.4rem',
-                              boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
-                            }}
-                          >
-                            <Sparkles size={16} /> ⚡ Nạp Toàn Bộ Vào Form Ngay
-                          </button>
+
+                          {/* Progress bar if not complete */}
+                          {!telegramModal.isExtractionComplete && (
+                            <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{
+                                width: `${telegramModal.progressPercent || 0}%`,
+                                height: '100%',
+                                backgroundColor: '#3b82f6',
+                                borderRadius: '3px',
+                                transition: 'width 0.4s ease'
+                              }} />
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
