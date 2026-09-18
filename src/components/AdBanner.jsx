@@ -122,9 +122,18 @@ async function detectAdBlocker() {
   // Chỉ test ExoClick URL vì site dùng ExoClick, KHÔNG dùng Google AdSense
   const fetchBlocked = await (async () => {
     try {
-      await fetch('https://a.magsrv.com/ad-provider.js', { method: 'HEAD', mode: 'no-cors', cache: 'no-store' });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3500);
+      await fetch('https://a.magsrv.com/ad-provider.js', { 
+        method: 'HEAD', 
+        mode: 'no-cors', 
+        cache: 'no-store',
+        signal: controller.signal 
+      });
+      clearTimeout(timer);
       return false;
-    } catch {
+    } catch (err) {
+      if (err.name === 'AbortError') return false;
       return true;
     }
   })();
@@ -417,6 +426,9 @@ export function AdBlockWall() {
             window.__popupSuccessfullyOpened = false;
             try {
               sessionStorage.removeItem('ad_popup_shown');
+              sessionStorage.removeItem('popunder_done');
+              sessionStorage.removeItem('popunder_done_6004200');
+              sessionStorage.removeItem('popunder_done_5983670');
               localStorage.removeItem('ad_popup_shown');
               document.cookie.split(";").forEach(c => {
                 const name = c.split("=")[0].trim();

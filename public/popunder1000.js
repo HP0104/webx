@@ -27,8 +27,8 @@
         "popup_force": true,
         "chrome_enabled": true,
         "new_tab": true,
-        "frequency_period": 5,
-        "frequency_count": 2,
+        "frequency_period": 720,
+        "frequency_count": 1,
         "trigger_method": 1,
         "trigger_class": "",
         "trigger_delay": 0,
@@ -44,8 +44,8 @@
         "popup_force": true,
         "chrome_enabled": true,
         "new_tab": true,
-        "frequency_period": 6,
-        "frequency_count": 2,
+        "frequency_period": 720,
+        "frequency_count": 1,
         "trigger_method": 1,
         "trigger_class": "",
         "trigger_delay": 0,
@@ -67,6 +67,12 @@
         venor: "0",
         tcfData: null,
         remoteLicensedDomains: ["exdynsrv.com", "exosrv.com", "exoclick.com", "opoxv.com", "exacdn.com", "pemsrv.com"],
+        _completed: false,
+        _popPrepared: false,
+        _lastTrigger: 0,
+        _clickHandler: null,
+        _touchStartHandler: null,
+        _touchEndHandler: null,
         configTpl: {
             ads_host: "",
             syndication_host: "",
@@ -106,34 +112,59 @@
             this.browser = this.browserDetector.getBrowserInfo();
             this.buildUrl();
 
-            // Prepare popup listeners immediately - do NOT wait for 'load' event which may have already fired in SPA
+            // Nếu đã xem popup trong phiên này hoặc đã đạt giới hạn capping, không gắn listener
+            if (this.isCappingReached()) {
+                console.log("[Popunder] Capping already reached (" + this.cookie_name + "). Listeners skipped.");
+                return;
+            }
+
             var selfObj = this;
             selfObj.preparePop();
 
-            // Fallback in case document is still loading
             if (document.readyState === "loading") {
-                document.addEventListener("DOMContentLoaded", function() { selfObj.preparePop(); });
+                document.addEventListener("DOMContentLoaded", function() {
+                    selfObj.preparePop();
+                }, { once: true });
             }
+        },
+        isCappingReached: function() {
+            try {
+                if (window.__popupSuccessfullyOpened) return true;
+                if (sessionStorage.getItem("popunder_done_" + this.config.idzone)) return true;
+                if (sessionStorage.getItem("popunder_done")) return true;
+                if (this.config.capping_enabled) {
+                    var c = this.getCookie(this.cookie_name);
+                    if (c) {
+                        var count = parseInt(c.split(";")[0], 10);
+                        if (!isNaN(count) && count >= (this.config.frequency_count || 1)) {
+                            return true;
+                        }
+                    }
+                }
+            } catch (err) {}
+            return false;
         },
         getCountFromCookie: function() {
             var c = popMagic.getCookie(popMagic.cookie_name);
-            var count = c ? parseInt(c, 10) : 0;
+            var count = c ? parseInt(c.split(";")[0], 10) : 0;
             return isNaN(count) ? 0 : count;
         },
         shouldShow: function() {
             if (window.disablePopunder) return false;
-            if (window.__popupSuccessfullyOpened) return false;
-            // Ngừng thử sau khi bị chặn quá nhiều lần (tránh popup liên tiếp)
-            if (popMagic._blockedAttempts >= 3) return false;
+            if (popMagic._completed) return false;
+            if (popMagic.isCappingReached()) return false;
             return true;
         },
         venorShouldShow: function() {
             return true;
         },
         setAsOpened: function(e) {
+            popMagic._completed = true;
             try {
                 window.__popupSuccessfullyOpened = true;
                 window.__popupBlockedDetected = false;
+                sessionStorage.setItem("popunder_done_" + popMagic.config.idzone, "1");
+                sessionStorage.setItem("popunder_done", "1");
             } catch (err) {}
 
             var target = e ? e.target || e.srcElement : null;
@@ -152,50 +183,96 @@
             } catch (err) {}
 
             if (popMagic.config.capping_enabled) {
-                var count = 1;
-                count = 0 !== popMagic.open_count ? popMagic.open_count + 1 : popMagic.getCountFromCookie() + 1;
+                var count = popMagic.getCountFromCookie() + 1;
                 var nowSec = Math.floor(Date.now() / 1000);
                 popMagic.setCookie(popMagic.cookie_name, count + ";" + nowSec, popMagic.config.frequency_period);
             } else {
                 ++popMagic.open_count;
             }
+
+            console.log("[Popunder] Popup opened successfully. Removing all event listeners to prevent continuous popups.");
+            popMagic.removeListeners();
+        },
+        markAsBlocked: function() {
+            popMagic._completed = true;
+            try {
+                sessionStorage.setItem("popunder_done_" + popMagic.config.idzone, "blocked");
+                sessionStorage.setItem("popunder_done", "blocked");
+            } catch (err) {}
+            console.log("[Popunder] Popup blocked by browser popup blocker. Halting all further popup attempts.");
+            popMagic.removeListeners();
         },
         preparePop: function() {
             if (popMagic._popPrepared) return;
+            if (popMagic.isCappingReached() || popMagic._completed) return;
             popMagic._popPrepared = true;
             popMagic.top = self;
             popMagic.buildUrl();
 
-            var triggerFn = popMagic.getPopMethod(popMagic.browser);
+            var triggerFn = function(e) {
+                if (popMagic._completed || popMagic.isCappingReached()) {
+                    popMagic.removeListeners();
+                    return;
+                }
+                popMagic.methods.popup(e);
+            };
 
-            // 1. Attach to standard click event
-            popMagic.addEvent("click", triggerFn);
+            popMagic._clickHandler = triggerFn;
+            document.addEventListener("click", triggerFn, { capture: true, passive: true });
 
-            // 2. Attach mobile touch handler with tap detection (ignores scrolls/swipes)
             var touchStartX = 0;
             var touchStartY = 0;
             var touchStartTime = 0;
 
-            popMagic.addEventToElement(window, "touchstart", function(e) {
+            popMagic._touchStartHandler = function(e) {
                 if (e.touches && e.touches[0]) {
                     touchStartX = e.touches[0].clientX;
                     touchStartY = e.touches[0].clientY;
                     touchStartTime = Date.now();
                 }
-            });
+            };
 
-            popMagic.addEventToElement(window, "touchend", function(e) {
+            popMagic._touchEndHandler = function(e) {
+                if (popMagic._completed || popMagic.isCappingReached()) {
+                    popMagic.removeListeners();
+                    return;
+                }
                 if (e.changedTouches && e.changedTouches[0]) {
                     var distX = Math.abs(e.changedTouches[0].clientX - touchStartX);
                     var distY = Math.abs(e.changedTouches[0].clientY - touchStartY);
                     var timeDiff = Date.now() - touchStartTime;
-                    // If finger moved > 20px or touch was > 600ms, user was scrolling, NOT tapping
-                    if (distX > 20 || distY > 20 || timeDiff > 600) {
+                    if (distX > 25 || distY > 25 || timeDiff > 600) {
                         return;
                     }
                 }
                 triggerFn(e);
-            });
+            };
+
+            document.addEventListener("touchstart", popMagic._touchStartHandler, { capture: true, passive: true });
+            document.addEventListener("touchend", popMagic._touchEndHandler, { capture: true, passive: true });
+        },
+        removeListeners: function() {
+            if (popMagic._clickHandler) {
+                try {
+                    document.removeEventListener("click", popMagic._clickHandler, { capture: true, passive: true });
+                    document.removeEventListener("click", popMagic._clickHandler, true);
+                } catch (err) {}
+                popMagic._clickHandler = null;
+            }
+            if (popMagic._touchStartHandler) {
+                try {
+                    document.removeEventListener("touchstart", popMagic._touchStartHandler, { capture: true, passive: true });
+                    document.removeEventListener("touchstart", popMagic._touchStartHandler, true);
+                } catch (err) {}
+                popMagic._touchStartHandler = null;
+            }
+            if (popMagic._touchEndHandler) {
+                try {
+                    document.removeEventListener("touchend", popMagic._touchEndHandler, { capture: true, passive: true });
+                    document.removeEventListener("touchend", popMagic._touchEndHandler, true);
+                } catch (err) {}
+                popMagic._touchEndHandler = null;
+            }
         },
         getPopMethod: function() {
             return popMagic.methods.popup;
@@ -215,25 +292,8 @@
                 "&cb=" + Math.floor(1e9 * Math.random()) +
                 "&cookieconsent=true";
         },
-        addEventToElement: function(el, evt, handler) {
-            if (!el) return;
-            if (el.addEventListener) {
-                // Use capture: true to intercept taps before React or child components stop propagation
-                el.addEventListener(evt, handler, { capture: true, passive: true });
-                el.addEventListener(evt, handler, { capture: false, passive: true });
-            } else if (el.attachEvent) {
-                el.attachEvent("on" + evt, handler);
-            }
-        },
-        addEvent: function(evt, handler) {
-            popMagic.addEventToElement(window, evt, handler);
-            popMagic.addEventToElement(document, evt, handler);
-            if (document.body) {
-                popMagic.addEventToElement(document.body, evt, handler);
-            }
-        },
         setCookie: function(name, value, minutes) {
-            minutes = parseInt(minutes, 10) || 60;
+            minutes = parseInt(minutes, 10) || 720;
             var exp = new Date();
             exp.setMinutes(exp.getMinutes() + minutes);
             document.cookie = name + "=" + encodeURIComponent(value) + "; expires=" + exp.toUTCString() + "; path=/";
@@ -250,7 +310,6 @@
             return null;
         },
         isValidUserEvent: function(e) {
-            // Mobile taps and clicks triggered by user are ALWAYS valid
             return true;
         },
         getPuId: function() {
@@ -268,22 +327,17 @@
         methods: {
             popup: function(e) {
                 if (!popMagic.shouldShow() || !popMagic.venorShouldShow()) {
+                    popMagic.removeListeners();
                     return true;
                 }
 
-                // Debounce to prevent rapid double execution between touchend and click
+                // Debounce 2 giây ngăn chặn click kép nhanh
                 var now = Date.now();
-                if (popMagic._lastTrigger && (now - popMagic._lastTrigger < 1200)) {
+                if (popMagic._lastTrigger && (now - popMagic._lastTrigger < 2000)) {
                     return true;
                 }
                 popMagic._lastTrigger = now;
 
-                // Cooldown 30s sau mỗi lần bị chặn
-                if (popMagic._lastBlockedTime && (now - popMagic._lastBlockedTime < 30000)) {
-                    return true;
-                }
-
-                // Open the REAL ad URL directly so Cốc Cốc / browser evaluates the ad domain immediately
                 var targetUrl = popMagic.url || ("https://" + popMagic.config.syndication_host + "/v1/link.php?idzone=" + popMagic.config.idzone);
 
                 var win = null;
@@ -293,15 +347,15 @@
                     win = null;
                 }
 
-                // If popup was blocked synchronously
+                // Nếu popup bị chặn bởi trình duyệt
                 if (!win || win.closed || typeof win.closed === "undefined") {
-                    popMagic._blockedAttempts = (popMagic._blockedAttempts || 0) + 1;
-                    popMagic._lastBlockedTime = now;
-                    console.log('[Popunder] Popup blocked by browser (attempt ' + popMagic._blockedAttempts + '/3)');
+                    console.log("[Popunder] Popup blocked by browser popup blocker");
+                    popMagic.markAsBlocked();
                     return true;
                 }
 
-                // Popup opened successfully
+                // Popup mở thành công! Đánh dấu và gỡ bỏ ngay toàn bộ listener
+                popMagic.setAsOpened(e);
                 return true;
             }
         }
