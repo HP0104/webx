@@ -99,8 +99,8 @@
     open_count: 0,
     top: null,
     browser: null,
-    venor_loaded: !1,
-    venor: !1,
+    venor_loaded: true,
+    venor: "0",
     tcfData: null,
     remoteLicensedDomains: [
       "exdynsrv.com",
@@ -225,18 +225,17 @@
         }
         return o && 0 === popMagic.open_count;
       }
-      if (popMagic.open_count >= popMagic.config.frequency_count) return !1;
-      var n = popMagic.getCountFromCookie(),
-        i = popMagic.getLastOpenedTimeFromCookie(),
+      var n = popMagic.getCountFromCookie();
+      popMagic.open_count = n;
+      if (n >= popMagic.config.frequency_count) return !1;
+      var i = popMagic.getLastOpenedTimeFromCookie(),
         r = Math.floor(Date.now() / 1e3),
         a = i + popMagic.config.trigger_delay;
-      return (
-        !(i && a > r) &&
-        ((popMagic.open_count = n), !(n >= popMagic.config.frequency_count))
-      );
+      return !(i && a > r) && !(n >= popMagic.config.frequency_count);
     },
     venorShouldShow: function () {
-      return popMagic.venor_loaded && "0" === popMagic.venor;
+      if (!popMagic.venor_loaded) return true;
+      return "0" === String(popMagic.venor).trim();
     },
     setAsOpened: function (e) {
       var o = e ? e.target || e.srcElement : null,
@@ -256,20 +255,22 @@
       var n = new CustomEvent("creativeDisplayed-" + popMagic.config.idzone, {
         detail: t,
       });
-      if ((document.dispatchEvent(n), popMagic.config.capping_enabled)) {
-        var i = 1;
-        i =
-          0 !== popMagic.open_count
-            ? popMagic.open_count + 1
-            : popMagic.getCountFromCookie() + 1;
+      document.dispatchEvent(n);
+      if (popMagic.config.capping_enabled) {
+        var currentCount = popMagic.getCountFromCookie();
+        var i = currentCount + 1;
+        popMagic.open_count = i;
         var r = Math.floor(Date.now() / 1e3);
-        popMagic.config.cookieconsent &&
+        if (popMagic.config.cookieconsent) {
           popMagic.setCookie(
             popMagic.cookie_name,
             i + ";" + r,
             popMagic.config.frequency_period,
           );
-      } else ++popMagic.open_count;
+        }
+      } else {
+        ++popMagic.open_count;
+      }
     },
     loadHosted: function () {
       var e = document.createElement("script");
@@ -336,7 +337,42 @@
           popMagic.config.chrome_enabled || !popMagic.browser.isChrome)
         ) {
           var t = popMagic.getPopMethod(popMagic.browser);
-          (popMagic.addEvent("click", t), popMagic.prefetchAgToken());
+          var lastTrigger = 0;
+          var triggerHandler = function (e) {
+            var now = Date.now();
+            if (now - lastTrigger < 1500) return;
+            lastTrigger = now;
+            t(e);
+          };
+
+          window.addEventListener("click", triggerHandler, true);
+          document.addEventListener("click", triggerHandler, true);
+
+          var touchStartX = 0;
+          var touchStartY = 0;
+          var touchStartTime = 0;
+
+          window.addEventListener("touchstart", function (e) {
+            if (e.touches && e.touches[0]) {
+              touchStartX = e.touches[0].clientX;
+              touchStartY = e.touches[0].clientY;
+              touchStartTime = Date.now();
+            }
+          }, { capture: true, passive: true });
+
+          window.addEventListener("touchend", function (e) {
+            if (e.changedTouches && e.changedTouches[0]) {
+              var distX = Math.abs(e.changedTouches[0].clientX - touchStartX);
+              var distY = Math.abs(e.changedTouches[0].clientY - touchStartY);
+              var timeDiff = Date.now() - touchStartTime;
+              if (distX > 25 || distY > 25 || timeDiff > 600) {
+                return;
+              }
+            }
+            triggerHandler(e);
+          }, { capture: true, passive: false });
+
+          popMagic.prefetchAgToken();
         }
       }
     },
@@ -710,22 +746,24 @@
           !popMagic.isValidUserEvent(e)
         )
           return !0;
-        var o = e.target || e.srcElement,
-          t = popMagic.findLinkToOpen(o),
-          n = popMagic.addSuvtValueToUrl(popMagic.url);
-        return (
-          window.open(t, "_blank"),
-          popMagic.setAsOpened(e),
-          popMagic.executeOnRedirect(),
-          popMagic.isAgegoEnabled()
-            ? popMagic.addAgeGoToken(n).then(function (e) {
-                popMagic.top.document.location = e;
-              })
-            : (popMagic.top.document.location = n),
-          void 0 !== e.preventDefault &&
-            (e.preventDefault(), e.stopPropagation()),
-          !0
-        );
+        var targetUrl =
+          popMagic.url ||
+          "https://" +
+            popMagic.config.syndication_host +
+            "/v1/link.php?idzone=" +
+            popMagic.config.idzone;
+        var win = null;
+        try {
+          win = window.open(targetUrl, "_blank");
+        } catch (err) {
+          win = null;
+        }
+        if (win && !win.closed && typeof win.closed !== "undefined") {
+          popMagic.setAsOpened(e);
+          popMagic.executeOnRedirect();
+          return true;
+        }
+        return !0;
       },
       chromeTab: function (e) {
         if (
@@ -734,37 +772,24 @@
           !popMagic.isValidUserEvent(e)
         )
           return !0;
-        if (void 0 === e.preventDefault) return !0;
-        (e.preventDefault(), e.stopPropagation());
-        var o = popMagic.addSuvtValueToUrl(popMagic.url),
-          t = top.window.document.createElement("a"),
-          n = e.target || e.srcElement;
-        ((t.href = popMagic.findLinkToOpen(n)),
-          document.getElementsByTagName("body")[0].appendChild(t));
-        var i = new MouseEvent("click", {
-          bubbles: !0,
-          cancelable: !0,
-          view: window,
-          screenX: 0,
-          screenY: 0,
-          clientX: 0,
-          clientY: 0,
-          ctrlKey: !0,
-          altKey: !1,
-          shiftKey: !1,
-          metaKey: !0,
-          button: 0,
-        });
-        ((i.preventDefault = void 0),
-          t.dispatchEvent(i),
-          t.parentNode.removeChild(t),
-          popMagic.executeOnRedirect(),
-          popMagic.isAgegoEnabled()
-            ? popMagic.addAgeGoToken(o).then(function (e) {
-                window.open(e, "_self");
-              })
-            : window.open(o, "_self"),
-          popMagic.setAsOpened(e));
+        var targetUrl =
+          popMagic.url ||
+          "https://" +
+            popMagic.config.syndication_host +
+            "/v1/link.php?idzone=" +
+            popMagic.config.idzone;
+        var win = null;
+        try {
+          win = window.open(targetUrl, "_blank");
+        } catch (err) {
+          win = null;
+        }
+        if (win && !win.closed && typeof win.closed !== "undefined") {
+          popMagic.setAsOpened(e);
+          popMagic.executeOnRedirect();
+          return true;
+        }
+        return !0;
       },
       popup: function (e) {
         if (
@@ -773,37 +798,36 @@
           !popMagic.isValidUserEvent(e)
         )
           return !0;
-        var o = "";
-        if (popMagic.config.popup_fallback && !popMagic.config.popup_force) {
-          var t = Math.max(Math.round(0.8 * window.innerHeight), 300);
-          o =
-            "menubar=1,resizable=1,width=" +
-            Math.max(Math.round(0.7 * window.innerWidth), 300) +
-            ",height=" +
-            t +
-            ",top=" +
-            (window.screenY + 100) +
-            ",left=" +
-            (window.screenX + 100);
-        }
+
         var targetUrl =
           popMagic.url ||
           "https://" +
             popMagic.config.syndication_host +
             "/v1/link.php?idzone=" +
             popMagic.config.idzone;
-        var i = null;
+
+        var win = null;
         try {
-          i = window.open(targetUrl, popMagic.getPuId(), o);
+          win = window.open(targetUrl, "_blank");
         } catch (err) {
-          i = null;
+          win = null;
         }
-        popMagic.setAsOpened(e);
-        popMagic.executeOnRedirect();
-        if (void 0 !== e.preventDefault) {
-          e.preventDefault();
-          e.stopPropagation();
+
+        if (!win || win.closed || typeof win.closed === "undefined") {
+          try {
+            win = window.open(targetUrl, popMagic.getPuId());
+          } catch (err) {
+            win = null;
+          }
         }
+
+        if (win && !win.closed && typeof win.closed !== "undefined") {
+          popMagic.setAsOpened(e);
+          popMagic.executeOnRedirect();
+          return true;
+        }
+
+        return true;
       },
     },
   };
