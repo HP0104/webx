@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, Download, Loader2 } from 'lucide-react';
-import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getDownloadUrl } from '../utils/videoUtils';
+import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getDownloadUrl, isDirectVideo } from '../utils/videoUtils';
 import ErrorReportButton from '../components/ErrorReportButton';
 import { doc, updateDoc, increment, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import VideoCardItem from '../components/VideoCardItem';
+import NativeVideoPlayer from '../components/NativeVideoPlayer';
 
 /**
  * Get thumbnail from video URL (exported for backwards compatibility with Videos.jsx).
@@ -255,7 +256,15 @@ function VideoDetail() {
       {/* Video Player */}
       <div className="video-detail-player-wrapper">
         <div className="video-detail-player" style={{ position: 'relative', overflow: 'hidden' }}>
-          {!isPlaying && thumbnail ? (
+          {isDirectVideo(rawUrl) ? (
+            <NativeVideoPlayer
+              src={rawUrl}
+              poster={thumbnail}
+              title={video.title}
+              autoPlay={true}
+              onEnded={() => {}}
+            />
+          ) : !isPlaying && thumbnail ? (
             <div 
               className="video-player-overlay" 
               style={{
@@ -362,7 +371,7 @@ function VideoDetail() {
                           scrolling="no"
                           loading="eager"
                           referrerPolicy="no-referrer-when-downgrade"
-                          allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
                           onLoad={() => setIframeLoading(false)}
                           style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
                         />
@@ -410,7 +419,7 @@ function VideoDetail() {
                 scrolling="no"
                 loading="eager"
                 referrerPolicy="no-referrer-when-downgrade"
-                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
                 onLoad={() => setIframeLoading(false)}
                 style={{ border: 'none' }}
               />

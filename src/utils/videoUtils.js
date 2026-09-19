@@ -28,6 +28,32 @@ export function parseVideoUrl(input) {
     }
   }
 
+  // 0. Direct HLS (.m3u8) or Direct MP4 / WebM / OGG stream
+  const isDirectHls = url.match(/\.m3u8(?:\?.*)?$/i);
+  const isDirectVideoFile = url.match(/\.(mp4|webm|ogg|mkv|mov)(?:\?.*)?$/i);
+  if (isDirectHls || isDirectVideoFile) {
+    try {
+      const parsedUrl = new URL(url.startsWith('http') ? url : `https://${url}`);
+      return {
+        provider: isDirectHls ? 'hls' : 'direct',
+        domain: parsedUrl.hostname,
+        id: null,
+        rawUrl: url,
+        embedUrl: url,
+        isDirect: true
+      };
+    } catch (e) {
+      return {
+        provider: isDirectHls ? 'hls' : 'direct',
+        domain: null,
+        id: null,
+        rawUrl: url,
+        embedUrl: url,
+        isDirect: true
+      };
+    }
+  }
+
   // 1. VOE variants (voe.sx, voecdn, etc.)
   const voeMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(voe\.sx|voecdn\.com|voe-sx\.com|launchreed\.com|caseyimpactstation\.com)\/(?:e\/)?([a-zA-Z0-9]+)/i);
   if (voeMatch && !['cache', 'embed', 'api'].includes(voeMatch[2])) {
@@ -196,11 +222,23 @@ export function getVideoThumbnail(url) {
 }
 
 /**
+ * Check if a URL or input string is a direct video link (.m3u8, .mp4, etc.)
+ */
+export function isDirectVideo(input) {
+  if (!input || typeof input !== 'string') return false;
+  const trimmed = input.trim();
+  if (trimmed.startsWith('<iframe')) return false;
+  return /\.m3u8|\.mp4|\.webm|\.ogg|\.mkv/i.test(trimmed);
+}
+
+/**
  * Get display provider name
  */
 export function getVideoProviderName(url) {
   const parsed = parseVideoUrl(url);
   switch (parsed.provider) {
+    case 'hls': return 'HLS Live/Stream (Tua Siêu Tốc)';
+    case 'direct': return 'Link Trực Tiếp (Tua Siêu Tốc)';
     case 'voe': return 'VOE.sx';
     case 'doodstream': return 'Doodstream / Doobstream';
     case 'filemoon':
