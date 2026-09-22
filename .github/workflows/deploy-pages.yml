@@ -40,6 +40,11 @@ jobs:
           VITE_BANK_ID: ${{ secrets.VITE_BANK_ID }}
           VITE_ACCOUNT_NUMBER: ${{ secrets.VITE_ACCOUNT_NUMBER }}
           VITE_ACCOUNT_NAME: ${{ secrets.VITE_ACCOUNT_NAME }}
+          VITE_STREAMHG_API_KEY: ${{ secrets.VITE_STREAMHG_API_KEY }}
+          VITE_STREAMHG_FOLDER: ${{ secrets.VITE_STREAMHG_FOLDER }}
+          VITE_STREAMHG_FOLDER_ID: ${{ secrets.VITE_STREAMHG_FOLDER_ID }}
+          VITE_RAWG_API_KEY: ${{ secrets.VITE_RAWG_API_KEY }}
+          VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
 
       - name: Generate SEO files
         run: node scripts/generate-seo-pages.mjs
