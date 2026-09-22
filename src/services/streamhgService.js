@@ -77,7 +77,7 @@ let cachedFolderId = null;
 export async function getFolderId(apiKey, folderName = TARGET_FOLDER_NAME) {
   if (cachedFolderId) return cachedFolderId;
 
-  const envFolderId = import.meta.env.VITE_STREAMHG_FOLDER_ID;
+  const envFolderId = import.meta.env.VITE_STREAMHG_FOLDER_ID || import.meta.env.VITE_STREAMHG_FOLDER_I;
   if (envFolderId) {
     cachedFolderId = envFolderId.toString();
     return cachedFolderId;
