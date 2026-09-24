@@ -199,6 +199,25 @@ export function toEmbedUrl(url) {
 }
 
 /**
+ * Get alternate embed URL (Server 1: Primary e.g. hgcloud.to, Server 2: Backup e.g. vibuxer.com)
+ */
+export function getAlternateEmbedUrl(url, server = 'server1') {
+  if (!url) return '';
+  const parsed = parseVideoUrl(url);
+
+  if (parsed.provider === 'filemoon' && parsed.id) {
+    if (server === 'server2') {
+      return `https://vibuxer.com/e/${parsed.id}`;
+    }
+    // Default Server 1: use hgcloud.to or original domain
+    const domain = (parsed.domain && parsed.domain.includes('vibuxer')) ? 'hgcloud.to' : (parsed.domain || 'hgcloud.to');
+    return `https://${domain}/e/${parsed.id}`;
+  }
+
+  return parsed.embedUrl || url;
+}
+
+/**
  * Get video thumbnail URL from video URL where possible.
  */
 export function getVideoThumbnail(url) {

@@ -13,12 +13,15 @@ export default function NativeVideoPlayer({ src, poster, title, autoPlay = true,
   const hlsRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [hasError, setHasError] = useState(false);
+
   // Setup Player (HLS or Native MP4)
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) return;
 
     setIsLoading(true);
+    setHasError(false);
     const isHls = /\.m3u8(?:\?.*)?$/i.test(src);
 
     if (isHls && Hls.isSupported()) {
@@ -60,6 +63,8 @@ export default function NativeVideoPlayer({ src, poster, title, autoPlay = true,
               break;
             default:
               hls.destroy();
+              setIsLoading(false);
+              setHasError(true);
               break;
           }
         }
@@ -86,7 +91,9 @@ export default function NativeVideoPlayer({ src, poster, title, autoPlay = true,
       ref={containerRef}
       className="native-video-player-container"
       style={{
-        position: 'relative',
+        position: 'absolute',
+        top: 0,
+        left: 0,
         width: '100%',
         height: '100%',
         backgroundColor: '#000',
@@ -101,10 +108,20 @@ export default function NativeVideoPlayer({ src, poster, title, autoPlay = true,
         poster={poster}
         controls
         playsInline
+        webkit-playsinline="true"
+        x5-video-player-type="h5"
+        x5-video-player-fullscreen="true"
         preload="auto"
         onWaiting={() => setIsLoading(true)}
-        onPlaying={() => setIsLoading(false)}
+        onPlaying={() => {
+          setIsLoading(false);
+          setHasError(false);
+        }}
         onCanPlay={() => setIsLoading(false)}
+        onError={() => {
+          setIsLoading(false);
+          setHasError(true);
+        }}
         onEnded={onEnded}
         style={{
           width: '100%',
@@ -114,8 +131,50 @@ export default function NativeVideoPlayer({ src, poster, title, autoPlay = true,
         }}
       />
 
+      {/* Error state */}
+      {hasError && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(0,0,0,0.88)',
+            zIndex: 4,
+            padding: '1.5rem',
+            textAlign: 'center'
+          }}
+        >
+          <div style={{ color: '#ff4d4f', fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+            ⚠️ Không thể kết nối luồng phát video này
+          </div>
+          <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '1rem', maxWidth: '380px' }}>
+            Luồng video có thể bị chặn bởi nhà mạng hoặc máy chủ chưa sẵn sàng. Hãy thử tải lại hoặc dùng 1.1.1.1 (WARP).
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              setHasError(false);
+              setIsLoading(true);
+              if (videoRef.current) {
+                videoRef.current.load();
+                videoRef.current.play().catch(() => {});
+              }
+            }}
+          >
+            Thử Lại
+          </button>
+        </div>
+      )}
+
       {/* Loading Spinner */}
-      {isLoading && (
+      {isLoading && !hasError && (
         <div
           style={{
             position: 'absolute',

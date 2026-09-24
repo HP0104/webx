@@ -32,3 +32,4 @@ KEY/
 check_*.js
 check_*.mjs
 scratch/
+tools/

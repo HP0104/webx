@@ -2481,6 +2481,7 @@ a {
 
 /* Player Wrapper */
 .video-detail-player-wrapper {
+  position: relative;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid rgba(102, 192, 244, 0.15);
@@ -2502,6 +2503,182 @@ a {
   left: 0;
   width: 100%;
   height: 100%;
+}
+
+.video-detail-player .native-video-player-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Fullscreen support on player wrapper for mobile & desktop */
+.video-detail-player-wrapper:fullscreen,
+.video-detail-player-wrapper:-webkit-full-screen,
+.video-detail-player-wrapper:-moz-full-screen,
+.video-detail-player-wrapper:-ms-fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  border-radius: 0 !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 2147483647 !important;
+}
+
+.video-detail-player-wrapper:fullscreen .video-detail-player,
+.video-detail-player-wrapper:-webkit-full-screen .video-detail-player,
+.video-detail-player-wrapper:-moz-full-screen .video-detail-player,
+.video-detail-player-wrapper:-ms-fullscreen .video-detail-player {
+  width: 100% !important;
+  height: 100% !important;
+  padding-bottom: 0 !important;
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.video-detail-player-wrapper:fullscreen iframe,
+.video-detail-player-wrapper:-webkit-full-screen iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+}
+
+/* Video Player Controls & Server Bar */
+.video-player-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.9rem;
+  background: rgba(13, 17, 23, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.video-server-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.video-server-label {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.video-server-btn {
+  padding: 0.38rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.video-server-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.video-server-btn.active {
+  background: var(--color-accent);
+  color: #0d1117;
+  border-color: var(--color-accent);
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(102, 192, 244, 0.4);
+}
+
+.video-player-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.video-action-btn {
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 1px solid rgba(102, 192, 244, 0.3);
+  background: rgba(102, 192, 244, 0.1);
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  text-decoration: none;
+}
+
+.video-action-btn:hover {
+  background: var(--color-accent);
+  color: #0d1117;
+  box-shadow: 0 0 15px rgba(102, 192, 244, 0.3);
+}
+
+.video-action-btn.btn-fullscreen {
+  background: linear-gradient(135deg, rgba(102, 192, 244, 0.2), rgba(56, 189, 248, 0.3));
+  border-color: var(--color-accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.video-action-btn.btn-fullscreen:hover {
+  background: var(--color-accent);
+  color: #0d1117;
+}
+
+/* Floating Fullscreen Exit Button inside fullscreen player */
+.video-floating-fs-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  transition: all 0.25s ease;
+}
+
+.video-floating-fs-btn:hover {
+  background: rgba(0, 0, 0, 0.9);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
 }
 
 /* VPN Notice */

@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
-import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, Download, Loader2 } from 'lucide-react';
-import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getDownloadUrl, isDirectVideo } from '../utils/videoUtils';
+import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, Download, Loader2, Maximize, Minimize, RotateCcw, Server, Smartphone } from 'lucide-react';
+import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getDownloadUrl, isDirectVideo, getAlternateEmbedUrl } from '../utils/videoUtils';
 import ErrorReportButton from '../components/ErrorReportButton';
 import { doc, updateDoc, increment, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -26,6 +26,65 @@ function VideoDetail() {
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
   const [recommendedVideos, setRecommendedVideos] = useState([]);
+
+  // Server selection & Fullscreen controls
+  const playerWrapperRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [currentServer, setCurrentServer] = useState('server1');
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const toggleFullscreen = () => {
+    const el = playerWrapperRef.current;
+    if (!el) return;
+
+    const isFs = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+    if (!isFs) {
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(err => console.warn('requestFullscreen failed:', err));
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      } else if (el.msRequestFullscreen) {
+        el.msRequestFullscreen();
+      }
+      // On mobile Android devices, try locking orientation to landscape
+      if (window.screen?.orientation?.lock) {
+        window.screen.orientation.lock('landscape').catch(() => {});
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(err => console.warn('exitFullscreen failed:', err));
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
+      if (window.screen?.orientation?.unlock) {
+        window.screen.orientation.unlock();
+      }
+    }
+  };
+
+  useEffect(() => {
+    const onFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement || document.webkitFullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
+    };
+  }, []);
+
+  const switchServer = (srv) => {
+    if (srv === currentServer) return;
+    setCurrentServer(srv);
+    setIframeLoading(true);
+    setReloadKey(prev => prev + 1);
+  };
+
+  const reloadPlayer = () => {
+    setIframeLoading(true);
+    setReloadKey(prev => prev + 1);
+  };
 
   const video = videos.find(v => v.id.toString() === videoId);
 
@@ -233,11 +292,34 @@ function VideoDetail() {
 
   // Support both new field name (videoUrl) and legacy (streamtapeUrl)
   const rawUrl = video.videoUrl || video.streamtapeUrl;
-  const embedUrl = toEmbedUrl(rawUrl);
+  const embedUrl = getAlternateEmbedUrl(rawUrl, currentServer);
   const downloadUrl = getDownloadUrl(rawUrl);
   let thumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
   if (thumbnail && thumbnail.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
     thumbnail = thumbnail.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
+  }
+
+  // Calculate effective iframe src for embed code or URL
+  let effectiveIframeSrc = '';
+  if (rawUrl && rawUrl.trim().toLowerCase().startsWith('<iframe')) {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(rawUrl, 'text/html');
+      const iframe = doc.querySelector('iframe');
+      if (iframe && iframe.src) {
+        let src = iframe.src;
+        if (currentServer === 'server2' && src.includes('hgcloud.to')) {
+          src = src.replace('hgcloud.to', 'vibuxer.com');
+        } else if (currentServer === 'server1' && src.includes('vibuxer.com')) {
+          src = src.replace('vibuxer.com', 'hgcloud.to');
+        }
+        effectiveIframeSrc = src;
+      }
+    } catch (e) {
+      effectiveIframeSrc = '';
+    }
+  } else {
+    effectiveIframeSrc = embedUrl;
   }
 
   return (
@@ -253,8 +335,20 @@ function VideoDetail() {
         <span>{video.title}</span>
       </div>
 
-      {/* Video Player */}
-      <div className="video-detail-player-wrapper">
+      {/* Video Player Wrapper */}
+      <div ref={playerWrapperRef} className="video-detail-player-wrapper">
+        {/* Floating exit fullscreen button for mobile/desktop */}
+        {isFullscreen && (
+          <button
+            type="button"
+            className="video-floating-fs-btn"
+            onClick={toggleFullscreen}
+            title="Thoát toàn màn hình"
+          >
+            <Minimize size={16} /> Thoát toàn màn hình
+          </button>
+        )}
+
         <div className="video-detail-player" style={{ position: 'relative', overflow: 'hidden' }}>
           {isDirectVideo(rawUrl) ? (
             <NativeVideoPlayer
@@ -332,12 +426,8 @@ function VideoDetail() {
                 'iframe.mediadelivery.net'
               ];
               try {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(rawUrl, 'text/html');
-                const iframe = doc.querySelector('iframe');
-                if (iframe && iframe.src) {
-                  const iframeSrc = iframe.src;
-                  const hostname = new URL(iframeSrc).hostname.toLowerCase();
+                if (effectiveIframeSrc) {
+                  const hostname = new URL(effectiveIframeSrc).hostname.toLowerCase();
                   const isTrusted = TRUSTED_DOMAINS.some(domain => hostname === domain || hostname.endsWith('.' + domain));
                   if (isTrusted) {
                     return (
@@ -363,15 +453,18 @@ function VideoDetail() {
                           </div>
                         )}
                         <iframe
-                          src={iframeSrc.includes('?') ? `${iframeSrc}&autoplay=1` : `${iframeSrc}?autoplay=1`}
+                          key={`${effectiveIframeSrc}-${reloadKey}`}
+                          src={effectiveIframeSrc.includes('?') ? `${effectiveIframeSrc}&autoplay=1` : `${effectiveIframeSrc}?autoplay=1`}
                           width="100%"
                           height="100%"
                           allowFullScreen
+                          webkitallowfullscreen="true"
+                          mozallowfullscreen="true"
                           frameBorder="0"
                           scrolling="no"
                           loading="eager"
                           referrerPolicy="no-referrer-when-downgrade"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *"
                           onLoad={() => setIframeLoading(false)}
                           style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
                         />
@@ -411,21 +504,96 @@ function VideoDetail() {
                 </div>
               )}
               <iframe
-                src={embedUrl ? (embedUrl.includes('?') ? `${embedUrl}&autoplay=1` : `${embedUrl}?autoplay=1`) : ''}
+                key={`${effectiveIframeSrc}-${reloadKey}`}
+                src={effectiveIframeSrc ? (effectiveIframeSrc.includes('?') ? `${effectiveIframeSrc}&autoplay=1` : `${effectiveIframeSrc}?autoplay=1`) : ''}
                 width="100%"
                 height="100%"
                 allowFullScreen
+                webkitallowfullscreen="true"
+                mozallowfullscreen="true"
                 frameBorder="0"
                 scrolling="no"
                 loading="eager"
                 referrerPolicy="no-referrer-when-downgrade"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *"
                 onLoad={() => setIframeLoading(false)}
                 style={{ border: 'none' }}
               />
             </>
           )}
         </div>
+      </div>
+
+      {/* Video Player Toolbar */}
+      <div className="video-player-toolbar">
+        {/* Server Switcher */}
+        <div className="video-server-group">
+          <span className="video-server-label">
+            <Server size={14} color="var(--color-accent)" /> Máy chủ:
+          </span>
+          <button
+            type="button"
+            className={`video-server-btn ${currentServer === 'server1' ? 'active' : ''}`}
+            onClick={() => switchServer('server1')}
+            title="Máy chủ chính HGCloud"
+          >
+            <span>Server 1 (HGCloud)</span>
+          </button>
+          <button
+            type="button"
+            className={`video-server-btn ${currentServer === 'server2' ? 'active' : ''}`}
+            onClick={() => switchServer('server2')}
+            title="Máy chủ dự phòng Vibuxer - Dùng khi Server 1 quay mãi hoặc bị chặn mạng"
+          >
+            <span>Server 2 (Vibuxer)</span>
+          </button>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="video-player-actions">
+          <button
+            type="button"
+            className="video-action-btn btn-fullscreen"
+            onClick={toggleFullscreen}
+            title="Xem toàn màn hình (Tối ưu cho Android & xoay ngang)"
+          >
+            {isFullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
+            <span>{isFullscreen ? 'Thu Nhỏ' : 'Toàn Màn Hình'}</span>
+          </button>
+
+          <button
+            type="button"
+            className="video-action-btn"
+            onClick={reloadPlayer}
+            title="Tải lại trình phát nếu video bị đứng hoặc đơ"
+          >
+            <RotateCcw size={14} />
+            <span>Làm Mới</span>
+          </button>
+
+          {downloadUrl && (
+            <a
+              href={downloadUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="video-action-btn"
+              title="Tải video này về máy"
+            >
+              <Download size={14} />
+              <span>Tải Video</span>
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* Android and Mobile network guidance */}
+      <div className="video-detail-vpn-notice" style={{ border: '1px solid rgba(102, 192, 244, 0.25)', backgroundColor: 'rgba(102, 192, 244, 0.05)' }}>
+        <span className="vpn-notice-status" style={{ color: 'var(--color-accent)', display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+          <Smartphone size={15} /> Mẹo xem trên Android & 4G:
+        </span>
+        <span className="vpn-notice-text">
+          Nhấn nút <strong>"Toàn Màn Hình"</strong> ở trên để phóng to chuẩn không chạm nhầm quảng cáo. Nếu video quay mãi không tải, hãy bấm đổi sang <strong>Server 2 (Vibuxer)</strong> hoặc bật <strong>1.1.1.1 (WARP)</strong> do một số mạng 4G/Wifi chặn máy chủ phát.
+        </span>
       </div>
 
       {/* Ad-Free Notice */}
