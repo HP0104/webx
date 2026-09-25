@@ -69,8 +69,8 @@ export const ADS_CONFIG = {
   // Vị trí Đầu trang đọc truyện: In-stream Video (VAST) phát liên tục
   manga_reader_video: {
     provider: 'vast',
-    zoneId: '6022002',
-    vastUrl: 'https://s.magsrv.com/v1/vast.php?idz=6022002',
+    zoneId: '6040006',
+    vastUrl: 'https://s.magsrv.com/v1/vast.php?idz=6040006',
     width: '100%',
     aspectRatio: '16/9',
     minHeight: '230px',

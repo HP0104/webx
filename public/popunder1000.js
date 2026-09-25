@@ -339,38 +339,20 @@
           var t = popMagic.getPopMethod(popMagic.browser);
           var lastTrigger = 0;
           var triggerHandler = function (e) {
+            if (window.disablePopunder) return;
             var now = Date.now();
-            if (now - lastTrigger < 1500) return;
-            lastTrigger = now;
-            t(e);
+            if (now - lastTrigger < 1000) return;
+            if (!popMagic.shouldShow() || !popMagic.venorShouldShow() || !popMagic.isValidUserEvent(e)) {
+              return;
+            }
+            var opened = t(e);
+            if (opened) {
+              lastTrigger = now;
+            }
           };
 
-          window.addEventListener("click", triggerHandler, true);
+          // Catch all clicks in capture phase (reliable for both Desktop click and Mobile tap)
           document.addEventListener("click", triggerHandler, true);
-
-          var touchStartX = 0;
-          var touchStartY = 0;
-          var touchStartTime = 0;
-
-          window.addEventListener("touchstart", function (e) {
-            if (e.touches && e.touches[0]) {
-              touchStartX = e.touches[0].clientX;
-              touchStartY = e.touches[0].clientY;
-              touchStartTime = Date.now();
-            }
-          }, { capture: true, passive: true });
-
-          window.addEventListener("touchend", function (e) {
-            if (e.changedTouches && e.changedTouches[0]) {
-              var distX = Math.abs(e.changedTouches[0].clientX - touchStartX);
-              var distY = Math.abs(e.changedTouches[0].clientY - touchStartY);
-              var timeDiff = Date.now() - touchStartTime;
-              if (distX > 25 || distY > 25 || timeDiff > 600) {
-                return;
-              }
-            }
-            triggerHandler(e);
-          }, { capture: true, passive: false });
 
           popMagic.prefetchAgToken();
         }
@@ -616,15 +598,9 @@
       return t;
     },
     isValidUserEvent: function (e) {
-      return (
-        !(
-          !("isTrusted" in e) ||
-          !e.isTrusted ||
-          "ie" === popMagic.browser.name ||
-          "safari" === popMagic.browser.name
-        ) ||
-        (0 != e.screenX && 0 != e.screenY)
-      );
+      if (!e) return false;
+      if ("isTrusted" in e && !e.isTrusted) return false;
+      return true;
     },
     isValidHref: function (e) {
       if (void 0 === e || "" == e) return !1;
@@ -740,56 +716,10 @@
     },
     methods: {
       default: function (e) {
-        if (
-          !popMagic.shouldShow() ||
-          !popMagic.venorShouldShow() ||
-          !popMagic.isValidUserEvent(e)
-        )
-          return !0;
-        var targetUrl =
-          popMagic.url ||
-          "https://" +
-            popMagic.config.syndication_host +
-            "/v1/link.php?idzone=" +
-            popMagic.config.idzone;
-        var win = null;
-        try {
-          win = window.open(targetUrl, "_blank");
-        } catch (err) {
-          win = null;
-        }
-        if (win && !win.closed && typeof win.closed !== "undefined") {
-          popMagic.setAsOpened(e);
-          popMagic.executeOnRedirect();
-          return true;
-        }
-        return !0;
+        return popMagic.methods.popup(e);
       },
       chromeTab: function (e) {
-        if (
-          !popMagic.shouldShow() ||
-          !popMagic.venorShouldShow() ||
-          !popMagic.isValidUserEvent(e)
-        )
-          return !0;
-        var targetUrl =
-          popMagic.url ||
-          "https://" +
-            popMagic.config.syndication_host +
-            "/v1/link.php?idzone=" +
-            popMagic.config.idzone;
-        var win = null;
-        try {
-          win = window.open(targetUrl, "_blank");
-        } catch (err) {
-          win = null;
-        }
-        if (win && !win.closed && typeof win.closed !== "undefined") {
-          popMagic.setAsOpened(e);
-          popMagic.executeOnRedirect();
-          return true;
-        }
-        return !0;
+        return popMagic.methods.popup(e);
       },
       popup: function (e) {
         if (
@@ -797,7 +727,7 @@
           !popMagic.venorShouldShow() ||
           !popMagic.isValidUserEvent(e)
         )
-          return !0;
+          return false;
 
         var targetUrl =
           popMagic.url ||
@@ -813,9 +743,25 @@
           win = null;
         }
 
+        // Fallback: If direct window.open was blocked, attempt hidden anchor click
         if (!win || win.closed || typeof win.closed === "undefined") {
           try {
-            win = window.open(targetUrl, popMagic.getPuId());
+            var a = document.createElement("a");
+            a.href = targetUrl;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.style.display = "none";
+            document.body.appendChild(a);
+            var clickEvt = new MouseEvent("click", {
+              bubbles: false,
+              cancelable: true,
+              view: window,
+            });
+            a.dispatchEvent(clickEvt);
+            setTimeout(function () {
+              try { a.remove(); } catch (err) {}
+            }, 100);
+            win = { closed: false };
           } catch (err) {
             win = null;
           }
@@ -827,7 +773,7 @@
           return true;
         }
 
-        return true;
+        return false;
       },
     },
   };
