@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { ChevronLeft, ChevronRight, ChevronUp, Layers, ArrowLeft, Maximize, Minimize, RotateCw } from 'lucide-react';
+import VideoAdBanner from '../components/VideoAdBanner';
+import AdBanner from '../components/AdBanner';
+import { ADS_CONFIG } from '../config/ads';
 
 // In-memory cache for preloaded image URLs
 const preloadedUrls = new Set();
@@ -207,6 +210,21 @@ function MangaReader() {
           <span className="vpn-notice-text">
             Web có tính năng xem dồn quảng cáo để giảm sự khó chịu khi xem <Link to="/profile" style={{ color: '#ebac26', fontWeight: 'bold', textDecoration: 'underline', textShadow: '0 0 8px rgba(235, 172, 38, 0.8), 0 0 15px rgba(235, 172, 38, 0.5)' }}>tại đây</Link>
           </span>
+        </div>
+      </div>
+
+      {/* Top Ads: In-stream Video (Phát liên tục) & Banner */}
+      <div className="manga-reader-top-ads" style={{ maxWidth: '900px', margin: '1.2rem auto 0.5rem auto', padding: '0 0.5rem', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', alignItems: 'center' }}>
+          {/* 1. Quảng cáo Video In-Stream (Phát liên tục) */}
+          <div style={{ width: '100%', maxWidth: '640px' }}>
+            <VideoAdBanner config={ADS_CONFIG.manga_reader_video || ADS_CONFIG.sidebar_video} />
+          </div>
+
+          {/* 2. Quảng cáo Banner */}
+          <div style={{ width: '100%', maxWidth: '728px' }}>
+            <AdBanner key={`manga-banner-${chapterId}`} config={ADS_CONFIG.manga_reader_banner || ADS_CONFIG.slot1} />
+          </div>
         </div>
       </div>
 

@@ -78,16 +78,35 @@ export default function VideoAdBanner({ config }) {
                 setAdCycle((prev) => prev + 1);
               }, 2000);
             },
-            // Khi tạm thời hết quảng cáo từ mạng ad -> thử lại sau 15 giây
+            // Khi user skip quảng cáo -> chuyển sang video mới liên tục
+            vastVideoSkippedCallback: () => {
+              if (isCancelled) return;
+              timer = setTimeout(() => {
+                setAdCycle((prev) => prev + 1);
+              }, 2000);
+            },
+            // Khi tạm thời hết quảng cáo từ mạng ad -> thử lại sau 10 giây
             noVastVideoCallback: () => {
               if (isCancelled) return;
               timer = setTimeout(() => {
                 setAdCycle((prev) => prev + 1);
-              }, 15000);
+              }, 10000);
             },
           },
         },
       });
+
+      // Lắng nghe sự kiện ended trên thẻ video làm lớp bảo vệ dự phòng để luôn phát liên tục
+      const videoEl = videoPlayerRef.current;
+      const handleEnded = () => {
+        if (isCancelled) return;
+        if (!timer) {
+          timer = setTimeout(() => {
+            setAdCycle((prev) => prev + 1);
+          }, 2000);
+        }
+      };
+      videoEl?.addEventListener('ended', handleEnded);
 
       setHasError(false);
     } catch (err) {
