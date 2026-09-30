@@ -65,6 +65,14 @@ function VideoForm({
     return cleanUrl;
   };
 
+  const handleTitlePaste = (e) => {
+    const pasted = e.clipboardData.getData('text');
+    if (pasted.includes(' | ') && pasted.includes('http')) {
+      e.preventDefault();
+      handleUrlInput(pasted);
+    }
+  };
+
   const handlePaste = (e) => {
     const pasted = e.clipboardData.getData('text');
     handleUrlInput(pasted, e);
@@ -193,8 +201,9 @@ function VideoForm({
             type="text"
             className="input-field"
             placeholder="Nhập tên phim đầy đủ..."
-            value={videoData.title}
+            value={videoData.title || ''}
             onChange={e => setVideoData({ ...videoData, title: e.target.value })}
+            onPaste={handleTitlePaste}
             style={{ margin: 0, width: '100%' }}
             required
           />
