@@ -45,7 +45,7 @@ function VideoForm({
   }, [videoData.videoUrl]);
 
   const handleUrlInput = (rawVal, preventDefaultEvent = null) => {
-    const { videoUrl: extractedUrl, thumbnail } = extractVideoInfoFromPaste(rawVal);
+    const { videoUrl: extractedUrl, thumbnail, title } = extractVideoInfoFromPaste(rawVal);
     
     const isRawEmbed = rawVal && (rawVal.trim().toLowerCase().startsWith('<iframe') || rawVal.trim().toLowerCase().startsWith('<script'));
     const cleanUrl = isRawEmbed ? rawVal : (extractedUrl || rawVal);
@@ -57,7 +57,8 @@ function VideoForm({
     setVideoData(prev => ({
       ...prev,
       videoUrl: cleanUrl,
-      thumbnail: thumbnail || prev.thumbnail
+      thumbnail: thumbnail || prev.thumbnail,
+      title: title || prev.title
     }));
 
     setThumbError(false);
@@ -136,7 +137,7 @@ function VideoForm({
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    const { videoUrl: extractedUrl, thumbnail: extractedThumb } = extractVideoInfoFromPaste(videoData.videoUrl);
+    const { videoUrl: extractedUrl, thumbnail: extractedThumb, title: extractedTitle } = extractVideoInfoFromPaste(videoData.videoUrl);
     const isRawEmbed = videoData.videoUrl && (videoData.videoUrl.trim().toLowerCase().startsWith('<iframe') || videoData.videoUrl.trim().toLowerCase().startsWith('<script'));
     const finalVideoUrl = isRawEmbed ? videoData.videoUrl.trim() : (extractedUrl || videoData.videoUrl).trim();
 

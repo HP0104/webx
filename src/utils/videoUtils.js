@@ -153,6 +153,19 @@ export function parseVideoUrl(input) {
     };
   }
 
+  // 8. Upload18
+  const u18Match = url.match(/(?:https?:\/\/)?(?:www\.)?upload18\.net\/(?:play\/index\/|e\/|v\/)([a-zA-Z0-9_-]+)/i);
+  if (u18Match) {
+    const id = u18Match[1];
+    return {
+      provider: 'upload18',
+      domain: 'upload18.net',
+      id,
+      rawUrl: url,
+      embedUrl: `https://upload18.net/play/index/${id}`
+    };
+  }
+
   // 4. Ok.ru
   const okMatch = url.match(/(?:https?:\/\/)?(?:www\.)?ok\.ru\/(?:video|videoembed)\/(\d+)/i);
   if (okMatch) {
@@ -270,6 +283,7 @@ export function getVideoProviderName(url) {
     case 'lulustream': return 'Lulustream';
     case 'mixdrop': return 'Mixdrop';
     case 'okru': return 'OK.ru';
+    case 'upload18': return 'Upload18';
     case 'youtube': return 'YouTube';
     default: return 'Link Trực Tiếp / Khác';
   }
@@ -279,10 +293,26 @@ export function getVideoProviderName(url) {
  * Extract URL and thumbnail from pasted text (supports VOE & Doodstream HTML export code)
  */
 export function extractVideoInfoFromPaste(pastedText) {
-  if (!pastedText) return { videoUrl: null, thumbnail: null };
+  if (!pastedText) return { videoUrl: null, thumbnail: null, title: null };
 
   let videoUrl = null;
   let thumbnail = null;
+  let title = null;
+
+  // Support for new format: "Filename.mp4 | https://url | <iframe...>"
+  if (pastedText.includes(' | ')) {
+    const parts = pastedText.split(' | ');
+    if (parts.length >= 2) {
+      title = parts[0].trim().replace(/\.(mp4|mkv|avi|webm)$/i, '');
+      for (let i = 1; i < parts.length; i++) {
+        const urlMatch = parts[i].match(/(https?:\/\/[^\s"'<>]+)/i);
+        if (urlMatch) {
+          videoUrl = urlMatch[1];
+          break;
+        }
+      }
+    }
+  }
 
   // Check VOE HTML + Thumbnail code: <a href="https://voe.sx/ID"><img src="https://voe.sx/cache/ID_storyboard_L1.jpg"/></a>
   const voeHrefMatch = pastedText.match(/href\s*=\s*["']([^"']*(?:voe\.sx|voecdn\.com|caseyimpactstation\.com|launchreed\.com)[^"']*)["']/i);
@@ -304,20 +334,22 @@ export function extractVideoInfoFromPaste(pastedText) {
   }
 
   // Check iframe src inside pasted text
-  const iframeSrcMatch = pastedText.match(/<iframe[^>]*src\s*=\s*["'](https?:\/\/[^"']+)["']/i);
-  if (iframeSrcMatch) {
-    videoUrl = iframeSrcMatch[1];
-  } else if (pastedText.trim().match(/^https?:\/\/[^\s]+$/i)) {
-    videoUrl = pastedText.trim();
-  } else {
-    // Check if it has a simple src="..." as a fallback if not iframe
-    const srcMatch = pastedText.match(/src\s*=\s*["'](https?:\/\/[^"']+)["']/i);
-    if (srcMatch && !srcMatch[1].match(/\.(jpg|jpeg|png|webp|gif)$/i)) {
-      videoUrl = srcMatch[1];
+  if (!videoUrl) {
+    const iframeSrcMatch = pastedText.match(/<iframe[^>]*src\s*=\s*["'](https?:\/\/[^"']+)["']/i);
+    if (iframeSrcMatch) {
+      videoUrl = iframeSrcMatch[1];
+    } else if (pastedText.trim().match(/^https?:\/\/[^\s]+$/i)) {
+      videoUrl = pastedText.trim();
     } else {
-      const anyLinkMatch = pastedText.match(/(https?:\/\/[^\s"'<>]+)/i);
-      if (anyLinkMatch) {
-        videoUrl = anyLinkMatch[1];
+      // Check if it has a simple src="..." as a fallback if not iframe
+      const srcMatch = pastedText.match(/src\s*=\s*["'](https?:\/\/[^"']+)["']/i);
+      if (srcMatch && !srcMatch[1].match(/\.(jpg|jpeg|png|webp|gif)$/i)) {
+        videoUrl = srcMatch[1];
+      } else {
+        const anyLinkMatch = pastedText.match(/(https?:\/\/[^\s"'<>]+)/i);
+        if (anyLinkMatch) {
+          videoUrl = anyLinkMatch[1];
+        }
       }
     }
   }
@@ -332,7 +364,7 @@ export function extractVideoInfoFromPaste(pastedText) {
     }
   }
 
-  return { videoUrl, thumbnail };
+  return { videoUrl, thumbnail, title };
 }
 
 /**
