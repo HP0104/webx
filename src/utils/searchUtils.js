@@ -14,5 +14,7 @@ export const matchSearch = (text, query) => {
   const normText = normalizeString(text);
   const normQuery = normalizeString(query);
   if (!normQuery) return true;
-  return normText.includes(normQuery);
+  
+  const queryWords = normQuery.split(' ');
+  return queryWords.every(word => normText.includes(word));
 };
