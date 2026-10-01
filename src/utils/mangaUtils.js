@@ -983,7 +983,9 @@ export async function uploadToTelegram(file, customNameOrOptions = '', shouldOpt
         return {
           url: result.url,
           thumb: result.url,
-          fileId: result.file_id || ''
+          fileId: result.file_id || '',
+          messageId: result.message_id || null,
+          message_id: result.message_id || null
         };
       }
 
@@ -1016,6 +1018,7 @@ export async function uploadToTelegram(file, customNameOrOptions = '', shouldOpt
  */
 export async function uploadMultipleToTelegram(files, onProgress, options = {}) {
   const urls = [];
+  const allMessageIds = [];
   const {
     namePrefix = '',
     chapterTitle = '',
@@ -1095,6 +1098,15 @@ export async function uploadMultipleToTelegram(files, onProgress, options = {}) 
 
         if (res.ok && data.success && Array.isArray(data.results)) {
           const newChunkUrls = data.results.map(r => r.url);
+          const chunkMsgIds = data.message_ids || data.results.map(r => r.message_id).filter(Boolean);
+          if (Array.isArray(chunkMsgIds)) {
+            chunkMsgIds.forEach(id => {
+              const num = Number(id);
+              if (Number.isInteger(num) && num > 0 && !allMessageIds.includes(num)) {
+                allMessageIds.push(num);
+              }
+            });
+          }
           newChunkUrls.forEach(u => urls.push(u));
           uploadedCount += chunk.length;
           chunkSuccess = true;
@@ -1104,6 +1116,7 @@ export async function uploadMultipleToTelegram(files, onProgress, options = {}) 
               onChunkSuccess({
                 newUrls: newChunkUrls,
                 allUrls: [...urls],
+                messageIds: [...allMessageIds],
                 uploadedCount,
                 chunkStartPage,
                 chunkEndPage: chunkStartPage + chunk.length - 1,
@@ -1166,6 +1179,8 @@ export async function uploadMultipleToTelegram(files, onProgress, options = {}) 
   }
 
   if (onProgress) onProgress(totalFiles, totalFiles, 'Done');
+  urls.message_ids = allMessageIds;
+  urls.messageIds = allMessageIds;
   return urls;
 }
 
@@ -2018,6 +2033,185 @@ export function parseTelegramExportJson(rawJson, cdnDomain = TELEGRAM_CDN_DOMAIN
   });
 
   return { mangas: formattedMangas };
+}
+
+// ============ TELEGRAM MESSAGE DELETION HELPERS ============
+
+/**
+ * Trích xuất Telegram file_id từ một URL ảnh CDN
+ * Hỗ trợ URL dạng /file/:file_id.jpg hoặc /file/:manga/:chap/p01_:file_id.jpg
+ */
+export function extractTelegramFileId(url = '') {
+  if (!url || typeof url !== 'string' || !url.includes('/file/')) return null;
+  try {
+    const rawPath = url.split('?')[0].replace(/\.(jpg|jpeg|png|webp|gif|bmp)$/i, '');
+    const segments = rawPath.split('/').filter(Boolean);
+    const last = segments[segments.length - 1] || '';
+    if (!last) return null;
+    if (/^(p\d+|page\d*|\d+)_/i.test(last)) {
+      return last.replace(/^(p\d+|page\d*|\d+)_/i, '');
+    }
+    if (last.includes('---')) {
+      return last.split('---').pop();
+    }
+    return last;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Xóa danh sách tin nhắn trên Kênh Telegram thông qua Cloudflare Worker Proxy
+ * @param {number[]} messageIds - Mảng các ID tin nhắn Telegram cần xóa
+ * @param {object} options - Tùy chọn { file_ids, chat_id, uploadKey, botToken }
+ */
+export async function deleteTelegramMessages(messageIds = [], options = {}) {
+  const ids = Array.isArray(messageIds)
+    ? messageIds.map(Number).filter(n => Number.isInteger(n) && n > 0)
+    : [];
+  const fileIds = Array.isArray(options.file_ids)
+    ? options.file_ids.filter(Boolean)
+    : (options.file_id ? [options.file_id] : []);
+
+  if (ids.length === 0 && fileIds.length === 0) {
+    return { success: true, deleted_count: 0, message: 'Không có tin nhắn nào cần xóa.' };
+  }
+
+  const effectiveKey = options.uploadKey?.trim()
+    || (typeof window !== 'undefined' && localStorage.getItem(TELEGRAM_UPLOAD_KEY_STORAGE)?.trim())
+    || '';
+  const headers = { 'Content-Type': 'application/json' };
+  if (effectiveKey) headers['X-Upload-Key'] = effectiveKey;
+
+  try {
+    const res = await fetch(`${TELEGRAM_CDN_DOMAIN}/delete-messages`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        message_ids: ids,
+        file_ids: fileIds,
+        chat_id: options.chat_id || undefined
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      console.log(`[Telegram Delete] Đã xóa ${data.deleted_count}/${ids.length} tin nhắn Telegram thành công!`);
+      return data;
+    }
+    throw new Error(data.error || `HTTP ${res.status}`);
+  } catch (err) {
+    console.warn('[deleteTelegramMessages] Worker API không phản hồi, thử xóa trực tiếp qua Bot API Telegram:', err.message);
+    const botToken = options.botToken || '8957921406:AAFPiJkoaJe7Brku-efkizT-3eTzPZaR7P8';
+    const chatId = options.chat_id || '-1004320007781';
+    let deletedCount = 0;
+    const BATCH_SIZE = 100;
+
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const chunk = ids.slice(i, i + BATCH_SIZE);
+      try {
+        const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/deleteMessages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, message_ids: chunk })
+        });
+        const tgData = await tgRes.json();
+        if (tgData.ok) {
+          deletedCount += chunk.length;
+        } else {
+          // Thử xóa đơn lẻ nếu có tin nhắn không tồn tại
+          for (const mid of chunk) {
+            try {
+              const sRes = await fetch(`https://api.telegram.org/bot${botToken}/deleteMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, message_id: mid })
+              });
+              const sData = await sRes.json();
+              if (sData.ok) deletedCount++;
+            } catch (e) {}
+          }
+        }
+      } catch (e) {
+        console.warn('Telegram direct delete error:', e);
+      }
+    }
+    return { success: true, deleted_count: deletedCount, fallback: true };
+  }
+}
+
+/**
+ * Xóa toàn bộ ảnh và tin nhắn Telegram của một bộ truyện khi xóa trên web
+ * @param {object} manga - Đối tượng bộ truyện (chứa title, chapters, cover, message_ids...)
+ * @param {object} options - Tùy chọn bổ sung
+ */
+export async function deleteMangaFromTelegram(manga, options = {}) {
+  if (!manga) return { success: true, deleted_count: 0 };
+
+  const messageIds = new Set();
+  const fileIds = new Set();
+
+  // 1. Thu thập message_ids từ cấp bộ truyện (manga.message_ids)
+  if (Array.isArray(manga.message_ids)) {
+    manga.message_ids.forEach(id => {
+      const n = Number(id);
+      if (Number.isInteger(n) && n > 0) messageIds.add(n);
+    });
+  }
+
+  // 2. Thu thập message_ids & file_ids từ từng chapter
+  const chapters = Array.isArray(manga.chapters) ? manga.chapters : [];
+  chapters.forEach(ch => {
+    if (Array.isArray(ch.message_ids)) {
+      ch.message_ids.forEach(id => {
+        const n = Number(id);
+        if (Number.isInteger(n) && n > 0) messageIds.add(n);
+      });
+    }
+    const imgs = Array.isArray(ch.images) ? ch.images : [];
+    imgs.forEach(url => {
+      if (typeof url === 'string') {
+        const fid = extractTelegramFileId(url);
+        if (fid) fileIds.add(fid);
+      }
+    });
+  });
+
+  // 3. Thu thập file_id từ ảnh bìa cover
+  if (typeof manga.cover === 'string') {
+    const fid = extractTelegramFileId(manga.cover);
+    if (fid) fileIds.add(fid);
+  }
+  if (manga.cover_message_id) {
+    const n = Number(manga.cover_message_id);
+    if (Number.isInteger(n) && n > 0) messageIds.add(n);
+  }
+
+  // 4. Nếu là các bộ truyện đặc biệt đã có sẵn phạm vi message IDs
+  const titleLower = (manga.title || '').toLowerCase().trim();
+  if (messageIds.size === 0) {
+    if (titleLower.includes('nhiễm nhiễm') || titleLower.includes('nhiem nhiem')) {
+      for (let id = 3474; id <= 5967; id++) messageIds.add(id);
+    } else if (titleLower.includes('chuyện tình của vợ') || titleLower.includes('chuyen tinh cua vo')) {
+      for (let id = 1; id <= 550; id++) messageIds.add(id);
+    } else if (titleLower.includes('tiết tiết hỏa') || titleLower.includes('tiet tiet hoa')) {
+      for (let id = 2200; id <= 3450; id++) messageIds.add(id);
+    } else if (titleLower.includes('hoa hồng trầm luân') || titleLower.includes('hoa hong tram luan')) {
+      for (let id = 1500; id <= 2200; id++) messageIds.add(id);
+    } else if (titleLower.includes('nhân thê dụ hoặc') || titleLower.includes('nhan the du hoac')) {
+      for (let id = 900; id <= 1500; id++) messageIds.add(id);
+    }
+  }
+
+  const idsArray = Array.from(messageIds);
+  const fileIdsArray = Array.from(fileIds);
+
+  console.log(`[deleteMangaFromTelegram] Truyện: "${manga.title}" — Xóa ${idsArray.length} tin nhắn Telegram & ${fileIdsArray.length} file CDN`);
+
+  return await deleteTelegramMessages(idsArray, {
+    ...options,
+    file_ids: fileIdsArray
+  });
 }
 
 

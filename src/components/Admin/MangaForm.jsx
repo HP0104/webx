@@ -30,7 +30,9 @@ import {
   isSameChapter,
   findDuplicateChapters,
   parseTelegramCaption,
-  parseTelegramExportJson
+  parseTelegramExportJson,
+  deleteTelegramMessages,
+  extractTelegramFileId
 } from '../../utils/mangaUtils';
 
 function MangaForm({
@@ -285,14 +287,16 @@ function MangaForm({
           number: chapterNumber,
           title: ch.name,
           images: urls,
+          message_ids: urls.message_ids || [],
           createdAt: new Date().toISOString()
         });
       }
 
       setMangaData(prev => {
         const merged = [...(prev.chapters || []), ...addedChapters];
+        const allMsgIds = merged.flatMap(c => c.message_ids || []);
         const firstImg = !prev.cover && merged[0]?.images?.[0] ? merged[0].images[0] : prev.cover;
-        return { ...prev, chapters: merged, cover: firstImg };
+        return { ...prev, chapters: merged, cover: firstImg, message_ids: allMsgIds };
       });
 
       setParsedChapters([]);
@@ -641,6 +645,16 @@ function MangaForm({
     const bestCh = sorted[0];
     const removeIds = new Set(sorted.slice(1).map(c => c.id));
 
+    // Tự động xóa ảnh trên Telegram của các bản chapter trùng bị loại bỏ
+    const removedChapters = sorted.slice(1);
+    removedChapters.forEach(c => {
+      const msgIds = c.message_ids || [];
+      const fileIds = (c.images || []).map(extractTelegramFileId).filter(Boolean);
+      if (msgIds.length > 0 || fileIds.length > 0) {
+        deleteTelegramMessages(msgIds, { file_ids: fileIds }).catch(() => {});
+      }
+    });
+
     setMangaData(prev => {
       const updated = (prev.chapters || []).filter(c => !removeIds.has(c.id));
       return { ...prev, chapters: updated };
@@ -698,9 +712,22 @@ function MangaForm({
     if (groups.length === 0) return;
 
     const removeIds = new Set();
+    const chaptersToRemove = [];
     groups.forEach(g => {
       const sorted = [...g.chapters].sort((a, b) => (b.images?.length || 0) - (a.images?.length || 0));
-      sorted.slice(1).forEach(c => removeIds.add(c.id));
+      sorted.slice(1).forEach(c => {
+        removeIds.add(c.id);
+        chaptersToRemove.push(c);
+      });
+    });
+
+    // Xóa ảnh trên Telegram của các bản trùng lặp
+    chaptersToRemove.forEach(c => {
+      const msgIds = c.message_ids || [];
+      const fileIds = (c.images || []).map(extractTelegramFileId).filter(Boolean);
+      if (msgIds.length > 0 || fileIds.length > 0) {
+        deleteTelegramMessages(msgIds, { file_ids: fileIds }).catch(() => {});
+      }
     });
 
     setMangaData(prev => {
@@ -709,7 +736,7 @@ function MangaForm({
     });
 
     setDuplicateModal({ isOpen: false, duplicateGroups: [] });
-    alert(`🎉 Đã tự động dọn sạch ${removeIds.size} chapter trùng lặp!`);
+    alert(`🎉 Đã tự động dọn sạch ${removeIds.size} chapter trùng lặp (và giải phóng trên Telegram)!`);
   };
 
   // Đánh số lại toàn bộ chapters từ 1 -> N
@@ -979,13 +1006,15 @@ function MangaForm({
         number: chapterNumber,
         title: manualChapterTitle || `Chapter ${chapterNumber}`,
         images: urls,
+        message_ids: urls.message_ids || [],
         createdAt: new Date().toISOString()
       };
 
       setMangaData(prev => {
         const chapters = [...(prev.chapters || []), newChapter];
+        const allMsgIds = chapters.flatMap(c => c.message_ids || []);
         const firstImg = !prev.cover && urls[0] ? urls[0] : prev.cover;
-        return { ...prev, chapters, cover: firstImg };
+        return { ...prev, chapters, cover: firstImg, message_ids: allMsgIds };
       });
       setManualChapterTitle('');
       setUploadProgress(null);
@@ -1059,12 +1088,41 @@ function MangaForm({
   };
 
   // Delete chapter
-  const handleDeleteChapter = (chId) => {
-    if (!confirm('Xóa chapter này?')) return;
-    setMangaData(prev => ({
-      ...prev,
-      chapters: (prev.chapters || []).filter(c => c.id !== chId).map((c, i) => ({ ...c, number: i + 1 }))
-    }));
+  const handleDeleteChapter = async (chId) => {
+    const targetChapter = (mangaData.chapters || []).find(c => c.id === chId);
+    if (!targetChapter) return;
+
+    const hasTg = (targetChapter.message_ids && targetChapter.message_ids.length > 0) ||
+      (targetChapter.images && targetChapter.images.some(u => typeof u === 'string' && u.includes('takarvn.workers.dev')));
+
+    let confirmMsg = `Xóa chapter "${targetChapter.title || 'Chapter ' + targetChapter.number}"?`;
+    let deleteOnTg = false;
+    if (hasTg) {
+      if (confirm(`${confirmMsg}\n\n📡 Chapter này có ảnh lưu trên Telegram.\n\nBấm [OK] để xóa chapter VÀ XÓA LUÔN toàn bộ ảnh trên Telegram.\nBấm [Cancel] nếu muốn hủy bỏ.`)) {
+        deleteOnTg = true;
+      } else {
+        return;
+      }
+    } else {
+      if (!confirm(confirmMsg)) return;
+    }
+
+    if (deleteOnTg) {
+      const fileIds = (targetChapter.images || []).map(extractTelegramFileId).filter(Boolean);
+      deleteTelegramMessages(targetChapter.message_ids || [], { file_ids: fileIds }).catch(err => {
+        console.warn('Lỗi xóa chapter trên Telegram:', err);
+      });
+    }
+
+    setMangaData(prev => {
+      const filtered = (prev.chapters || []).filter(c => c.id !== chId).map((c, i) => ({ ...c, number: i + 1 }));
+      const allMsgIds = filtered.flatMap(c => c.message_ids || []);
+      return {
+        ...prev,
+        chapters: filtered,
+        message_ids: allMsgIds
+      };
+    });
   };
 
   // Toggle chapter expand

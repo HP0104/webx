@@ -47,8 +47,16 @@ function VideoForm({
   const handleUrlInput = (rawVal, preventDefaultEvent = null) => {
     const { videoUrl: extractedUrl, thumbnail, title } = extractVideoInfoFromPaste(rawVal);
     
-    const isRawEmbed = rawVal && (rawVal.trim().toLowerCase().startsWith('<iframe') || rawVal.trim().toLowerCase().startsWith('<script'));
-    const cleanUrl = isRawEmbed ? rawVal : (extractedUrl || rawVal);
+    const isScriptEmbed = rawVal && rawVal.trim().toLowerCase().startsWith('<script');
+    
+    let cleanUrl = rawVal;
+    if (extractedUrl && rawVal.trim().toLowerCase().startsWith('<iframe')) {
+      cleanUrl = extractedUrl;
+    } else if (isScriptEmbed) {
+      cleanUrl = rawVal;
+    } else {
+      cleanUrl = extractedUrl || rawVal;
+    }
 
     if (preventDefaultEvent && cleanUrl !== videoData.videoUrl) {
       preventDefaultEvent.preventDefault();
@@ -146,8 +154,16 @@ function VideoForm({
     e.preventDefault();
 
     const { videoUrl: extractedUrl, thumbnail: extractedThumb, title: extractedTitle } = extractVideoInfoFromPaste(videoData.videoUrl);
-    const isRawEmbed = videoData.videoUrl && (videoData.videoUrl.trim().toLowerCase().startsWith('<iframe') || videoData.videoUrl.trim().toLowerCase().startsWith('<script'));
-    const finalVideoUrl = isRawEmbed ? videoData.videoUrl.trim() : (extractedUrl || videoData.videoUrl).trim();
+    
+    const isScriptEmbed = videoData.videoUrl && videoData.videoUrl.trim().toLowerCase().startsWith('<script');
+    let finalVideoUrl = videoData.videoUrl ? videoData.videoUrl.trim() : '';
+    if (extractedUrl && finalVideoUrl.toLowerCase().startsWith('<iframe')) {
+      finalVideoUrl = extractedUrl;
+    } else if (isScriptEmbed) {
+      finalVideoUrl = finalVideoUrl;
+    } else {
+      finalVideoUrl = (extractedUrl || finalVideoUrl).trim();
+    }
 
     if (!videoData.title.trim()) return alert('Vui lòng nhập tên phim!');
     if (!finalVideoUrl) return alert('Vui lòng nhập link video!');

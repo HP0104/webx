@@ -174,16 +174,20 @@ function UserManager({ users = [], games = [] }) {
     }
   };
 
-  const handleToggleRole = async (userId, currentRole) => {
-    const nextRole = currentRole === 'uploader' ? 'user' : 'uploader';
-    const roleLabel = nextRole === 'uploader' ? 'Uploader (Người đăng video)' : 'Thành viên thường (User)';
-    if (!window.confirm(`Bạn có chắc muốn chuyển vai trò tài khoản này thành "${roleLabel}"?`)) {
+  const handleSetRole = async (userId, targetRole) => {
+    const roleLabels = {
+      admin: 'Quản Trị Viên (ADMIN)',
+      uploader: 'Người Đăng (UPLOADER)',
+      user: 'Thành Viên Thường (USER)'
+    };
+    const label = roleLabels[targetRole] || targetRole;
+    if (!window.confirm(`Bạn có chắc muốn đổi vai trò tài khoản này thành "${label}"?`)) {
       return;
     }
     try {
       const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, { role: nextRole });
-      alert('Đổi quyền thành công!');
+      await updateDoc(userRef, { role: targetRole });
+      alert(`Đổi quyền thành "${label}" thành công!`);
     } catch (error) {
       alert('Lỗi đổi quyền: ' + error.message);
     }
@@ -456,26 +460,33 @@ function UserManager({ users = [], games = [] }) {
                       {isEditingBalance ? 'Đóng nạp' : 'Nạp / Trừ'}
                     </button>
 
-                    {u.role !== 'admin' && (
-                      <button
-                        type="button"
-                        onClick={() => handleToggleRole(u.id, u.role)}
-                        className="btn btn-outline"
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <select
+                        value={u.role || 'user'}
+                        onChange={(e) => handleSetRole(u.id, e.target.value)}
+                        className="input-field select-field"
                         style={{
                           fontSize: '0.8rem',
-                          padding: '0.4rem 0.75rem',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                          borderColor: u.role === 'uploader' ? 'rgba(0, 210, 211, 0.4)' : 'var(--color-border)',
-                          color: u.role === 'uploader' ? '#00d2d3' : 'var(--color-text-muted)'
+                          padding: '0.35rem 0.6rem',
+                          height: 'auto',
+                          borderRadius: '6px',
+                          border: u.role === 'admin' 
+                            ? '1px solid #ff4757' 
+                            : (u.role === 'uploader' ? '1px solid #00d2d3' : '1px solid var(--color-border)'),
+                          color: u.role === 'admin' 
+                            ? '#ff4757' 
+                            : (u.role === 'uploader' ? '#00d2d3' : 'var(--color-text-muted)'),
+                          background: 'rgba(0,0,0,0.3)',
+                          cursor: 'pointer',
+                          fontWeight: 600
                         }}
-                        title={u.role === 'uploader' ? 'Chuyển về User thông thường' : 'Cấp quyền đăng video'}
+                        title="Đổi vai trò tài khoản (Admin / Uploader / User)"
                       >
-                        <Film size={14} />
-                        {u.role === 'uploader' ? 'Hạ quyền' : 'Cấp Uploader'}
-                      </button>
-                    )}
+                        <option value="user" style={{ color: '#fff', background: '#1a1d24' }}>👤 User</option>
+                        <option value="uploader" style={{ color: '#00d2d3', background: '#1a1d24' }}>🎬 Uploader</option>
+                        <option value="admin" style={{ color: '#ff4757', background: '#1a1d24' }}>🛡️ ADMIN</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 

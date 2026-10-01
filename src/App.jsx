@@ -31,6 +31,7 @@ import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './
 import { ADS_CONFIG } from './config/ads';
 import MobileBottomNav from './components/MobileBottomNav';
 import DMCABadge from './components/DMCABadge';
+import { deleteMangaFromTelegram } from './utils/mangaUtils';
 
 const AppContext = createContext();
 
@@ -561,8 +562,14 @@ function App() {
     }
   };
 
-  const deleteMangaFromStore = async (mangaId) => {
+  const deleteMangaFromStore = async (mangaId, mangaObj = null) => {
+    const targetManga = mangaObj || manga.find(m => m.id?.toString() === mangaId?.toString());
     setManga(prev => prev.filter(m => m.id.toString() !== mangaId.toString()));
+    if (targetManga) {
+      deleteMangaFromTelegram(targetManga).catch(error => {
+        console.warn('Lỗi khi xóa ảnh trên Telegram:', error);
+      });
+    }
     try {
       await deleteDoc(doc(db, 'manga', mangaId.toString()));
       return true;

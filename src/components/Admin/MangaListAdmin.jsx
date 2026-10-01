@@ -98,13 +98,22 @@ function MangaListAdmin({ mangaList = [], onEditClick, onDeleteClick }) {
                   <Edit3 size={14} />
                 </button>
                 <button
-                  onClick={() => {
-                    if (confirm(`Xóa truyện "${manga.title}"?`)) {
-                      onDeleteClick(manga.id);
+                  onClick={async () => {
+                    const hasTg = (manga.chapters || []).some(c => 
+                      (c.message_ids && c.message_ids.length > 0) ||
+                      (c.images && c.images.some(u => typeof u === 'string' && u.includes('takarvn.workers.dev')))
+                    ) || (manga.cover && typeof manga.cover === 'string' && manga.cover.includes('takarvn.workers.dev'));
+
+                    let confirmMsg = `Xóa truyện "${manga.title}"?`;
+                    if (hasTg) {
+                      confirmMsg += `\n\n📡 Chú ý: Bộ truyện này có ảnh lưu trữ trên Telegram. Khi xóa, toàn bộ ảnh và tin nhắn tương ứng trên Kênh Telegram sẽ được tự động xóa sạch!`;
+                    }
+                    if (confirm(confirmMsg)) {
+                      await onDeleteClick(manga.id, manga);
                     }
                   }}
                   style={{ background: 'rgba(255, 77, 79, 0.1)', border: '1px solid rgba(255, 77, 79, 0.2)', color: '#ff4d4f', padding: '0.4rem', borderRadius: '6px', cursor: 'pointer', display: 'flex' }}
-                  title="Xóa"
+                  title="Xóa truyện (và xóa luôn ảnh trên Telegram nếu có)"
                 >
                   <Trash2 size={14} />
                 </button>

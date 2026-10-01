@@ -194,12 +194,15 @@ export default {
             publicUrl = `${url.origin}/file/${mangaSlug}/${chapSlug}/${pagePart}_${fileId}.jpg`;
           }
 
+          const msgId = tgData.result.message_id || null;
           return new Response(JSON.stringify({
             success: true,
+            message_ids: msgId ? [msgId] : [],
             results: [{
               page: startPage,
               filename: file.name,
               file_id: fileId,
+              message_id: msgId,
               url: publicUrl
             }]
           }), {
@@ -254,6 +257,7 @@ export default {
         // tgData.result là mảng Message tương ứng với từng ảnh trong album
         const messages = tgData.result;
         const results = [];
+        const messageIds = [];
 
         messages.forEach((msg, idx) => {
           const currentPage = startPage + idx;
@@ -268,10 +272,15 @@ export default {
             publicUrl = `${url.origin}/file/${mangaSlug}/${chapSlug}/${pagePart}_${fileId}.jpg`;
           }
 
+          if (msg && msg.message_id) {
+            messageIds.push(msg.message_id);
+          }
+
           results.push({
             page: currentPage,
             filename: file ? file.name : `page_${currentPage}`,
             file_id: fileId,
+            message_id: msg?.message_id || null,
             url: publicUrl
           });
         });
@@ -279,6 +288,7 @@ export default {
         return new Response(JSON.stringify({
           success: true,
           count: results.length,
+          message_ids: messageIds,
           results
         }), {
           status: 200,
@@ -389,11 +399,13 @@ export default {
           publicUrl = `${url.origin}/file/${mangaSlug}/${chapSlug}/${pagePart}_${fileId}.jpg`;
         }
 
+        const singleMsgId = tgData.result.message_id || null;
         return new Response(
           JSON.stringify({
             success: true,
             filename: file.name,
             file_id: fileId,
+            message_id: singleMsgId,
             url: publicUrl,
             direct_url: `${url.origin}/file/${fileId}.jpg`,
             size: bestPhoto.file_size,
@@ -406,6 +418,108 @@ export default {
             headers: { "Content-Type": "application/json", ...corsHeaders }
           }
         );
+      } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
+      }
+    }
+
+    // =========================================================================
+    // 2.5 API XÓA TIN NHẮN / TRUYỆN TRÊN TELEGRAM: POST /delete-messages
+    // =========================================================================
+    if (request.method === "POST" && (url.pathname === "/delete-messages" || url.pathname === "/api/delete-messages" || url.pathname === "/delete" || url.pathname === "/api/delete")) {
+      const corsHeaders = getCorsHeaders(request);
+
+      if (UPLOAD_API_KEY) {
+        const clientKey = request.headers.get("X-Upload-Key") || "";
+        if (clientKey !== UPLOAD_API_KEY) {
+          return new Response(JSON.stringify({ error: "Unauthorized: API Key không hợp lệ" }), {
+            status: 401,
+            headers: { "Content-Type": "application/json", ...corsHeaders }
+          });
+        }
+      }
+
+      try {
+        const body = await request.json().catch(() => ({}));
+        const rawIds = Array.isArray(body.message_ids) ? body.message_ids : (body.message_id ? [body.message_id] : []);
+        const messageIds = rawIds.map(Number).filter(n => Number.isInteger(n) && n > 0);
+        const targetChatId = body.chat_id ? cleanChatId(body.chat_id) : CHAT_ID;
+        const fileIds = Array.isArray(body.file_ids) ? body.file_ids : (body.file_id ? [body.file_id] : []);
+
+        // Xóa Edge Cache của Cloudflare cho các file_id
+        if (fileIds.length > 0) {
+          const cache = caches.default;
+          for (const fid of fileIds) {
+            try {
+              await cache.delete(new Request(`${url.origin}/file/${fid}`, { method: "GET" }));
+            } catch (e) {}
+          }
+        }
+
+        if (messageIds.length === 0) {
+          return new Response(JSON.stringify({
+            success: true,
+            deleted_count: 0,
+            purged_cache_files: fileIds.length,
+            message: "Đã xóa bộ nhớ cache CDN nhưng không tìm thấy message_ids để xóa trên Telegram."
+          }), {
+            status: 200,
+            headers: { "Content-Type": "application/json", ...corsHeaders }
+          });
+        }
+
+        let deletedCount = 0;
+        const errors = [];
+        const BATCH_SIZE = 100;
+
+        // Xóa theo batch tối đa 100 message_ids (chuẩn deleteMessages của Telegram Bot API)
+        for (let i = 0; i < messageIds.length; i += BATCH_SIZE) {
+          const chunk = messageIds.slice(i, i + BATCH_SIZE);
+          try {
+            const tgRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteMessages`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: targetChatId,
+                message_ids: chunk
+              })
+            });
+            const tgData = await tgRes.json();
+            if (tgData.ok) {
+              deletedCount += chunk.length;
+            } else {
+              // Nếu batch lỗi (ví dụ có tin nhắn đã bị xóa trước đó), thử xóa đơn lẻ từng tin
+              errors.push({ batch: `${i + 1}-${i + chunk.length}`, error: tgData.description });
+              for (const mid of chunk) {
+                try {
+                  const sRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/deleteMessage`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ chat_id: targetChatId, message_id: mid })
+                  });
+                  const sData = await sRes.json();
+                  if (sData.ok) deletedCount++;
+                } catch (e) {}
+              }
+            }
+          } catch (err) {
+            errors.push({ batch: `${i + 1}-${i + chunk.length}`, error: err.message });
+          }
+        }
+
+        return new Response(JSON.stringify({
+          success: true,
+          deleted_count: deletedCount,
+          total_requested: messageIds.length,
+          purged_cache_files: fileIds.length,
+          errors
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), {
           status: 500,
