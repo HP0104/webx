@@ -75,7 +75,11 @@ function VideoForm({
 
   const handleTitlePaste = (e) => {
     const pasted = e.clipboardData.getData('text');
-    if (pasted.includes(' | ') && pasted.includes('http')) {
+    const isComboFormat = pasted.includes(' | ') && pasted.includes('http');
+    const isIframe = pasted.trim().toLowerCase().startsWith('<iframe');
+    const isUrl = pasted.trim().toLowerCase().startsWith('http');
+
+    if (isComboFormat || isIframe || isUrl) {
       e.preventDefault();
       handleUrlInput(pasted);
     }
