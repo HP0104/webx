@@ -1,18 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { User, Wallet, Gamepad2, Download, Save, Mail, Lock, ShieldCheck, ShoppingCart, Play } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { updatePassword, updateEmail } from 'firebase/auth';
-import { auth, db } from '../firebase';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { auth } from '../firebase';
 import { getGamePath } from '../utils/gameRoutes';
 import { formatOwnershipDate, getGameOwnership } from '../utils/ownership';
-import fluidPlayer from 'fluid-player';
-import 'fluid-player/src/css/fluidplayer.css';
 
 function Profile() {
-  const { user, balance, ownedGames, games, updateUserInfo, logout, claimAdFreeTime } = useAppContext();
+  const { user, balance, ownedGames, games, updateUserInfo, logout } = useAppContext();
   const [isEditing, setIsMenuOpen] = useState(false);
   const [formData, setFormData] = useState({
     username: user?.username || '',
@@ -22,145 +18,6 @@ function Profile() {
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
-  const [adMessage, setAdMessage] = useState(null);
-  const [claimHistory, setClaimHistory] = useState([]);
-  
-  const [showAdModal, setShowAdModal] = useState(false);
-  const showAdModalRef = useRef(showAdModal);
-  useEffect(() => { showAdModalRef.current = showAdModal; }, [showAdModal]);
-
-  const [isAutoPlay, setIsAutoPlay] = useState(false);
-  const isAutoPlayRef = useRef(isAutoPlay);
-  useEffect(() => { isAutoPlayRef.current = isAutoPlay; }, [isAutoPlay]);
-
-  const [adPlayKey, setAdPlayKey] = useState(0);
-
-  const videoPlayerRef = useRef(null);
-  const fluidPlayerInstance = useRef(null);
-  const [timeRemaining, setTimeRemaining] = useState(0);
-
-  useEffect(() => {
-    if (user?.adFreeUntil && Date.now() < user.adFreeUntil) {
-      const interval = setInterval(() => {
-        const remaining = Math.max(0, user.adFreeUntil - Date.now());
-        setTimeRemaining(remaining);
-        if (remaining === 0) clearInterval(interval);
-      }, 1000);
-      // init call
-      const initRemaining = Math.max(0, user.adFreeUntil - Date.now());
-      setTimeRemaining(initRemaining);
-      return () => clearInterval(interval);
-    } else {
-      setTimeRemaining(0);
-    }
-  }, [user?.adFreeUntil]);
-
-  const formatTime = (ms) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const m = Math.floor(totalSeconds / 60);
-    const s = totalSeconds % 60;
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-
-  useEffect(() => {
-    if (user?.id) {
-      const q = query(
-        collection(db, 'users', user.id, 'ad_claims'),
-        orderBy('claimedAt', 'desc'),
-        limit(5)
-      );
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const history = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setClaimHistory(history);
-      }, (err) => {
-        console.warn("Could not fetch ad claims:", err);
-      });
-      return () => unsubscribe();
-    }
-  }, [user?.id]);
-
-  const getRandomMinutes = () => {
-    const rand = Math.random() * 100;
-    // 3 phút: 40%, 4 phút: 30%, 5 phút: 15%, 6 phút: 10%, 7 phút: 5%
-    if (rand < 40) return 3;
-    if (rand < 70) return 4;
-    if (rand < 85) return 5;
-    if (rand < 95) return 6;
-    return 7;
-  };
-
-  useEffect(() => {
-    if (showAdModal && videoPlayerRef.current) {
-      fluidPlayerInstance.current = fluidPlayer(videoPlayerRef.current, {
-        layoutControls: {
-          controlsBarText: 'Video tài trợ sẽ giúp duy trì server, cảm ơn bạn!',
-          allowTheatre: false,
-          playPauseAnimation: false,
-          playButtonShowing: true,
-          fillToContainer: true,
-          autoPlay: true,
-          mute: false
-        },
-        vastOptions: {
-          allowVPAID: true,
-          adList: [
-            {
-              roll: 'preRoll',
-              vastTag: 'https://s.magsrv.com/v1/vast.php?idz=5997948'
-            }
-          ],
-          vastAdvanced: {
-            vastVideoEndedCallback: async () => {
-              const minutes = getRandomMinutes();
-              const success = await claimAdFreeTime(minutes);
-              if (success) {
-                setAdMessage({ type: 'success', text: `Chúc mừng! Bạn đã nhận được ${minutes} phút không quảng cáo!` });
-              } else {
-                setAdMessage({ type: 'error', text: 'Nhận thưởng thất bại. Có thể bạn đang gửi yêu cầu quá nhanh.' });
-              }
-              
-              if (isAutoPlayRef.current) {
-                // Đợi 2 giây rồi tự động mở video mới
-                setTimeout(() => {
-                  if (showAdModalRef.current) {
-                    setAdPlayKey(prev => prev + 1);
-                  }
-                }, 2000);
-              } else {
-                setShowAdModal(false);
-              }
-            },
-            noVastVideoCallback: () => {
-              setAdMessage({ type: 'error', text: 'Hệ thống tạm thời hết quảng cáo. Đang thử lại...' });
-              if (isAutoPlayRef.current) {
-                setTimeout(() => {
-                  if (showAdModalRef.current) {
-                    setAdPlayKey(prev => prev + 1);
-                  }
-                }, 5000);
-              } else {
-                setTimeout(() => {
-                  if (showAdModalRef.current) setShowAdModal(false);
-                }, 3000);
-              }
-            }
-          }
-        }
-      });
-      
-      const player = fluidPlayerInstance.current;
-    }
-
-    return () => {
-      if (fluidPlayerInstance.current) {
-        fluidPlayerInstance.current.destroy();
-        fluidPlayerInstance.current = null;
-      }
-    };
-  }, [showAdModal, adPlayKey]);
   
   const myGames = games
     .map(game => ({
@@ -300,91 +157,7 @@ function Profile() {
             )}
           </div>
 
-          {adMessage && (
-            <div className={`alert alert-${adMessage.type}`} style={{ marginTop: '1.5rem', marginBottom: '0' }}>
-              {adMessage.text}
-            </div>
-          )}
 
-          <div className="card" style={{ marginTop: '1.5rem', background: 'linear-gradient(135deg, rgba(235, 172, 38, 0.1), rgba(255, 255, 255, 0.05))', border: '1px solid rgba(235, 172, 38, 0.2)' }}>
-            <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text-light)', marginBottom: '1rem', fontSize: '1.2rem' }}>
-              🌟 Trải nghiệm VIP (Chặn Popup)
-            </h2>
-            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-              Xem một đoạn video ngắn để nhận ngẫu nhiên <strong style={{color: '#ebac26'}}>3 đến 7 phút</strong> loại bỏ hoàn toàn các popup ẩn khó chịu trên web. Số phút có thể cộng dồn!
-            </p>
-            <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: '1.5rem', fontStyle: 'italic' }}>
-              * Lưu ý: Tính năng này chặn 100% popup ẩn của WEB18P, nhưng không thể can thiệp vào popup nằm trong Trình phát video (như Doodstream, Streamtape...) vì đó là máy chủ bên thứ 3.
-            </div>
-            
-            {timeRemaining > 0 ? (
-              <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
-                <div style={{ color: 'var(--color-success)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Bạn đang trong thời gian ưu tiên</div>
-                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'var(--color-text-light)', fontFamily: 'monospace' }}>
-                  {formatTime(timeRemaining)}
-                </div>
-                <button 
-                  className="btn btn-outline" 
-                  style={{ width: '100%', justifyContent: 'center', marginTop: '1rem', borderColor: 'var(--color-success)', color: 'var(--color-success)' }}
-                  onClick={() => setShowAdModal(true)}
-                >
-                  <Play size={16} /> Xem tiếp để cộng dồn
-                </button>
-              </div>
-            ) : (
-              <button 
-                className="btn btn-primary" 
-                style={{ width: '100%', justifyContent: 'center', backgroundColor: '#ebac26', color: '#000', border: 'none', fontWeight: 'bold' }}
-                onClick={() => setShowAdModal(true)}
-              >
-                <Play size={18} fill="#000" /> Xem Video Nhận Thưởng
-              </button>
-            )}
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', backgroundColor: 'rgba(0,0,0,0.2)', padding: '0.8rem 1rem', borderRadius: '8px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '0.8rem', width: '100%' }}>
-                <div style={{ position: 'relative', width: '40px', height: '22px' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={isAutoPlay} 
-                    onChange={(e) => setIsAutoPlay(e.target.checked)}
-                    style={{ opacity: 0, width: 0, height: 0 }}
-                  />
-                  <span style={{
-                    position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: isAutoPlay ? '#ebac26' : 'rgba(255,255,255,0.2)',
-                    transition: '.4s', borderRadius: '34px'
-                  }}>
-                    <span style={{
-                      position: 'absolute', content: '""', height: '16px', width: '16px', left: '3px', bottom: '3px',
-                      backgroundColor: 'white', transition: '.4s', borderRadius: '50%',
-                      transform: isAutoPlay ? 'translateX(18px)' : 'translateX(0)'
-                    }}></span>
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ color: 'var(--color-text-light)', fontSize: '0.95rem', fontWeight: 'bold' }}>Tự động xem tiếp</span>
-                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>Treo máy kiếm giờ liên tục không cần bấm tay</span>
-                </div>
-              </label>
-            </div>
-
-            {claimHistory.length > 0 && (
-              <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                <h3 style={{ fontSize: '0.9rem', color: 'var(--color-text-light)', marginBottom: '1rem' }}>Lịch sử nhận gần đây:</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {claimHistory.map(record => (
-                    <div key={record.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.8rem', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '6px', fontSize: '0.85rem' }}>
-                      <span style={{ color: 'var(--color-text-muted)' }}>
-                        {record.claimedAt?.toDate ? new Date(record.claimedAt.toDate()).toLocaleString('vi-VN') : 'Đang xử lý...'}
-                      </span>
-                      <span style={{ color: '#ebac26', fontWeight: 'bold' }}>+{record.minutes} phút</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="card">
@@ -534,69 +307,6 @@ function Profile() {
         </div>
       </div>
 
-      {showAdModal && createPortal(
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.95)',
-          zIndex: 9999999,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '2rem'
-        }}>
-          {adMessage && (
-            <div className={`alert alert-${adMessage.type}`} style={{ position: 'absolute', top: '2rem', left: '50%', transform: 'translateX(-50%)', zIndex: 100, minWidth: '300px', textAlign: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
-              {adMessage.text}
-            </div>
-          )}
-          {isAutoPlay && (
-             <div style={{ position: 'absolute', top: '1rem', left: '1rem', zIndex: 10, background: 'rgba(235, 172, 38, 0.2)', color: '#ebac26', padding: '0.5rem 1rem', borderRadius: '8px', fontWeight: 'bold', border: '1px solid rgba(235, 172, 38, 0.5)' }}>
-               ⚡ Đang bật Tự động Phát
-             </div>
-          )}
-          <div key={adPlayKey} style={{ 
-            width: '100%', 
-            maxWidth: '900px', 
-            position: 'relative',
-            backgroundColor: '#000',
-            borderRadius: '12px',
-            overflow: 'hidden',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
-          }}>
-            <button 
-              onClick={() => {
-                if(window.confirm('Bạn sẽ không nhận được phần thưởng nếu đóng quảng cáo giữa chừng! Bạn chắc chứ?')) {
-                  setShowAdModal(false);
-                }
-              }} 
-              style={{
-                position: 'absolute',
-                top: '1rem',
-                right: '1rem',
-                zIndex: 10,
-                background: 'rgba(255,255,255,0.2)',
-                border: 'none',
-                color: 'white',
-                padding: '0.5rem 1rem',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                backdropFilter: 'blur(4px)'
-              }}
-            >
-              Đóng
-            </button>
-            {/* Thẻ video rỗng không có src để khi VAST kết thúc, nó trigger luôn ended */}
-            <video ref={videoPlayerRef} style={{ width: '100%', height: '100%', aspectRatio: '16/9' }}></video>
-          </div>
-          <div style={{ marginTop: '1.5rem', color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>
-            Vui lòng xem hết (các) video để nhận thưởng... <br/>
-            <span style={{fontSize: '0.8rem', opacity: 0.7}}>Hệ thống có thể phát tự động 2-3 lần liên tục.</span>
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }

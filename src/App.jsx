@@ -413,38 +413,7 @@ function App() {
     }
   };
 
-  const claimAdFreeTime = async (minutes) => {
-    if (!user) return false;
-    const nowMs = Date.now();
-    const currentAdFree = user.adFreeUntil || 0;
-    const newAdFree = Math.max(nowMs, currentAdFree) + (minutes * 60 * 1000);
-    
-    // We update using updateDoc to bypass updateUserInfo's merge, but updateUserInfo is also fine.
-    try {
-      const userRef = doc(db, 'users', user.id);
-      const updates = {
-        adFreeUntil: newAdFree,
-        lastAdClaimed: nowMs
-      };
-      await updateDoc(userRef, updates);
-      
-      // Ghi lịch sử nhận thưởng
-      try {
-        await addDoc(collection(db, 'users', user.id, 'ad_claims'), {
-          minutes: minutes,
-          claimedAt: serverTimestamp()
-        });
-      } catch (histErr) {
-        console.warn("Could not save claim history:", histErr);
-      }
 
-      setUser(prev => ({ ...prev, ...updates }));
-      return true;
-    } catch (error) {
-      console.error("Lỗi khi cộng giờ vàng (có thể do Firebase Rules hoặc lỗi mạng):", error);
-      return false;
-    }
-  };
 
   const addGameToStore = async (newGame) => {
     const gameId = Date.now().toString();
@@ -593,7 +562,7 @@ function App() {
 
   return (
     <AppContext.Provider value={{
-      user, balance, ownedGames, logout, buyGame, updateUserInfo, claimAdFreeTime,
+      user, balance, ownedGames, logout, buyGame, updateUserInfo,
       games, loadingGames, addGameToStore, deleteGameFromStore, updateGameInStore,
       videos, loadingVideos, addVideoToStore, deleteVideoFromStore, updateVideoInStore,
       manga, loadingManga, addMangaToStore, deleteMangaFromStore, updateMangaInStore
