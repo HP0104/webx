@@ -230,6 +230,17 @@ function VideoDetail() {
     }
   }, [video?.id]);
 
+  // Auto-hide iframe loading spinner after 5 seconds to prevent permanent block
+  useEffect(() => {
+    let timer;
+    if (iframeLoading) {
+      timer = setTimeout(() => {
+        setIframeLoading(false);
+      }, 5000);
+    }
+    return () => clearTimeout(timer);
+  }, [iframeLoading]);
+
   // Vô hiệu hóa popup quảng cáo (popunder) khi đang ở trang xem video
   useEffect(() => {
     window.disablePopunder = true;
@@ -439,7 +450,8 @@ function VideoDetail() {
                             left: 0,
                             width: '100%',
                             height: '100%',
-                            backgroundColor: '#0d1117',
+                            backgroundColor: 'rgba(13, 17, 23, 0.6)',
+                            pointerEvents: 'none',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
@@ -449,7 +461,7 @@ function VideoDetail() {
                             color: 'var(--color-text-light)'
                           }}>
                             <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
-                            <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Đang kết nối luồng phát video...</span>
+                            <span style={{ fontSize: '0.9rem', color: 'var(--color-text-light)', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Đang tải luồng phát video...</span>
                           </div>
                         )}
                         <iframe
@@ -490,7 +502,8 @@ function VideoDetail() {
                   left: 0,
                   width: '100%',
                   height: '100%',
-                  backgroundColor: '#0d1117',
+                  backgroundColor: 'rgba(13, 17, 23, 0.6)',
+                  pointerEvents: 'none',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -500,7 +513,7 @@ function VideoDetail() {
                   color: 'var(--color-text-light)'
                 }}>
                   <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
-                  <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Đang kết nối luồng phát video...</span>
+                  <span style={{ fontSize: '0.9rem', color: 'var(--color-text-light)', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Đang tải luồng phát video...</span>
                 </div>
               )}
               <iframe
