@@ -5,6 +5,7 @@ import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
 import VideoCardItem from '../components/VideoCardItem';
 import Pagination from '../components/Pagination';
+import { matchSearch } from '../utils/searchUtils';
 
 function Category() {
   const { categoryType } = useParams();
@@ -37,16 +38,16 @@ function Category() {
     const lowerQuery = searchQuery.toLowerCase();
     
     const gameMatches = games.filter(g => 
-      g.title?.toLowerCase().includes(lowerQuery) || 
-      g.developer?.toLowerCase().includes(lowerQuery) ||
-      (Array.isArray(g.tags) ? g.tags : []).some(t => t.toLowerCase().includes(lowerQuery)) ||
-      g.description?.toLowerCase().includes(lowerQuery)
+      matchSearch(g.title, searchQuery) || 
+      matchSearch(g.developer, searchQuery) ||
+      (Array.isArray(g.tags) ? g.tags : []).some(t => matchSearch(t, searchQuery)) ||
+      matchSearch(g.description, searchQuery)
     ).map(g => ({ ...g, itemType: 'game' }));
 
     const videoMatches = videos.filter(v => 
-      v.title?.toLowerCase().includes(lowerQuery) || 
-      v.description?.toLowerCase().includes(lowerQuery) ||
-      (Array.isArray(v.tags) ? v.tags : []).some(t => t.toLowerCase().includes(lowerQuery))
+      matchSearch(v.title, searchQuery) || 
+      matchSearch(v.description, searchQuery) ||
+      (Array.isArray(v.tags) ? v.tags : []).some(t => matchSearch(t, searchQuery))
     ).map(v => ({ ...v, itemType: 'video' }));
 
     filteredGames = [...gameMatches, ...videoMatches];

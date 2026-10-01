@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Wallet, User, LogOut, ShieldAlert, Menu, X, ChevronDown, Search, Film } from 'lucide-react';
 import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
+import { matchSearch } from '../utils/searchUtils';
 
 function Navbar() {
   const { user, logout, balance, games, videos = [], manga = [] } = useAppContext();
@@ -209,17 +210,17 @@ function Navbar() {
             
             {(() => {
               const gameMatches = games.filter(g => 
-                g.title?.toLowerCase().includes(navSearch.toLowerCase()) ||
-                g.developer?.toLowerCase().includes(navSearch.toLowerCase())
+                matchSearch(g.title, navSearch) ||
+                matchSearch(g.developer, navSearch)
               ).map(g => ({ ...g, itemType: 'game' }));
 
               const videoMatches = videos.filter(v => 
-                v.title?.toLowerCase().includes(navSearch.toLowerCase())
+                matchSearch(v.title, navSearch)
               ).map(v => ({ ...v, itemType: 'video' }));
 
               const mangaMatches = manga.filter(m => 
-                m.title?.toLowerCase().includes(navSearch.toLowerCase()) ||
-                m.author?.toLowerCase().includes(navSearch.toLowerCase())
+                matchSearch(m.title, navSearch) ||
+                matchSearch(m.author, navSearch)
               ).map(m => ({ ...m, itemType: 'manga' }));
 
               const matches = [...gameMatches, ...videoMatches, ...mangaMatches].slice(0, 6);
