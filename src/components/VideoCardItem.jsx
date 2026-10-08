@@ -1,8 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Eye, Calendar, Tag, Film } from 'lucide-react';
-import { getVideoThumbnail } from '../pages/VideoDetail';
-import { toEmbedUrl } from '../utils/videoUtils';
+import { getVideoThumbnail, toEmbedUrl } from '../utils/videoUtils';
 
 export default function VideoCardItem({ video }) {
   const rawUrl = video.videoUrl || video.streamtapeUrl;

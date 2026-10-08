@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film } from 'lucide-react';
-import { getVideoThumbnail } from './VideoDetail';
-import { toEmbedUrl } from '../utils/videoUtils';
 import Pagination from '../components/Pagination';
 
 const CATEGORY_LABELS = {
