@@ -92,15 +92,20 @@ export default function VideoCardItem({ video }) {
             </span>
           )}
         </div>
-        {video.tags && video.tags.length > 0 && (
-          <div className="video-card-tags">
-            {video.tags.slice(0, 3).map((tag, idx) => (
-              <span key={idx} className="video-card-tag">
-                <Tag size={10} /> {tag}
-              </span>
-            ))}
-          </div>
-        )}
+        {(() => {
+          const tagsArray = Array.isArray(video.tags) 
+            ? video.tags 
+            : (typeof video.tags === 'string' ? video.tags.split(',').map(t => t.trim()) : []);
+          return tagsArray.length > 0 ? (
+            <div className="video-card-tags">
+              {tagsArray.slice(0, 3).map((tag, idx) => (
+                <span key={idx} className="video-card-tag">
+                  <Tag size={10} /> {tag}
+                </span>
+              ))}
+            </div>
+          ) : null;
+        })()}
       </div>
     </Link>
   );
