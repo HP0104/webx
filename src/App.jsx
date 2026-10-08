@@ -31,6 +31,7 @@ import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './
 import { ADS_CONFIG } from './config/ads';
 import MobileBottomNav from './components/MobileBottomNav';
 import DMCABadge from './components/DMCABadge';
+import ErrorBoundary from './components/ErrorBoundary';
 import { deleteMangaFromTelegram } from './utils/mangaUtils';
 
 const AppContext = createContext();
@@ -176,25 +177,27 @@ function AppContent({ user }) {
 
       <div className={`app-layout ${isMangaReaderRoute ? 'app-layout-full' : ''}`} style={{ paddingTop: '1rem' }}>
         <main className={`main-content ${isMangaReaderRoute ? 'main-content-full' : ''}`}>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/category/:categoryType" element={<Category />} />
-            <Route path="/games" element={<Category />} />
-            <Route path="/game/:gameSlug" element={<GameDetail />} />
-            <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
-            <Route path="/wallet" element={user ? <Wallet /> : <Navigate to="/auth" />} />
-            <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
-            <Route path="/admin" element={user?.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
-            <Route path="/uploader" element={(user?.role === 'uploader' || user?.role === 'admin') ? <UploaderDashboard /> : <Navigate to={user ? "/" : "/auth"} />} />
-            <Route path="/blog" element={<Blog />} />
-            <Route path="/report" element={<Report />} />
-            <Route path="/ai-search" element={<GameSearch />} />
-            <Route path="/videos/:category" element={<Videos />} />
-            <Route path="/video/:videoId" element={<VideoDetail />} />
-            <Route path="/manga" element={<MangaList />} />
-            <Route path="/manga/:mangaId" element={<MangaDetail />} />
-            <Route path="/manga/:mangaId/chapter/:chapterId" element={<MangaReader />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/category/:categoryType" element={<Category />} />
+              <Route path="/games" element={<Category />} />
+              <Route path="/game/:gameSlug" element={<GameDetail />} />
+              <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
+              <Route path="/wallet" element={user ? <Wallet /> : <Navigate to="/auth" />} />
+              <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
+              <Route path="/admin" element={user?.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
+              <Route path="/uploader" element={(user?.role === 'uploader' || user?.role === 'admin') ? <UploaderDashboard /> : <Navigate to={user ? "/" : "/auth"} />} />
+              <Route path="/blog" element={<Blog />} />
+              <Route path="/report" element={<Report />} />
+              <Route path="/ai-search" element={<GameSearch />} />
+              <Route path="/videos/:category" element={<Videos />} />
+              <Route path="/video/:videoId" element={<VideoDetail />} />
+              <Route path="/manga" element={<MangaList />} />
+              <Route path="/manga/:mangaId" element={<MangaDetail />} />
+              <Route path="/manga/:mangaId/chapter/:chapterId" element={<MangaReader />} />
+            </Routes>
+          </ErrorBoundary>
 
           {!isMangaReaderRoute && (
             <div className="container" style={{ paddingTop: 0, marginTop: '2rem' }}>

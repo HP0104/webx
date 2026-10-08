@@ -111,6 +111,7 @@ function VideoDetail() {
 
     // Hàm lấy tên gốc và số tập ở cuối
     const extractInfo = (title) => {
+      if (!title || typeof title !== 'string') return { baseName: '', epNumber: null };
       const match = title.match(/^(.*?)(?:\s*(?:tập|phần|part|ep|t)?\s*(\d+))\s*$/i);
       if (match) {
         return {
@@ -124,7 +125,7 @@ function VideoDetail() {
     const { baseName: currentBaseName, epNumber: currentEpNumber } = extractInfo(video.title);
 
     // Tách các từ trong tiêu đề video hiện tại (độ dài > 2 để bỏ qua từ nối ngắn)
-    const currentTitleWords = video.title.toLowerCase().match(/[\p{L}\d]+/gu) || [];
+    const currentTitleWords = (typeof video.title === 'string' ? video.title : '').toLowerCase().match(/[\p{L}\d]+/gu) || [];
     const significantWords = currentTitleWords.filter(w => w.length > 2);
 
     // Tính điểm cho các video khác dựa trên số từ trùng khớp và cùng series
@@ -151,7 +152,7 @@ function VideoDetail() {
         }
       }
 
-      const vTitleWords = v.title.toLowerCase().match(/[\p{L}\d]+/gu) || [];
+      const vTitleWords = (typeof v.title === 'string' ? v.title : '').toLowerCase().match(/[\p{L}\d]+/gu) || [];
       const vSignificantWords = vTitleWords.filter(w => w.length > 2);
 
       // Đếm số từ trùng lặp (dùng làm điểm phụ nếu không phải cùng series)
@@ -634,15 +635,22 @@ function VideoDetail() {
           )}
         </div>
 
-        {video.tags && video.tags.length > 0 && (
-          <div className="video-detail-tags">
-            {video.tags.map((tag, idx) => (
-              <span key={idx} className="video-card-tag">
-                <Tag size={11} /> {tag}
-              </span>
-            ))}
-          </div>
-        )}
+        {(() => {
+          const tagsList = Array.isArray(video.tags)
+            ? video.tags
+            : (typeof video.tags === 'string'
+                ? video.tags.split(',').map(t => t.trim()).filter(Boolean)
+                : []);
+          return tagsList.length > 0 ? (
+            <div className="video-detail-tags">
+              {tagsList.map((tag, idx) => (
+                <span key={idx} className="video-card-tag">
+                  <Tag size={11} /> {tag}
+                </span>
+              ))}
+            </div>
+          ) : null;
+        })()}
 
         {video.description && (
           <div className="video-detail-description">

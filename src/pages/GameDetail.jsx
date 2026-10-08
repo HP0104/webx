@@ -73,9 +73,9 @@ function GameDetail() {
             <h1 style={{ color: 'var(--color-text-light)', fontSize: '2.5rem', marginBottom: '1rem' }}>{game.title}</h1>
             
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-              {game.tags && (Array.isArray(game.tags) ? game.tags : game.tags.split(',')).map(tag => (
-                <span key={tag} style={{ fontSize: '0.9rem', padding: '0.3rem 0.8rem', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '2px', color: 'var(--color-text-muted)' }}>
-                  {tag.trim()}
+              {game.tags && (Array.isArray(game.tags) ? game.tags : (typeof game.tags === 'string' ? game.tags.split(',') : [])).map((tag, idx) => (
+                <span key={idx} style={{ fontSize: '0.9rem', padding: '0.3rem 0.8rem', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '2px', color: 'var(--color-text-muted)' }}>
+                  {typeof tag === 'string' ? tag.trim() : tag}
                 </span>
               ))}
             </div>

@@ -139,7 +139,7 @@ function Home() {
                     />
                     <div className="game-badge">
                       <Gamepad2 size={14} />
-                      <span>{game.tags?.[0] || 'Game'}</span>
+                      <span>{(Array.isArray(game.tags) ? game.tags[0] : (typeof game.tags === 'string' ? game.tags.split(',')[0]?.trim() : '')) || 'Game'}</span>
                     </div>
                     <div className="game-overlay">
                       <div className="game-overlay-content">

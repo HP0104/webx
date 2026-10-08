@@ -23,6 +23,13 @@ function Category() {
   let title = 'Kho Game';
   let filteredGames = [...games];
 
+  // Helper to safely extract tags array from either Array or comma-delimited string
+  const parseTags = (tags) => {
+    if (Array.isArray(tags)) return tags.filter(Boolean);
+    if (typeof tags === 'string') return tags.split(',').map(t => t.trim()).filter(Boolean);
+    return [];
+  };
+
   // Helper to parse DD/MM/YYYY or YYYY-MM-DD to a Comparable Date Object
   const parseDate = (dateStr) => {
     if (!dateStr) return new Date(0);
@@ -40,14 +47,14 @@ function Category() {
     const gameMatches = games.filter(g => 
       matchSearch(g.title, searchQuery) || 
       matchSearch(g.developer, searchQuery) ||
-      (Array.isArray(g.tags) ? g.tags : []).some(t => matchSearch(t, searchQuery)) ||
+      parseTags(g.tags).some(t => matchSearch(t, searchQuery)) ||
       matchSearch(g.description, searchQuery)
     ).map(g => ({ ...g, itemType: 'game' }));
 
     const videoMatches = videos.filter(v => 
       matchSearch(v.title, searchQuery) || 
       matchSearch(v.description, searchQuery) ||
-      (Array.isArray(v.tags) ? v.tags : []).some(t => matchSearch(t, searchQuery))
+      parseTags(v.tags).some(t => matchSearch(t, searchQuery))
     ).map(v => ({ ...v, itemType: 'video' }));
 
     filteredGames = [...gameMatches, ...videoMatches];
@@ -58,7 +65,7 @@ function Category() {
         title = categoryType === 'hot' ? 'GAME HOT' : 'GAME 18+';
         filteredGames = categoryType === 'hot'
           ? filteredGames.sort((a, b) => (b.views || 0) - (a.views || 0))
-          : filteredGames.filter(g => g.is18Plus || g.is18Vn || g.is18Uncensored || g.is18Pc || g.is18Android || g.tags?.some(t => ['Mature', '18+'].includes(t)));
+          : filteredGames.filter(g => g.is18Plus || g.is18Vn || g.is18Uncensored || g.is18Pc || g.is18Android || parseTags(g.tags).some(t => ['Mature', '18+'].includes(t)));
         break;
       case 'new':
         title = 'GAME MỚI NHẤT';
@@ -77,7 +84,7 @@ function Category() {
         break;
       case '18-all':
         title = 'TẤT CẢ GAME 18+';
-        filteredGames = filteredGames.filter(g => g.is18Plus || g.is18Vn || g.is18Uncensored || g.is18Pc || g.is18Android || g.tags?.some(t => ['Mature', '18+'].includes(t)));
+        filteredGames = filteredGames.filter(g => g.is18Plus || g.is18Vn || g.is18Uncensored || g.is18Pc || g.is18Android || parseTags(g.tags).some(t => ['Mature', '18+'].includes(t)));
         break;
       case '18-vn':
         title = 'VIỆT HÓA 18+';
@@ -222,7 +229,7 @@ function Category() {
                           {game.downloads.toLocaleString('vi-VN')} lượt tải
                         </span>
                       )}
-                      {game.tags?.slice(0, 2).map((tag, idx) => (
+                      {parseTags(game.tags).slice(0, 2).map((tag, idx) => (
                         <span key={idx} style={{ fontSize: '0.7rem', background: 'rgba(255,255,255,0.05)', color: 'var(--color-text-muted)', padding: '0.15rem 0.4rem', borderRadius: '4px', border: '1px solid var(--color-border)' }}>
                           {tag}
                         </span>
