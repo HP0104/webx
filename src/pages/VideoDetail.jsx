@@ -320,10 +320,10 @@ function VideoDetail() {
       const iframe = doc.querySelector('iframe');
       if (iframe && iframe.src) {
         let src = iframe.src;
-        if (currentServer === 'server2' && src.includes('hgcloud.to')) {
-          src = src.replace('hgcloud.to', 'vibuxer.com');
-        } else if (currentServer === 'server1' && src.includes('vibuxer.com')) {
-          src = src.replace('vibuxer.com', 'hgcloud.to');
+        if (currentServer === 'server2') {
+          src = src.replace('hgcloud.to', 'vibuxer.com').replace('streamhg.com', 'vibuxer.com').replace('huntrexus.com', 'vibuxer.com');
+        } else if (currentServer === 'server1') {
+          src = src.replace('vibuxer.com', 'hgcloud.to').replace('streamhg.com', 'hgcloud.to').replace('huntrexus.com', 'hgcloud.to');
         }
         effectiveIframeSrc = src;
       }

@@ -188,7 +188,7 @@ export async function uploadVideoToStreamHG(file, onProgress, targetFolderName =
               resolve({
                 filecode: filecode,
                 fn: res.filename || res.fn || file.name,
-                embedUrl: `https://streamhg.com/e/${filecode}`,
+                embedUrl: `https://hgcloud.to/e/${filecode}`,
                 thumbnailUrl: `https://huntrexus.com/${filecode}.jpg`,
                 directUrl: `https://streamhg.com/${filecode}.html`
               });
@@ -244,7 +244,7 @@ export async function remoteUploadUrlToStreamHG(videoUrl, targetFolderName = TAR
     const filecode = data.result.filecode;
     return {
       filecode,
-      embedUrl: `https://streamhg.com/e/${filecode}`,
+      embedUrl: `https://hgcloud.to/e/${filecode}`,
       thumbnailUrl: `https://huntrexus.com/${filecode}.jpg`,
       directUrl: `https://streamhg.com/${filecode}.html`
     };

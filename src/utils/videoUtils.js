@@ -86,8 +86,13 @@ export function parseVideoUrl(input) {
   // 3. Filemoon / StreamHG variants (filemoon.sx, filemoon.to, fmoonembed.com, hgcloud.to, streamhg.com, vibuxer.com, etc.)
   const fmMatch = url.match(/(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9.-]*(?:filemoon|fmoonembed|fmoon|hgcloud|vibuxer|streamhg|hgstream|huntrexus)[a-zA-Z0-9.-]*)\/(?:(?:d|e|v|download)\/)?([a-zA-Z0-9_-]+)/i);
   if (fmMatch) {
-    const domain = fmMatch[1];
+    let domain = fmMatch[1];
     const id = fmMatch[2];
+    // StreamHG blocks /e/ embeds on streamhg.com and huntrexus.com with 403 Forbidden.
+    // The active, working player embed domain for StreamHG is hgcloud.to.
+    if (domain.includes('streamhg') || domain.includes('huntrexus') || domain.includes('hgstream')) {
+      domain = 'hgcloud.to';
+    }
     return {
       provider: 'filemoon',
       domain,
@@ -222,9 +227,9 @@ export function getAlternateEmbedUrl(url, server = 'server1') {
     if (server === 'server2') {
       return `https://vibuxer.com/e/${parsed.id}`;
     }
-    // Default Server 1: use hgcloud.to or original domain
-    const domain = (parsed.domain && parsed.domain.includes('vibuxer')) ? 'hgcloud.to' : (parsed.domain || 'hgcloud.to');
-    return `https://${domain}/e/${parsed.id}`;
+    // Default Server 1 (HGCloud): Always use hgcloud.to as primary embed server
+    // (streamhg.com and huntrexus.com reject embeds with 403 Forbidden)
+    return `https://hgcloud.to/e/${parsed.id}`;
   }
 
   return parsed.embedUrl || url;
