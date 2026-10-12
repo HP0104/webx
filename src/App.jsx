@@ -175,7 +175,10 @@ function AppContent({ user }) {
         </div>
       )}
 
-      <div className={`app-layout ${isMangaReaderRoute ? 'app-layout-full' : ''}`} style={{ paddingTop: '1rem' }}>
+      <div
+        className={`app-layout ${isMangaReaderRoute ? 'app-layout-full' : ''}`}
+        style={isMangaReaderRoute ? { padding: 0, margin: 0, width: '100%', maxWidth: '100%' } : { paddingTop: '1rem' }}
+      >
         <main className={`main-content ${isMangaReaderRoute ? 'main-content-full' : ''}`}>
           <ErrorBoundary>
             <Routes>

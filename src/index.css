@@ -83,14 +83,18 @@ a {
 }
 
 .app-layout.app-layout-full {
-  max-width: 1720px;
-  padding: 1rem 1.5rem;
-  gap: 0;
+  max-width: 100% !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  gap: 0 !important;
 }
 
 .main-content.main-content-full {
-  width: 100%;
-  max-width: 100%;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 .sidebar {
@@ -4457,7 +4461,8 @@ a {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  padding: 1rem 0;
+  padding: 0;
+  width: 100%;
 }
 
 .manga-reader-page {
@@ -4474,30 +4479,17 @@ a {
   display: block;
 }
 
-.manga-reader-page.is-zoomed {
-  overflow: visible;
-  z-index: 50;
-}
-
 .manga-reader-page-img {
   width: 100%;
   max-width: 100%;
   height: auto;
   display: block;
   opacity: 0;
-  transition: opacity 0.4s ease, transform 0.25s cubic-bezier(0.2, 0, 0.2, 1);
-  cursor: zoom-in;
+  transition: opacity 0.3s ease;
 }
 
 .manga-reader-page-img.loaded {
   opacity: 1;
-}
-
-.manga-reader-page-img.is-zoomed {
-  transform: scale(1.6);
-  cursor: zoom-out;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.85);
-  border-radius: 4px;
 }
 
 .manga-reader-page-placeholder,
@@ -4660,19 +4652,54 @@ a {
     right: 1rem;
   }
 
+  .app-layout.app-layout-full {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+
+  .main-content.main-content-full {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+
+  .manga-reader {
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
   .manga-reader-images {
-    width: 100%;
-    max-width: 100vw;
-    padding: 0;
-    margin: 0;
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   .manga-reader-page {
-    min-height: 200px;
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 180px;
   }
 
   .manga-reader-page.is-loaded {
     min-height: unset;
+  }
+
+  .manga-reader-page-img {
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 100% !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
   }
 }
 
