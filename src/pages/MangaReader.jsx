@@ -326,7 +326,9 @@ function LazyImage({ src, alt, index, total, onVisible }) {
   const [inView, setInView] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [isZoomed, setIsZoomed] = useState(false);
   const imgRef = useRef(null);
+  const lastTapRef = useRef(0);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -350,10 +352,25 @@ function LazyImage({ src, alt, index, total, onVisible }) {
     setRetryCount(prev => prev + 1);
   };
 
+  const handleDoubleClick = () => {
+    setIsZoomed(prev => !prev);
+  };
+
+  const handleTouchEnd = (e) => {
+    const currentTime = Date.now();
+    const tapLength = currentTime - lastTapRef.current;
+    if (tapLength < 300 && tapLength > 0) {
+      // Double tap on mobile to zoom / unzoom
+      setIsZoomed(prev => !prev);
+      e.preventDefault();
+    }
+    lastTapRef.current = currentTime;
+  };
+
   const imageSrc = retryCount > 0 ? `${src}?retry=${retryCount}` : src;
 
   return (
-    <div className="manga-reader-page" ref={imgRef}>
+    <div className={`manga-reader-page ${loaded ? 'is-loaded' : ''} ${isZoomed ? 'is-zoomed' : ''}`} ref={imgRef}>
       {inView ? (
         <>
           {!loaded && !hasError && (
@@ -384,9 +401,12 @@ function LazyImage({ src, alt, index, total, onVisible }) {
               decoding="async"
               loading={index < 5 ? "eager" : "auto"}
               fetchPriority={index < 3 ? "high" : "auto"}
-              className={`manga-reader-page-img ${loaded ? 'loaded' : 'loading'}`}
+              className={`manga-reader-page-img ${loaded ? 'loaded' : 'loading'} ${isZoomed ? 'is-zoomed' : ''}`}
               onLoad={() => setLoaded(true)}
               onError={() => setHasError(true)}
+              onDoubleClick={handleDoubleClick}
+              onTouchEnd={handleTouchEnd}
+              title={isZoomed ? "Chạm đúp để thu nhỏ" : "Chạm đúp để phóng to ảnh"}
             />
           )}
         </>
