@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { ChevronLeft, ChevronRight, ChevronUp, Layers, ArrowLeft, Maximize, Minimize, RotateCw } from 'lucide-react';
 import VideoAdBanner from '../components/VideoAdBanner';
 import AdBanner from '../components/AdBanner';
@@ -19,12 +21,13 @@ function preloadImageUrl(url) {
 
 function MangaReader() {
   const { mangaId, chapterId } = useParams();
-  const { manga = [] } = useAppContext();
+  const { manga = [], user } = useAppContext();
   const navigate = useNavigate();
 
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showNav, setShowNav] = useState(true);
+  const [restoredImages, setRestoredImages] = useState(null);
   const readerRef = useRef(null);
   const hideNavTimer = useRef(null);
 
@@ -36,7 +39,40 @@ function MangaReader() {
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
 
-  const images = currentChapter?.images || [];
+  // Tự động kiểm tra file khôi phục nếu có
+  useEffect(() => {
+    const rawChap = chapterId || '';
+    const cleanChap = rawChap.replace(/[^a-zA-Z0-9_-]/g, '');
+    const compactChap = rawChap.replace(/-/g, '');
+
+    const tryFetch = async () => {
+      for (const name of [rawChap, cleanChap, compactChap]) {
+        try {
+          const res = await fetch(`/restored_${name}.json?t=${Date.now()}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && String(data.mangaId) === String(mangaId) && data.chapterId === chapterId && Array.isArray(data.images) && data.images.length > 0) {
+              setRestoredImages(data.images);
+              // Tự động đồng bộ lên Firestore nếu user có quyền (Admin hoặc Uploader của truyện)
+              if (user && (user.role === 'admin' || user.id === mangaItem?.uploaderId)) {
+                const mangaRef = doc(db, 'manga', String(mangaId));
+                const updatedChapters = (mangaItem.chapters || []).map(ch => 
+                  ch.id === chapterId ? { ...ch, images: data.images, message_ids: data.messageIds || ch.message_ids } : ch
+                );
+                updateDoc(mangaRef, { chapters: updatedChapters }).catch(err => {
+                  console.warn('Auto-sync restored chapter to Firestore:', err.message);
+                });
+              }
+              break;
+            }
+          }
+        } catch (e) {}
+      }
+    };
+    tryFetch();
+  }, [mangaId, chapterId, user, mangaItem]);
+
+  const images = restoredImages || currentChapter?.images || [];
 
   // 1. Preload the first 10 images of current chapter immediately for instant reading
   useEffect(() => {

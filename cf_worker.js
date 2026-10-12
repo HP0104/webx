@@ -34,7 +34,7 @@ function cleanToken(token) {
   // Token Telegram BẮT BUỘC phải có dấu ':' (ví dụ: 8957921406:AAFPi...)
   // Nếu bị nhập nhầm Chat ID (như -1004320007781) hoặc rỗng, tự động sửa về token chuẩn
   if (!token || !String(token).includes(":")) {
-    return "8957921406:AAFPiJkoaJe7Brku-efkizT-3eTzPZaR7P8";
+    return "8762474365:AAE8cgyYGC8GoV6tQ5mZi7Ye8tj5Du-FQpo";
   }
   let t = String(token).trim();
   t = t.replace(/^["']|["']$/g, "").trim();
@@ -42,7 +42,7 @@ function cleanToken(token) {
     t = t.split("api.telegram.org/bot").pop().split("/")[0];
   }
   t = t.replace(/^bot/i, "").trim();
-  return t.includes(":") ? t : "8957921406:AAFPiJkoaJe7Brku-efkizT-3eTzPZaR7P8";
+  return t.includes(":") ? t : "8762474365:AAE8cgyYGC8GoV6tQ5mZi7Ye8tj5Du-FQpo";
 }
 
 // Làm sạch Chat ID

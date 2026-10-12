@@ -2102,7 +2102,7 @@ export async function deleteTelegramMessages(messageIds = [], options = {}) {
     throw new Error(data.error || `HTTP ${res.status}`);
   } catch (err) {
     console.warn('[deleteTelegramMessages] Worker API không phản hồi, thử xóa trực tiếp qua Bot API Telegram:', err.message);
-    const botToken = options.botToken || '8957921406:AAFPiJkoaJe7Brku-efkizT-3eTzPZaR7P8';
+    const botToken = options.botToken || '8762474365:AAE8cgyYGC8GoV6tQ5mZi7Ye8tj5Du-FQpo';
     const chatId = options.chat_id || '-1004320007781';
     let deletedCount = 0;
     const BATCH_SIZE = 100;
