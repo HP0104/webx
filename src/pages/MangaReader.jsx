@@ -46,6 +46,7 @@ function MangaReader() {
     const compactChap = rawChap.replace(/-/g, '');
 
     const tryFetch = async () => {
+      // 1. Thử file theo Chapter
       for (const name of [rawChap, cleanChap, compactChap]) {
         try {
           const res = await fetch(`/restored_${name}.json?t=${Date.now()}`);
@@ -63,14 +64,49 @@ function MangaReader() {
                   console.warn('Auto-sync restored chapter to Firestore:', err.message);
                 });
               }
-              break;
+              return;
+            }
+          }
+        } catch (e) {}
+      }
+
+      // 2. Thử file gộp theo Manga ID
+      if (mangaId) {
+        try {
+          const res = await fetch(`/restored_${mangaId}.json?t=${Date.now()}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.chapters) {
+              let chapImgs = null;
+              if (Array.isArray(data.chapters[chapterId])) {
+                chapImgs = data.chapters[chapterId];
+              } else if (Array.isArray(data.chapters)) {
+                const found = data.chapters.find(c => c.id === chapterId || c.title === currentChapter?.title);
+                if (found && Array.isArray(found.images)) chapImgs = found.images;
+              }
+              if (chapImgs && chapImgs.length > 0) {
+                setRestoredImages(chapImgs);
+                if (user && (user.role === 'admin' || user.id === mangaItem?.uploaderId)) {
+                  const mangaRef = doc(db, 'manga', String(mangaId));
+                  const updatedChapters = (mangaItem.chapters || []).map(ch => {
+                    const rImgs = Array.isArray(data.chapters[ch.id]) 
+                      ? data.chapters[ch.id] 
+                      : (Array.isArray(data.chapters) ? data.chapters.find(c => c.id === ch.id || c.title === ch.title)?.images : null);
+                    return rImgs ? { ...ch, images: rImgs } : ch;
+                  });
+                  updateDoc(mangaRef, { chapters: updatedChapters }).catch(err => {
+                    console.warn('Auto-sync all restored chapters to Firestore:', err.message);
+                  });
+                }
+                return;
+              }
             }
           }
         } catch (e) {}
       }
     };
     tryFetch();
-  }, [mangaId, chapterId, user, mangaItem]);
+  }, [mangaId, chapterId, user, mangaItem, currentChapter]);
 
   const images = restoredImages || currentChapter?.images || [];
 
