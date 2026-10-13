@@ -39,8 +39,11 @@ function MangaReader() {
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
 
-  // Tự động kiểm tra file khôi phục nếu có
+  // Tự động kiểm tra file khôi phục nếu có (reset ngay khi đổi chapter để tránh trùng ảnh chương trước)
   useEffect(() => {
+    setRestoredImages(null);
+    let isMounted = true;
+
     const rawChap = chapterId || '';
     const cleanChap = rawChap.replace(/[^a-zA-Z0-9_-]/g, '');
     const compactChap = rawChap.replace(/-/g, '');
@@ -52,6 +55,7 @@ function MangaReader() {
           const res = await fetch(`/restored_${name}.json?t=${Date.now()}`);
           if (res.ok) {
             const data = await res.json();
+            if (!isMounted) return;
             if (data && String(data.mangaId) === String(mangaId) && data.chapterId === chapterId && Array.isArray(data.images) && data.images.length > 0) {
               setRestoredImages(data.images);
               // Tự động đồng bộ lên Firestore nếu user có quyền (Admin hoặc Uploader của truyện)
@@ -76,6 +80,7 @@ function MangaReader() {
           const res = await fetch(`/restored_${mangaId}.json?t=${Date.now()}`);
           if (res.ok) {
             const data = await res.json();
+            if (!isMounted) return;
             if (data && data.chapters) {
               let chapImgs = null;
               if (Array.isArray(data.chapters[chapterId])) {
@@ -106,6 +111,11 @@ function MangaReader() {
       }
     };
     tryFetch();
+
+    return () => {
+      isMounted = false;
+      setRestoredImages(null);
+    };
   }, [mangaId, chapterId, user, mangaItem, currentChapter]);
 
   const images = restoredImages || currentChapter?.images || [];
@@ -363,6 +373,12 @@ function LazyImage({ src, alt, index, total, onVisible }) {
   const [hasError, setHasError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const imgRef = useRef(null);
+
+  useEffect(() => {
+    setLoaded(false);
+    setHasError(false);
+    setRetryCount(0);
+  }, [src]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
