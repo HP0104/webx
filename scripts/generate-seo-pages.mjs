@@ -163,6 +163,49 @@ const descriptionByRoute = {
   '/report': 'Gửi báo lỗi và góp ý cho đội ngũ WEB18P.'
 };
 
+// Video URL Parser & Thumbnail Extractor for SEO previews
+function getVideoThumbnail(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  let url = rawUrl.trim();
+  const iframeMatch = url.match(/<iframe[^>]*src\s*=\s*["']([^"']+)["']/i);
+  if (iframeMatch) url = iframeMatch[1];
+
+  // VOE
+  const voeMatch = url.match(/(?:voe\.sx|voecdn\.com|voe-sx\.com|launchreed\.com|caseyimpactstation\.com)\/(?:e\/)?([a-zA-Z0-9]+)/i);
+  if (voeMatch && !['cache', 'embed', 'api'].includes(voeMatch[1])) {
+    return `https://voe.sx/cache/${voeMatch[1]}_storyboard_L1.jpg`;
+  }
+
+  // YouTube
+  const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+  if (ytMatch) {
+    return `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+  }
+
+  // StreamHG / Filemoon / Huntrexus
+  const fmMatch = url.match(/(?:filemoon|fmoonembed|fmoon|hgcloud|vibuxer|streamhg|hgstream|huntrexus)[a-zA-Z0-9.-]*\/(?:(?:d|e|v|download)\/)?([a-zA-Z0-9_-]+)/i);
+  if (fmMatch) {
+    return `https://huntrexus.com/${fmMatch[1]}.jpg`;
+  }
+
+  return null;
+}
+
+function resolveVideoThumbnail(video) {
+  let thumb = video.thumbnail || video.thumbnailUrl;
+  if (!thumb) {
+    const rawUrl = video.videoUrl || video.streamtapeUrl || '';
+    thumb = getVideoThumbnail(rawUrl);
+  }
+  if (thumb && thumb.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
+    thumb = thumb.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
+  }
+  if (!thumb || thumb.endsWith('.svg') || thumb.includes('placehold.co')) {
+    thumb = 'https://web18p.xyz/og-banner.jpg';
+  }
+  return thumb;
+}
+
 async function run() {
   console.log('[SEO Generator] Starting SSG page generation...');
   const indexPath = path.join(distDir, 'index.html');
@@ -184,7 +227,7 @@ async function run() {
     routeMeta[route] = {
       title: titleByRoute[route] || 'WEB18P',
       description: descriptionByRoute[route] || `${(titleByRoute[route] || 'WEB18P').replace(' | WEB18P', '')} được cập nhật trên WEB18P.`,
-      image: 'https://web18p.xyz/favicon.svg',
+      image: 'https://web18p.xyz/og-banner.jpg',
       type: 'website'
     };
   }
@@ -193,10 +236,11 @@ async function run() {
   for (const game of games) {
     const slug = createGameSlug(game);
     const route = `/game/${slug}`;
+    const gameImg = (game.image && !game.image.endsWith('.svg')) ? game.image : 'https://web18p.xyz/og-banner.jpg';
     routeMeta[route] = {
       title: `${game.title || 'Game'} - Tải Game Việt Hóa | WEB18P`,
       description: cleanDescription(game.description) || `Tải ${game.title || 'Game'} Việt hóa miễn phí cho PC và Android trên WEB18P. Link tải nhanh, thông tin chi tiết.`,
-      image: game.image || 'https://web18p.xyz/favicon.svg',
+      image: gameImg,
       type: 'game',
       data: game
     };
@@ -208,7 +252,7 @@ async function run() {
     routeMeta[route] = {
       title: `${video.title || 'Phim'} | WEB18P`,
       description: cleanDescription(video.description) || `Xem video ${video.title || ''} chất lượng cao trên WEB18P.`,
-      image: video.thumbnailUrl || 'https://web18p.xyz/favicon.svg',
+      image: resolveVideoThumbnail(video),
       type: 'video',
       data: video
     };
@@ -217,10 +261,11 @@ async function run() {
   // Manga
   for (const manga of mangaList) {
     const route = `/manga/${manga.id}`;
+    const mangaCover = (manga.cover && !manga.cover.endsWith('.svg')) ? manga.cover : 'https://web18p.xyz/og-banner.jpg';
     routeMeta[route] = {
       title: `Truyện ${manga.title || ''} - Đọc Truyện Online | WEB18P`,
       description: cleanDescription(manga.description) || `Đọc truyện tranh ${manga.title || ''} trọn bộ, cập nhật chương mới trên WEB18P.`,
-      image: manga.cover || 'https://web18p.xyz/favicon.svg',
+      image: mangaCover,
       type: 'manga',
       data: manga
     };
@@ -309,15 +354,20 @@ async function run() {
       .replace(/<meta\s+name="twitter:description"[\s\S]*?\/>/, `<meta name="twitter:description" content="${escapedDescription}" />`)
       .replace(/<div id="root"><\/div>/, preRenderContent);
 
+    // If og:type is video
+    if (meta.type === 'video') {
+      html = html.replace(/<meta\s+property="og:type" content="[^"]*"\s*\/>/, '<meta property="og:type" content="video.other" />');
+    }
+
     // Ensure og:image and twitter:image are present
-    if (html.includes('<meta property="og:image"')) {
-      html = html.replace(/<meta property="og:image" content="[^"]*" \/>/, `<meta property="og:image" content="${escapedImage}" />`);
+    if (html.includes('property="og:image"')) {
+      html = html.replace(/<meta\s+property="og:image"\s+content="[^"]*"\s*\/?>/, `<meta property="og:image" content="${escapedImage}" />`);
     } else {
       html = html.replace('</head>', `  <meta property="og:image" content="${escapedImage}" />\n</head>`);
     }
 
-    if (html.includes('<meta name="twitter:image"')) {
-      html = html.replace(/<meta name="twitter:image" content="[^"]*" \/>/, `<meta name="twitter:image" content="${escapedImage}" />`);
+    if (html.includes('name="twitter:image"')) {
+      html = html.replace(/<meta\s+name="twitter:image"\s+content="[^"]*"\s*\/?>/, `<meta name="twitter:image" content="${escapedImage}" />`);
     } else {
       html = html.replace('</head>', `  <meta name="twitter:image" content="${escapedImage}" />\n</head>`);
     }

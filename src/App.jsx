@@ -53,7 +53,7 @@ const CATEGORY_TITLES = {
   '18-android': 'Game 18+ Cho Android'
 };
 
-function PageTitle({ games }) {
+function PageTitle({ games = [], videos = [], manga = [] }) {
   const location = useLocation();
 
   React.useEffect(() => {
@@ -62,6 +62,7 @@ function PageTitle({ games }) {
     let pageTitle = 'WEB18P';
     let description = 'WEB18P - kho game Việt hóa, game PC và Android được cập nhật thường xuyên.';
     let canonicalPath = pathname;
+    let ogImage = 'https://web18p.xyz/og-banner.jpg';
 
     if (pathname === '/') {
       pageTitle = 'Trang Chủ';
@@ -82,6 +83,7 @@ function PageTitle({ games }) {
       const game = findGameByRouteParam(games, gameSlug);
       pageTitle = game?.title || 'Chi Tiết Game';
       description = game?.description || 'Thông tin chi tiết game trên WEB18P.';
+      if (game?.image) ogImage = game.image;
       canonicalPath = game ? getGamePath(game) : pathname;
     } else if (pathname === '/blog') {
       pageTitle = 'Blog';
@@ -100,6 +102,16 @@ function PageTitle({ games }) {
     } else if (pathname === '/ai-search') {
       pageTitle = 'Tìm Kiếm Game Bằng AI';
       description = 'Tìm kiếm game từ cơ sở dữ liệu RAWG và tự động viết bài đánh giá bằng AI trên WEB18P.';
+    } else if (pathname.startsWith('/video/')) {
+      const vidId = pathname.split('/').filter(Boolean)[1];
+      const currentVideo = (videos || []).find(v => v.id?.toString() === vidId?.toString());
+      if (currentVideo) {
+        pageTitle = currentVideo.title || 'Chi Tiết Phim';
+        description = currentVideo.description || `Xem video ${currentVideo.title || ''} chất lượng cao trên WEB18P.`;
+        if (currentVideo.thumbnail) ogImage = currentVideo.thumbnail;
+      } else {
+        pageTitle = 'Chi Tiết Phim';
+      }
     } else if (pathname.startsWith('/videos')) {
       const videoCat = pathname.split('/').filter(Boolean)[1] || 'all';
       const catNames = { all: 'Tất Cả Phim', vam: 'Phim VAM', '3d': 'Phim 3D' };
@@ -112,8 +124,15 @@ function PageTitle({ games }) {
       pageTitle = 'Đọc Truyện';
       description = 'Đọc truyện tranh online miễn phí trên WEB18P.';
     } else if (pathname.startsWith('/manga/')) {
-      pageTitle = 'Chi Tiết Truyện';
-      description = 'Thông tin chi tiết truyện tranh trên WEB18P.';
+      const mId = pathname.split('/').filter(Boolean)[1];
+      const currentManga = (manga || []).find(m => m.id?.toString() === mId?.toString());
+      if (currentManga) {
+        pageTitle = currentManga.title || 'Chi Tiết Truyện';
+        description = currentManga.description || 'Thông tin chi tiết truyện tranh trên WEB18P.';
+        if (currentManga.cover) ogImage = currentManga.cover;
+      } else {
+        pageTitle = 'Chi Tiết Truyện';
+      }
     }
 
     document.title = `${pageTitle} | WEB18P`;
@@ -128,10 +147,12 @@ function PageTitle({ games }) {
     setMeta('meta[property="og:title"]', 'content', `${pageTitle} | WEB18P`);
     setMeta('meta[property="og:description"]', 'content', description);
     setMeta('meta[property="og:url"]', 'content', canonicalUrl);
+    setMeta('meta[property="og:image"]', 'content', ogImage);
     setMeta('meta[name="twitter:title"]', 'content', `${pageTitle} | WEB18P`);
     setMeta('meta[name="twitter:description"]', 'content', description);
+    setMeta('meta[name="twitter:image"]', 'content', ogImage);
     setMeta('link[rel="canonical"]', 'href', canonicalUrl);
-  }, [games, location]);
+  }, [games, videos, manga, location]);
 
   return null;
 }
@@ -575,7 +596,7 @@ function App() {
     }}>
       <Router>
         <ExoClickPopunder />
-        <PageTitle games={games} />
+        <PageTitle games={games} videos={videos} manga={manga} />
         <AppContent user={user} />
       </Router>
     </AppContext.Provider>

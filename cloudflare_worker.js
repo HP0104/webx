@@ -32,6 +32,13 @@ export default {
 
     const url = new URL(request.url);
 
+    // Bot / Crawler Open Graph Link Preview Interceptor (Telegram, Facebook, Discord, Zalo, etc.)
+    const userAgent = request.headers.get("User-Agent") || "";
+    if (isCrawler(userAgent) && request.method === "GET") {
+      const crawlerResponse = await handleCrawlerMetadata(url, env);
+      if (crawlerResponse) return crawlerResponse;
+    }
+
     // Proxy endpoint for FreeImage.host manga uploads (bypasses browser CORS)
     if (url.pathname === "/api/upload-freeimage") {
       const uploadCorsHeaders = {
@@ -621,6 +628,10 @@ export default {
       }
     }
 
+    if (request.method === "GET" && url.hostname.includes("web18p.xyz")) {
+      return fetch(request);
+    }
+
     return new Response("Not Found", { status: 404 });
   }
 };
@@ -774,4 +785,169 @@ function createGameSlug(title, id) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '') || 'game';
+}
+
+// --- Open Graph Bot / Crawler detection & Dynamic Metadata Generator ---
+
+const BOT_USER_AGENTS = [
+  "telegrambot",
+  "facebookexternalhit",
+  "facebot",
+  "twitterbot",
+  "discordbot",
+  "whatsapp",
+  "skypeuripreview",
+  "slackbot",
+  "kakaotalk-scrap",
+  "vkshare",
+  "redditbot",
+  "applebot",
+  "zalo"
+];
+
+function isCrawler(userAgent) {
+  if (!userAgent) return false;
+  const ua = userAgent.toLowerCase();
+  return BOT_USER_AGENTS.some(bot => ua.includes(bot));
+}
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function getVideoThumbnailHelper(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== "string") return null;
+  let url = rawUrl.trim();
+  const iframeMatch = url.match(/<iframe[^>]*src\s*=\s*["']([^"']+)["']/i);
+  if (iframeMatch) url = iframeMatch[1];
+
+  const voeMatch = url.match(/(?:voe\.sx|voecdn\.com|voe-sx\.com|launchreed\.com|caseyimpactstation\.com)\/(?:e\/)?([a-zA-Z0-9]+)/i);
+  if (voeMatch && !["cache", "embed", "api"].includes(voeMatch[1])) {
+    return `https://voe.sx/cache/${voeMatch[1]}_storyboard_L1.jpg`;
+  }
+
+  const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+  if (ytMatch) {
+    return `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`;
+  }
+
+  const fmMatch = url.match(/(?:filemoon|fmoonembed|fmoon|hgcloud|vibuxer|streamhg|hgstream|huntrexus)[a-zA-Z0-9.-]*\/(?:(?:d|e|v|download)\/)?([a-zA-Z0-9_-]+)/i);
+  if (fmMatch) {
+    return `https://huntrexus.com/${fmMatch[1]}.jpg`;
+  }
+
+  return null;
+}
+
+async function handleCrawlerMetadata(url, env) {
+  const pathname = url.pathname;
+  const projectId = env.FIREBASE_PROJECT_ID || "webk-a064e";
+
+  let title = "WEB18P - Kho Game Việt Hóa và Phim";
+  let description = "Kho game Việt hóa và Phim, game PC và Android được cập nhật thường xuyên.";
+  let image = "https://web18p.xyz/og-banner.jpg";
+  let ogType = "website";
+  const canonicalUrl = `https://web18p.xyz${pathname.endsWith("/") ? pathname : pathname + "/"}`;
+
+  try {
+    if (pathname.startsWith("/video/")) {
+      const parts = pathname.split("/").filter(Boolean);
+      const videoId = parts[1];
+      if (videoId) {
+        ogType = "video.other";
+        const docUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/videos/${videoId}`;
+        const res = await fetch(docUrl);
+        if (res.ok) {
+          const docData = await res.json();
+          const f = docData.fields || {};
+          const vTitle = f.title?.stringValue || "Phim";
+          title = `${vTitle} | WEB18P`;
+          description = f.description?.stringValue || `Xem video ${vTitle} chất lượng cao trên WEB18P.`;
+          let thumb = f.thumbnail?.stringValue || f.thumbnailUrl?.stringValue;
+          if (!thumb) {
+            const rawUrl = f.videoUrl?.stringValue || f.streamtapeUrl?.stringValue || "";
+            thumb = getVideoThumbnailHelper(rawUrl);
+          }
+          if (thumb && thumb.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
+            thumb = thumb.replace(/_t\.(jpg|jpeg|png|webp)$/i, ".$1");
+          }
+          if (thumb && !thumb.endsWith(".svg")) {
+            image = thumb;
+          }
+        }
+      }
+    } else if (pathname.startsWith("/videos")) {
+      title = "Kho Phim Chất Lượng Cao | WEB18P";
+      description = "Xem tất cả phim trên WEB18P - cập nhật liên tục với chất lượng cao.";
+    } else if (pathname.startsWith("/manga/")) {
+      const parts = pathname.split("/").filter(Boolean);
+      const mangaId = parts[1];
+      if (mangaId) {
+        const docUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/manga/${mangaId}`;
+        const res = await fetch(docUrl);
+        if (res.ok) {
+          const docData = await res.json();
+          const f = docData.fields || {};
+          const mTitle = f.title?.stringValue || "Truyện";
+          title = `Truyện ${mTitle} - Đọc Truyện Online | WEB18P`;
+          description = f.description?.stringValue || `Đọc truyện tranh ${mTitle} trọn bộ trên WEB18P.`;
+          const cover = f.cover?.stringValue || f.image?.stringValue;
+          if (cover && !cover.endsWith(".svg")) {
+            image = cover;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Error generating crawler metadata:", e.message);
+  }
+
+  const escapedTitle = escapeHtml(title);
+  const escapedDesc = escapeHtml(description);
+  const escapedImg = escapeHtml(image);
+  const escapedUrl = escapeHtml(canonicalUrl);
+
+  const html = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapedTitle}</title>
+  <meta name="description" content="${escapedDesc}" />
+  <link rel="canonical" href="${escapedUrl}" />
+
+  <meta property="og:type" content="${ogType}" />
+  <meta property="og:site_name" content="WEB18P" />
+  <meta property="og:title" content="${escapedTitle}" />
+  <meta property="og:description" content="${escapedDesc}" />
+  <meta property="og:url" content="${escapedUrl}" />
+  <meta property="og:image" content="${escapedImg}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapedTitle}" />
+  <meta name="twitter:description" content="${escapedDesc}" />
+  <meta name="twitter:image" content="${escapedImg}" />
+
+  <meta http-equiv="refresh" content="0;url=${escapedUrl}" />
+</head>
+<body style="font-family: sans-serif; background: #0a0a0c; color: #fff; padding: 2rem;">
+  <h1>${escapedTitle}</h1>
+  <p>${escapedDesc}</p>
+  <img src="${escapedImg}" alt="${escapedTitle}" style="max-width: 100%; border-radius: 8px;" />
+  <p><a href="${escapedUrl}" style="color: #66c0f4;">Bấm vào đây nếu trình duyệt không tự chuyển tiếp</a></p>
+</body>
+</html>`;
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "public, max-age=1800"
+    }
+  });
 }
