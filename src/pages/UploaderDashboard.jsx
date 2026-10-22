@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Navigate, Link } from 'react-router-dom';
 import { 
   Film, 
@@ -15,10 +15,8 @@ import {
   FolderCheck,
   Key,
   RefreshCw,
-  Settings,
   ExternalLink,
-  Link2,
-  Globe
+  Link2
 } from 'lucide-react';
 import { useAppContext } from '../App';
 import VideoForm from '../components/Admin/VideoForm';
@@ -45,11 +43,6 @@ const INITIAL_VIDEO_STATE = {
 
 function UploaderDashboard() {
   const { user, videos = [], addVideoToStore, deleteVideoFromStore, updateVideoInStore } = useAppContext();
-
-  // Guard: only uploader or admin allowed
-  if (!user || (user.role !== 'uploader' && user.role !== 'admin')) {
-    return <Navigate to={user ? '/' : '/auth'} replace />;
-  }
 
   const [videoData, setVideoData] = useState(INITIAL_VIDEO_STATE);
   const [editingVideoId, setEditingVideoId] = useState(null);
@@ -147,12 +140,13 @@ function UploaderDashboard() {
 
   // Filter videos belonging to this uploader (or all if admin toggles it)
   const myVideos = useMemo(() => {
+    if (!user) return [];
     return videos.filter(v => {
       if (user.role === 'admin' && showAllVideosForAdmin) return true;
       // Match by uploaderId, or fallback to uploaderName if uploaderId was missing
       return v.uploaderId === user.id || (!v.uploaderId && v.uploaderName === user.username);
     });
-  }, [videos, user.id, user.username, user.role, showAllVideosForAdmin]);
+  }, [videos, user, showAllVideosForAdmin]);
 
   // Filtered & sorted videos
   const displayVideos = useMemo(() => {
@@ -177,6 +171,11 @@ function UploaderDashboard() {
   const totalViews = useMemo(() => {
     return myVideos.reduce((sum, v) => sum + (Number(v.views) || 0), 0);
   }, [myVideos]);
+
+  // Guard: only uploader or admin allowed (rendered after all hooks)
+  if (!user || (user.role !== 'uploader' && user.role !== 'admin')) {
+    return <Navigate to={user ? '/' : '/auth'} replace />;
+  }
 
   // Handle Save (Add or Update)
   const handleSaveVideo = async (data) => {

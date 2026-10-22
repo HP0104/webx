@@ -43,7 +43,7 @@ const INITIAL_FORM_STATE = {
 };
 
 function Admin() {
-  const { user, games, addGameToStore, deleteGameFromStore, updateGameInStore, revenue, videos, addVideoToStore, deleteVideoFromStore, updateVideoInStore, manga = [], addMangaToStore, deleteMangaFromStore, updateMangaInStore } = useAppContext();
+  const { user, games, addGameToStore, deleteGameFromStore, updateGameInStore, videos, addVideoToStore, deleteVideoFromStore, updateVideoInStore, manga = [], addMangaToStore, deleteMangaFromStore, updateMangaInStore } = useAppContext();
   const [users, setUsers] = useState([]);
   const [reportsCount, setReportsCount] = useState(0);
   const [editingGameId, setEditingGameId] = useState(null);

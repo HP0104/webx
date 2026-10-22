@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Film, Trash2, Edit, ExternalLink, Search, Play, Eye, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter } from 'lucide-react';
-import { getVideoThumbnail, toEmbedUrl } from '../../utils/videoUtils';
+import { Film, Trash2, Edit, ExternalLink, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { getVideoThumbnail } from '../../utils/videoUtils';
 
 const VIDEOS_PER_PAGE = 15;
 

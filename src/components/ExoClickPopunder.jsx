@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAppContext } from '../App';
 
@@ -42,7 +42,7 @@ export default function ExoClickPopunder() {
       // We don't remove the script node because it has already executed,
       // but we do remove the event listeners if disablePopunder becomes true.
     };
-  }, [location.pathname, user?.adFreeUntil]);
+  }, [location.pathname, user]);
 
   return null;
 }

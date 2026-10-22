@@ -5,8 +5,6 @@
  * - EPUB / CBZ / ZIP extraction
  * - Genre and status constants
  */
-import JSZip from 'jszip';
-
 
 // ============ CONSTANTS ============
 
@@ -186,7 +184,7 @@ export async function uploadToImgBB(file, apiKey, customName = '', shouldOptimiz
   let result = null;
   try {
     result = await response.json();
-  } catch (e) {
+  } catch {
     // If not JSON response
   }
 
@@ -282,7 +280,7 @@ export function getStoredImgBBKeyState() {
       localStorage.setItem(IMGBB_KEY_STATE_STORAGE, JSON.stringify(state));
     }
     return state;
-  } catch (e) {
+  } catch {
     return {};
   }
 }
@@ -294,7 +292,7 @@ export function saveStoredImgBBKeyState(state) {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
     localStorage.setItem(IMGBB_KEY_STATE_STORAGE, JSON.stringify(state));
-  } catch (e) {}
+  } catch {}
 }
 
 /**
@@ -657,7 +655,7 @@ export async function uploadToFreeImage(file, customName = '', shouldOptimize = 
       let result = null;
       try {
         result = await response.json();
-      } catch (e) {
+      } catch {
         // Response wasn't JSON
       }
 
@@ -819,7 +817,7 @@ export async function uploadToCatbox(file, customName = '', shouldOptimize = tru
         if (result?.error) {
           throw new Error(result.error);
         }
-      } catch (jsonErr) {
+      } catch {
         // Not JSON - check if it's a direct Catbox URL (Vite proxy response)
         if (responseText.trim().startsWith('https://files.catbox.moe/')) {
           const url = responseText.trim();
@@ -915,7 +913,7 @@ export async function uploadMultipleToCatbox(files, onProgress, options = {}) {
  * @returns {Promise<{url: string, thumb: string, fileId: string}>}
  */
 export async function uploadToTelegram(file, customNameOrOptions = '', shouldOptimize = true, uploadKey = '') {
-  let customName = '';
+  let customName;
   let effectiveOptimize = shouldOptimize;
   let effectiveKey = uploadKey;
   let mangaTitle = '';
@@ -1056,7 +1054,7 @@ export async function uploadMultipleToTelegram(files, onProgress, options = {}) 
       try {
         const opt = await optimizeMangaImage(file, { customName });
         optimizedFiles.push({ file: opt, fileName: opt.name });
-      } catch (e) {
+      } catch {
         optimizedFiles.push({ file, fileName: file.name });
       }
     }
@@ -1190,7 +1188,7 @@ export async function uploadMultipleToTelegram(files, onProgress, options = {}) 
  * Upload a single image file using the selected provider
  */
 export async function uploadSingleMangaImage(file, options = {}) {
-  const { provider = 'telegram', apiKey = '', customName = '', shouldOptimize = true, isNsfw = true, botToken = '', chatId = '' } = options;
+  const { provider = 'telegram', apiKey = '', customName = '', shouldOptimize = true, isNsfw = true } = options;
   if (provider === 'telegram') {
     return uploadToTelegram(file, customName, shouldOptimize, options.uploadKey || '');
   }
@@ -1207,7 +1205,7 @@ export async function uploadSingleMangaImage(file, options = {}) {
  * Upload multiple images using the selected provider
  */
 export async function uploadMultipleMangaImages(files, onProgress, options = {}) {
-  const { provider = 'telegram', apiKey = '', isNsfw = true, botToken = '', chatId = '', ...restOptions } = options;
+  const { provider = 'telegram', apiKey = '', isNsfw = true, ...restOptions } = options;
   if (provider === 'telegram') {
     return uploadMultipleToTelegram(files, onProgress, restOptions);
   }
@@ -1359,9 +1357,9 @@ export function parseFolderStructure(fileList) {
     // Filter out technical subfolders like 'webp', 'images', etc.
     const cleanFolders = rawFolders.filter(d => !TECHNICAL_DIRS.has(d.toLowerCase().trim()));
 
-    let chapterName = 'Chapter 1';
+    let chapterName;
     let currentMangaTitle = '';
-    let folderKey = '';
+    let folderKey;
 
     if (cleanFolders.length >= 2) {
       // e.g. [ParentFolder, ChapterFolder] or [MangaTitle, ChapterFolder]
@@ -1601,6 +1599,7 @@ export function findDuplicateChapters(chapters = []) {
  * @returns {Promise<{ mangaTitle: string, chapters: Array<{ name: string, files: File[] }> }>}
  */
 export async function extractArchiveToChapters(file, onProgress) {
+  const JSZip = (await import('jszip')).default;
   const zip = await JSZip.loadAsync(file);
   const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif'];
 
@@ -1836,7 +1835,7 @@ export function parseTelegramCaption(caption = '') {
   if (!caption || typeof caption !== 'string') return data;
 
   // 1. Dòng Bookmark: 🔖 Tên truyện - Chapter ...
-  const bookmarkMatch = caption.match(/🔖\s*([^\n-]+)(?:\s*-\s*([^\n\(\)]+))?/i);
+  const bookmarkMatch = caption.match(/🔖\s*([^\n-]+)(?:\s*-\s*([^\n()]+))?/i);
   if (bookmarkMatch) {
     data.mangaTitle = bookmarkMatch[1].trim();
     if (bookmarkMatch[2]) {
@@ -1886,7 +1885,7 @@ export function parseTelegramExportJson(rawJson, cdnDomain = TELEGRAM_CDN_DOMAIN
     try {
       data = JSON.parse(rawJson);
     } catch (e) {
-      throw new Error('Định dạng JSON không hợp lệ: ' + e.message);
+      throw new Error('Định dạng JSON không hợp lệ: ' + e.message, { cause: e });
     }
   }
 
@@ -1943,7 +1942,7 @@ export function parseTelegramExportJson(rawJson, cdnDomain = TELEGRAM_CDN_DOMAIN
 
     const mangaName = currentGroupContext.mangaTitle || 'Truyện Telegram';
     const chapName = currentGroupContext.chapterTitle || 'Chapter 1';
-    const fileId = typeof photo === 'string' ? photo.split(/[\/\\]/).pop().replace(/\.[^/.]+$/, '') : (photo.file_id || `photo_${msg.id}`);
+    const fileId = typeof photo === 'string' ? photo.split(new RegExp('[/\\\\]')).pop().replace(/\.[^/.]+$/, '') : (photo.file_id || `photo_${msg.id}`);
     
     // Tính số trang
     let pageNum = currentGroupContext.startPage + (currentGroupContext.counter || 0);
@@ -2055,7 +2054,7 @@ export function extractTelegramFileId(url = '') {
       return last.split('---').pop();
     }
     return last;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -2129,7 +2128,7 @@ export async function deleteTelegramMessages(messageIds = [], options = {}) {
               });
               const sData = await sRes.json();
               if (sData.ok) deletedCount++;
-            } catch (e) {}
+            } catch {}
           }
         }
       } catch (e) {

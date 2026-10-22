@@ -1,18 +1,18 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, Download, Loader2, Maximize, Minimize, RotateCcw, Server, Smartphone } from 'lucide-react';
 import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getDownloadUrl, isDirectVideo, getAlternateEmbedUrl } from '../utils/videoUtils';
 import ErrorReportButton from '../components/ErrorReportButton';
-import { doc, updateDoc, increment, collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, increment, collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import VideoCardItem from '../components/VideoCardItem';
 import NativeVideoPlayer from '../components/NativeVideoPlayer';
 
 /**
- * Get thumbnail from video URL (exported for backwards compatibility with Videos.jsx).
+ * Get thumbnail from video URL.
  */
-export function getVideoThumbnail(url) {
+function getVideoThumbnail(url) {
   return getVideoThumbnailFromUtils(url);
 }
 
@@ -25,7 +25,6 @@ function VideoDetail() {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
-  const [recommendedVideos, setRecommendedVideos] = useState([]);
 
   // Server selection & Fullscreen controls
   const playerWrapperRef = useRef(null);
@@ -103,8 +102,8 @@ function VideoDetail() {
   }, [video?.id]);
 
   // Logic đề xuất video
-  useEffect(() => {
-    if (!video || !videos.length) return;
+  const recommendedVideos = useMemo(() => {
+    if (!video || !videos.length) return [];
 
     // Lọc bỏ video hiện tại
     const otherVideos = videos.filter(v => v.id.toString() !== videoId);
@@ -159,19 +158,19 @@ function VideoDetail() {
       const overlap = significantWords.filter(word => vSignificantWords.includes(word)).length;
       score += overlap * 10; // Trùng từ khóa cộng điểm
 
-      return { ...v, score, random: Math.random() };
+      return { ...v, score };
     });
 
-    // Sắp xếp theo điểm giảm dần, nếu điểm bằng nhau thì sắp xếp ngẫu nhiên
+    // Sắp xếp theo điểm giảm dần, nếu điểm bằng nhau thì sắp xếp ổn định theo id
     scoredVideos.sort((a, b) => {
       if (b.score !== a.score) {
         return b.score - a.score;
       }
-      return b.random - a.random;
+      return String(b.id || '').localeCompare(String(a.id || ''));
     });
 
     // Lấy 6 video cao điểm nhất (hoặc ngẫu nhiên nếu không có điểm cao)
-    setRecommendedVideos(scoredVideos.slice(0, 6));
+    return scoredVideos.slice(0, 6);
   }, [video, videos, videoId]);
 
   const handleAddComment = async (e) => {
@@ -281,10 +280,10 @@ function VideoDetail() {
           try {
             document.head.removeChild(linkDns);
             document.head.removeChild(linkPre);
-          } catch (e) {}
+          } catch {}
         };
       }
-    } catch (e) {
+    } catch {
       // Ignore parse error
     }
   }, [video?.videoUrl, video?.streamtapeUrl]);
@@ -327,7 +326,7 @@ function VideoDetail() {
         }
         effectiveIframeSrc = src;
       }
-    } catch (e) {
+    } catch {
       effectiveIframeSrc = '';
     }
   } else {

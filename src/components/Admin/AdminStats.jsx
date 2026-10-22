@@ -1,7 +1,6 @@
-import React from 'react';
-import { Users, Gamepad2, Film, BookOpen, PlusCircle, ArrowRight, Shield, AlertTriangle, Wallet } from 'lucide-react';
+import { Users, Gamepad2, Film, BookOpen, PlusCircle, ArrowRight, AlertTriangle } from 'lucide-react';
 
-function AdminStats({ usersCount, revenue, gamesCount, videosCount = 0, mangaCount = 0, onNavigateTab }) {
+function AdminStats({ usersCount, gamesCount, videosCount = 0, mangaCount = 0, onNavigateTab }) {
   const stats = [
     { id: 'users', title: 'Tổng Tài khoản', value: usersCount, icon: Users, color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.12)', desc: 'Thành viên & ví tiền' },
     { id: 'games', title: 'Kho Game', value: gamesCount, icon: Gamepad2, color: '#f8b319', bg: 'rgba(248, 179, 25, 0.12)', desc: 'Game PC & Android' },

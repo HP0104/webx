@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const EXOCLICK_PROVIDER_SRC = 'https://a.magsrv.com/ad-provider.js';
 const EXOCLICK_SCRIPT_ID = 'exoclick-ad-provider';
 const EXOCLICK_FILL_CHECK_DELAY = 2000;
-const ADBLOCK_DETECT_DELAY = 3000;
 
 // ─── Ad Blocker Detection ───────────────────────────────────────────
 
@@ -20,7 +19,7 @@ function checkScriptLoad(src, validationFn = null, timeout = 4000) {
       resolved = true;
       // Trì hoãn gỡ bỏ thẻ script để thư viện (như ad-provider.js) không bị lỗi null document.currentScript
       setTimeout(() => {
-        try { script.remove(); } catch (e) {}
+        try { script.remove(); } catch {}
       }, 2000);
       resolve(blocked);
     };
@@ -58,7 +57,7 @@ async function detectAdBlocker() {
     document.body.appendChild(bait);
 
     setTimeout(() => {
-      let isBlocked = false;
+      let isBlocked;
       if (document.body.contains(bait)) {
         const style = window.getComputedStyle(bait);
         isBlocked =
@@ -98,7 +97,7 @@ async function detectAdBlocker() {
     document.body.appendChild(ins);
 
     setTimeout(() => {
-      let isBlocked = false;
+      let isBlocked;
       if (document.body.contains(ins)) {
         const style = window.getComputedStyle(ins);
         isBlocked =
@@ -270,17 +269,22 @@ export function AdBlockWall() {
   const [checking, setChecking] = useState(true);
   const wallRef = useRef(null);
 
-  const checkAdBlock = useCallback(async () => {
-    setChecking(true);
-    resetAdBlockCache();
-    const result = await isAdBlockActive();
-    setBlocked(result);
-    setChecking(false);
-  }, []);
-
   useEffect(() => {
-    checkAdBlock();
-  }, [checkAdBlock]);
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      resetAdBlockCache();
+      const result = await isAdBlockActive();
+      if (!cancelled) {
+        setBlocked(result);
+        setChecking(false);
+      }
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
 
   // Popup bị chặn bởi trình duyệt KHÔNG phải ad blocker → không cần listener
 

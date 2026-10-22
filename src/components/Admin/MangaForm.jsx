@@ -1,21 +1,15 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { BookOpen, Upload, Link as LinkIcon, Trash2, Plus, FolderOpen, ImageIcon, ChevronDown, ChevronUp, Eye, X, Loader, Layers, Check, FileArchive, Sparkles, Clock, AlertCircle, RefreshCw, AlertTriangle, FileCheck, CheckCircle2, Search, ShieldAlert, GitMerge, CheckCheck, Filter, Radio, Download, FileCode } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { BookOpen, Upload, Link as LinkIcon, Trash2, Plus, FolderOpen, ImageIcon, ChevronDown, ChevronUp, X, Loader, Layers, Check, FileArchive, Sparkles, Clock, AlertCircle, RefreshCw, Search, ShieldAlert, CheckCheck, Radio, Download } from 'lucide-react';
 import {
   MANGA_GENRES,
   MANGA_STATUS,
   IMGBB_API_KEY_STORAGE,
   FREEIMAGE_API_KEY_STORAGE,
   MANGA_STORAGE_PROVIDER_KEY,
-  MANGA_STORAGE_PROVIDERS,
-  IMGBB_DEFAULT_KEYS,
   TELEGRAM_CDN_DOMAIN,
   getImgBBUsageSummary,
   resetImgBBKeyUsage,
   formatCountdownTime,
-  uploadMultipleToImgBB,
-  uploadToImgBB,
-  uploadToFreeImage,
-  uploadMultipleToFreeImage,
   uploadSingleMangaImage,
   uploadMultipleMangaImages,
   parseFolderStructure,
@@ -29,7 +23,6 @@ import {
   extractChapterNumericValue,
   isSameChapter,
   findDuplicateChapters,
-  parseTelegramCaption,
   parseTelegramExportJson,
   deleteTelegramMessages,
   extractTelegramFileId
@@ -129,7 +122,7 @@ function MangaForm({
             }));
           }
         }
-      } catch (e) {}
+      } catch {}
     };
 
     fetchRestored();
@@ -465,7 +458,6 @@ function MangaForm({
       return alert('Không tìm thấy tệp ảnh nào trong thư mục đã chọn!');
     }
 
-    const detectedTitle = mangaData.title || mangaTitle || '';
     if (mangaTitle && !mangaData.title) {
       setMangaData(prev => ({ ...prev, title: mangaTitle }));
     }
@@ -780,7 +772,7 @@ function MangaForm({
           }));
         }
       }
-    } catch (e) {}
+    } catch {}
 
     if (initialTab === 'check') {
       handleCheckTelegramChannel();
@@ -1178,7 +1170,7 @@ function MangaForm({
       return;
     }
 
-    const { chapter, existingCount } = supplementModal;
+    const { existingCount } = supplementModal;
     const totalFound = allImages.length;
 
     if (totalFound <= existingCount) {

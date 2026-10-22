@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Send, Smile, Image as ImageIcon, X, Plus } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Send, Smile, X, Plus } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { useAppContext } from '../App';
@@ -21,7 +21,6 @@ function ChatBox() {
   const [newMessage, setNewMessage] = useState('');
   const [showStickers, setShowStickers] = useState(false);
   const [dynamicStickers, setDynamicStickers] = useState([]);
-  const [customStickerUrl, setCustomStickerUrl] = useState('');
   const [error, setError] = useState(null);
   const scrollRef = useRef();
 

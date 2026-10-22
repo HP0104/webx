@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { AlertTriangle, Gamepad2, Film, User, CheckCircle, Trash2, Clock, Filter, Image as ImageIcon } from 'lucide-react';
+import { Gamepad2, Film, User, CheckCircle, Trash2, Clock, Filter } from 'lucide-react';
 
 function ErrorReportManager() {
   const [errorReports, setErrorReports] = useState([]);

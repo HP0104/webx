@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Eye, Calendar, Tag, Film } from 'lucide-react';
 import { getVideoThumbnail, toEmbedUrl } from '../utils/videoUtils';
@@ -32,7 +31,7 @@ export default function VideoCardItem({ video }) {
           document.head.appendChild(link);
         }
       }
-    } catch (e) {}
+    } catch {}
   };
 
   return (

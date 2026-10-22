@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Film, Eye, X, ExternalLink, Image as ImageIcon, Sparkles, Check, Play, AlertCircle, RefreshCw } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Film, Eye, X, ExternalLink, Image as ImageIcon, Check, Play, RefreshCw } from 'lucide-react';
 import { toEmbedUrl, getVideoThumbnail, extractVideoInfoFromPaste, parseVideoUrl, getVideoProviderName } from '../../utils/videoUtils';
 
 const POPULAR_TAGS = ['18+', 'Không Che', 'Vietsub', 'Full HD', 'VAM', 'Cosplay', '3D Anime', '60FPS', 'AI Remaster'];
@@ -163,13 +163,12 @@ function VideoForm({
     let finalVideoUrl = videoData.videoUrl ? videoData.videoUrl.trim() : '';
     if (extractedUrl && finalVideoUrl.toLowerCase().startsWith('<iframe')) {
       finalVideoUrl = extractedUrl;
-    } else if (isScriptEmbed) {
-      finalVideoUrl = finalVideoUrl;
-    } else {
+    } else if (!isScriptEmbed) {
       finalVideoUrl = (extractedUrl || finalVideoUrl).trim();
     }
 
-    if (!videoData.title.trim()) return alert('Vui lòng nhập tên phim!');
+    const effectiveTitle = videoData.title.trim() || extractedTitle || '';
+    if (!effectiveTitle) return alert('Vui lòng nhập tên phim!');
     if (!finalVideoUrl) return alert('Vui lòng nhập link video!');
 
     const data = {

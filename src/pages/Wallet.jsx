@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Wallet as WalletIcon, QrCode, CheckCircle2, RefreshCw, AlertTriangle, Landmark, Info, History } from 'lucide-react';
 import { useAppContext } from '../App';
 import { PAYMENT_CONFIG } from '../config/payment';
+import { db } from '../firebase';
+import { doc, getDoc, setDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 
 // Helper to format ISO dates beautifully
 const formatDate = (isoString) => {
@@ -97,11 +99,8 @@ function Wallet() {
     if (!user) return;
 
     let unsubscribe;
-    const fetchHistory = async () => {
+    const fetchHistory = () => {
       try {
-        const { collection, query, where, onSnapshot } = await import('firebase/firestore');
-        const { db } = await import('../firebase');
-
         const q = query(
           collection(db, 'payments'),
           where('userId', '==', user.id || user.uid || '')
@@ -152,8 +151,6 @@ function Wallet() {
 
     // Tạo document nạp tiền ở trạng thái 'pending' trên Firestore trước
     try {
-      const { doc, setDoc } = await import('firebase/firestore');
-      const { db } = await import('../firebase');
       await setDoc(doc(db, 'payments', code), {
         userId: user.id || user.uid || '',
         userEmail: user.email || 'N/A',
@@ -260,8 +257,6 @@ function Wallet() {
 
       if (response.ok && result.success) {
         // Cập nhật state số dư mới ở Frontend từ database Firestore
-        const { doc, getDoc } = await import('firebase/firestore');
-        const { db } = await import('../firebase');
         const userSnap = await getDoc(doc(db, 'users', user.id || user.uid || ''));
         if (userSnap.exists()) {
           await updateUserInfo({ balance: userSnap.data().balance });
@@ -285,9 +280,6 @@ function Wallet() {
     const mockTxId = `SIM-${Math.floor(100000 + Math.random() * 900000)}`;
 
     try {
-      const { doc, setDoc } = await import('firebase/firestore');
-      const { db } = await import('../firebase');
-
       await setDoc(doc(db, 'payments', mockTxId), {
         userId: user.id || user.uid || '',
         userEmail: user.email || 'N/A',

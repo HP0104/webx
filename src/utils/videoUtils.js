@@ -42,7 +42,7 @@ export function parseVideoUrl(input) {
         embedUrl: url,
         isDirect: true
       };
-    } catch (e) {
+    } catch {
       return {
         provider: isDirectHls ? 'hls' : 'direct',
         domain: null,

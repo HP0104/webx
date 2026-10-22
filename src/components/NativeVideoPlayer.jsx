@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { Loader2 } from 'lucide-react';
 
@@ -106,6 +106,8 @@ export default function NativeVideoPlayer({ src, poster, title, autoPlay = true,
       <video
         ref={videoRef}
         poster={poster}
+        title={title}
+        aria-label={title || 'Trình phát video'}
         controls
         playsInline
         webkit-playsinline="true"

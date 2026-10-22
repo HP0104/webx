@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Upload, X } from 'lucide-react';
 import { searchSteamThenTranslateGameInfo } from '../../utils/steamInfoHelper';
 
@@ -18,10 +18,12 @@ function GameForm({
   const [manualScreenshotUrl, setManualScreenshotUrl] = useState('');
 
   // Clear fields when editingGameId changes (like starting/canceling edit)
-  useEffect(() => {
+  const [prevEditingId, setPrevEditingId] = useState(editingGameId);
+  if (prevEditingId !== editingGameId) {
+    setPrevEditingId(editingGameId);
     setCurrentUpdateVersion('');
     setCurrentUpdateLog('');
-  }, [editingGameId]);
+  }
 
   const handleSearchAI = async () => {
     const gameName = searchQuery.trim();

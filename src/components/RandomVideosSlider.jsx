@@ -1,19 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import { Film } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import VideoCardItem from './VideoCardItem';
 
+function pseudoRandomHash(str = '') {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
 export default function RandomVideosSlider() {
   const { videos = [] } = useAppContext();
-  const [randomVideos, setRandomVideos] = useState([]);
   const sliderRef = useRef(null);
 
-  useEffect(() => {
-    if (videos.length > 0) {
-      const shuffled = [...videos].sort(() => 0.5 - Math.random());
-      setRandomVideos(shuffled.slice(0, 6));
-    }
+  const randomVideos = useMemo(() => {
+    if (!videos || videos.length === 0) return [];
+    return [...videos]
+      .sort((a, b) => pseudoRandomHash(String(a.id || a.title)) - pseudoRandomHash(String(b.id || b.title)))
+      .slice(0, 6);
   }, [videos]);
 
   useEffect(() => {

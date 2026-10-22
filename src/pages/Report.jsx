@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useAppContext } from '../App';
-import { MessageSquare, Send, User, ShieldAlert, Bug, Image as ImageIcon, X } from 'lucide-react';
+import { MessageSquare, Send, Bug, Image as ImageIcon } from 'lucide-react';
 
 function Report() {
   const { user } = useAppContext();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Gamepad2, Star, Download, Calendar, ArrowLeft } from 'lucide-react';
 import { useAppContext } from '../App';
@@ -18,9 +18,14 @@ function Category() {
   // Pagination
   const ITEMS_PER_PAGE = 9;
   const [currentPage, setCurrentPage] = useState(1);
+  const [prevFilter, setPrevFilter] = useState({ categoryType, searchQuery });
+  if (prevFilter.categoryType !== categoryType || prevFilter.searchQuery !== searchQuery) {
+    setPrevFilter({ categoryType, searchQuery });
+    setCurrentPage(1);
+  }
 
   // Map categoryType to display title and filter/sort logic
-  let title = 'Kho Game';
+  let title;
   let filteredGames = [...games];
 
   // Helper to safely extract tags array from either Array or comma-delimited string
@@ -42,7 +47,6 @@ function Category() {
 
   if (searchQuery) {
     title = `KẾT QUẢ TÌM KIẾM CHO "${searchQuery}"`;
-    const lowerQuery = searchQuery.toLowerCase();
     
     const gameMatches = games.filter(g => 
       matchSearch(g.title, searchQuery) || 
@@ -108,11 +112,6 @@ function Category() {
         break;
     }
   }
-
-  // Reset page when filter changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [categoryType, searchQuery]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredGames.length / ITEMS_PER_PAGE);

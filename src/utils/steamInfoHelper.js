@@ -1,4 +1,4 @@
-import { searchGames, generateGameContentWithGemini } from '../services/gameInfo';
+import { searchGames } from '../services/gameInfo';
 
 const ADULT_KEYWORDS = [
   '18+', 'adult', 'nsfw', 'hentai', 'eroge', 'sex', 'slut', 'porn', 'uncensored', 'nude'
@@ -118,7 +118,7 @@ const CORS_PROXIES = [
 ];
 
 const getJson = async (url) => {
-  let directError = null;
+  let directError;
 
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
@@ -137,7 +137,7 @@ const getJson = async (url) => {
         continue;
       }
     }
-    throw new Error('Không đọc được nguồn Steam qua các proxy. Vui lòng thử lại sau.');
+    throw new Error('Không đọc được nguồn Steam qua các proxy. Vui lòng thử lại sau.', { cause: directError });
   }
 
   throw directError || new Error('Không đọc được nguồn.');

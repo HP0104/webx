@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AlertCircle, X } from 'lucide-react';
 
 function NotificationBanner() {
   const [isVisible, setIsVisible] = useState(true);
-  const [notification, setNotification] = useState(
+  const [notification] = useState(
     '📌 LƯU Ý: Tất cả game được admin dịch. Nếu trùng với web khác thì admin chân thành xin lỗi. (Có thể vào phần báo lỗi và báo để admin gỡ)'
   );
 

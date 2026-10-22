@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { LogIn, Eye, EyeOff, Mail } from 'lucide-react';
 import { authService } from '../services/authService';
 
@@ -115,8 +115,8 @@ function Auth() {
 
           {error && <div style={{ color: '#ff4d4f', fontSize: '0.85rem', textAlign: 'center', backgroundColor: 'rgba(255, 77, 79, 0.1)', padding: '0.5rem', borderRadius: '4px' }}>{error}</div>}
 
-          <button type="submit" className="btn btn-primary" style={{ justifyContent: 'center', marginTop: '1rem', padding: '0.75rem' }}>
-            {isReset ? 'Gửi Email đặt lại' : (isLogin ? 'Đăng Nhập' : 'Đăng Ký')}
+          <button type="submit" disabled={loading} className="btn btn-primary" style={{ justifyContent: 'center', marginTop: '1rem', padding: '0.75rem', opacity: loading ? 0.7 : 1 }}>
+            {loading ? 'Đang xử lý...' : (isReset ? 'Gửi Email đặt lại' : (isLogin ? 'Đăng Nhập' : 'Đăng Ký'))}
           </button>
           
           {isReset && (

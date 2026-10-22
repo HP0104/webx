@@ -1,6 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import fluidPlayer from 'fluid-player';
-import 'fluid-player/src/css/fluidplayer.css';
+import { useState, useEffect, useRef } from 'react';
 import { useNetworkQuality } from '../utils/networkUtils';
 import { Wifi, SignalLow } from 'lucide-react';
 
@@ -25,7 +23,7 @@ export default function VideoAdBanner({ config }) {
       if (fluidPlayerInstance.current) {
         try {
           fluidPlayerInstance.current.destroy();
-        } catch (e) {
+        } catch {
           // ignore
         }
         fluidPlayerInstance.current = null;
@@ -42,77 +40,88 @@ export default function VideoAdBanner({ config }) {
     if (fluidPlayerInstance.current) {
       try {
         fluidPlayerInstance.current.destroy();
-      } catch (e) {
+      } catch {
         // ignore
       }
       fluidPlayerInstance.current = null;
     }
 
-    try {
-      const vastUrl = config?.vastUrl || `https://s.magsrv.com/v1/vast.php?idz=${config?.zoneId || '6022002'}`;
-      
-      fluidPlayerInstance.current = fluidPlayer(videoPlayerRef.current, {
-        layoutControls: {
-          controlsBarText: 'Video tài trợ',
-          allowTheatre: false,
-          playPauseAnimation: false,
-          playButtonShowing: true,
-          fillToContainer: true,
-          autoPlay: true,
-          mute: true, // BẮT BUỘC: Mặc định tắt tiếng để không phiền người xem
-          keyboardControl: false,
-        },
-        vastOptions: {
-          allowVPAID: true,
-          adList: [
-            {
-              roll: 'preRoll',
-              vastTag: vastUrl,
-            },
-          ],
-          vastAdvanced: {
-            // Khi video quảng cáo chạy xong -> phát liên tục video mới sau 2 giây
-            vastVideoEndedCallback: () => {
-              if (isCancelled) return;
-              timer = setTimeout(() => {
-                setAdCycle((prev) => prev + 1);
-              }, 2000);
-            },
-            // Khi user skip quảng cáo -> chuyển sang video mới liên tục
-            vastVideoSkippedCallback: () => {
-              if (isCancelled) return;
-              timer = setTimeout(() => {
-                setAdCycle((prev) => prev + 1);
-              }, 2000);
-            },
-            // Khi tạm thời hết quảng cáo từ mạng ad -> thử lại sau 10 giây
-            noVastVideoCallback: () => {
-              if (isCancelled) return;
-              timer = setTimeout(() => {
-                setAdCycle((prev) => prev + 1);
-              }, 10000);
+    const initPlayer = async () => {
+      try {
+        const [{ default: fluidPlayer }] = await Promise.all([
+          import('fluid-player'),
+          import('fluid-player/src/css/fluidplayer.css')
+        ]);
+
+        if (isCancelled || !videoPlayerRef.current) return;
+
+        const vastUrl = config?.vastUrl || `https://s.magsrv.com/v1/vast.php?idz=${config?.zoneId || '6022002'}`;
+        
+        fluidPlayerInstance.current = fluidPlayer(videoPlayerRef.current, {
+          layoutControls: {
+            controlsBarText: 'Video tài trợ',
+            allowTheatre: false,
+            playPauseAnimation: false,
+            playButtonShowing: true,
+            fillToContainer: true,
+            autoPlay: true,
+            mute: true, // BẮT BUỘC: Mặc định tắt tiếng để không phiền người xem
+            keyboardControl: false,
+          },
+          vastOptions: {
+            allowVPAID: true,
+            adList: [
+              {
+                roll: 'preRoll',
+                vastTag: vastUrl,
+              },
+            ],
+            vastAdvanced: {
+              // Khi video quảng cáo chạy xong -> phát liên tục video mới sau 2 giây
+              vastVideoEndedCallback: () => {
+                if (isCancelled) return;
+                timer = setTimeout(() => {
+                  setAdCycle((prev) => prev + 1);
+                }, 2000);
+              },
+              // Khi user skip quảng cáo -> chuyển sang video mới liên tục
+              vastVideoSkippedCallback: () => {
+                if (isCancelled) return;
+                timer = setTimeout(() => {
+                  setAdCycle((prev) => prev + 1);
+                }, 2000);
+              },
+              // Khi tạm thời hết quảng cáo từ mạng ad -> thử lại sau 10 giây
+              noVastVideoCallback: () => {
+                if (isCancelled) return;
+                timer = setTimeout(() => {
+                  setAdCycle((prev) => prev + 1);
+                }, 10000);
+              },
             },
           },
-        },
-      });
+        });
 
-      // Lắng nghe sự kiện ended trên thẻ video làm lớp bảo vệ dự phòng để luôn phát liên tục
-      const videoEl = videoPlayerRef.current;
-      const handleEnded = () => {
-        if (isCancelled) return;
-        if (!timer) {
-          timer = setTimeout(() => {
-            setAdCycle((prev) => prev + 1);
-          }, 2000);
-        }
-      };
-      videoEl?.addEventListener('ended', handleEnded);
+        // Lắng nghe sự kiện ended trên thẻ video làm lớp bảo vệ dự phòng để luôn phát liên tục
+        const videoEl = videoPlayerRef.current;
+        const handleEnded = () => {
+          if (isCancelled) return;
+          if (!timer) {
+            timer = setTimeout(() => {
+              setAdCycle((prev) => prev + 1);
+            }, 2000);
+          }
+        };
+        videoEl?.addEventListener('ended', handleEnded);
 
-      setHasError(false);
-    } catch (err) {
-      console.warn('Không thể khởi tạo Fluid Player cho Video Ad:', err);
-      setHasError(true);
-    }
+        setHasError(prev => prev ? false : prev);
+      } catch (err) {
+        console.warn('Không thể khởi tạo Fluid Player cho Video Ad:', err);
+        setHasError(true);
+      }
+    };
+
+    initPlayer();
 
     return () => {
       isCancelled = true;
@@ -120,7 +129,7 @@ export default function VideoAdBanner({ config }) {
       if (fluidPlayerInstance.current) {
         try {
           fluidPlayerInstance.current.destroy();
-        } catch (e) {
+        } catch {
           // ignore
         }
         fluidPlayerInstance.current = null;

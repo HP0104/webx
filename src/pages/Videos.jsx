@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../App';
-import { Play, Eye, Calendar, Tag, Film } from 'lucide-react';
+import { Film } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 const CATEGORY_LABELS = {
@@ -17,22 +17,21 @@ function Videos() {
   const { category } = useParams();
   const { videos = [] } = useAppContext();
 
-
-
   const currentCategory = category || 'all';
   const pageTitle = CATEGORY_LABELS[currentCategory] || 'Tất Cả Phim';
 
-  // Filter videos by category
-  const filteredVideos = currentCategory === 'all'
-    ? videos
-    : videos.filter(v => v.category === currentCategory);
+  // Filter and sort videos by category and newest first
+  const sortedVideos = useMemo(() => {
+    const filtered = currentCategory === 'all'
+      ? videos
+      : videos.filter(v => v.category === currentCategory);
 
-  // Sort by newest first
-  const sortedVideos = [...filteredVideos].sort((a, b) => {
-    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return dateB - dateA;
-  });
+    return [...filtered].sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+  }, [videos, currentCategory]);
 
   // Pagination
   const ITEMS_PER_PAGE = 9;

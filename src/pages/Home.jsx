@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Gamepad2, TrendingUp, Clock, Star, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../App';
@@ -15,11 +15,11 @@ function Home() {
   const [hotFilter, setHotFilter] = useState('day');
 
   // Sắp xếp Game mới cập nhật (updatedAt hoặc createdAt giảm dần)
-  const sortedNewGames = [...games].sort((a, b) => {
+  const sortedNewGames = useMemo(() => [...games].sort((a, b) => {
     const dateA = new Date(a.updatedAt || a.createdAt || a.releaseDate || 0);
     const dateB = new Date(b.updatedAt || b.createdAt || b.releaseDate || 0);
     return dateB - dateA;
-  });
+  }), [games]);
 
   const getDaysSinceCreation = (game) => {
     const createdDate = new Date(game.updatedAt || game.createdAt || game.releaseDate || 0);
@@ -68,7 +68,7 @@ function Home() {
         month: '2-digit',
         year: 'numeric'
       });
-    } catch (e) {
+    } catch {
       return dateVal;
     }
   };

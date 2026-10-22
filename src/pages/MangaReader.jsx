@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -39,9 +39,14 @@ function MangaReader() {
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
 
+  const [prevChapterId, setPrevChapterId] = useState(chapterId);
+  if (prevChapterId !== chapterId) {
+    setPrevChapterId(chapterId);
+    setRestoredImages(null);
+  }
+
   // Tự động kiểm tra file khôi phục nếu có (reset ngay khi đổi chapter để tránh trùng ảnh chương trước)
   useEffect(() => {
-    setRestoredImages(null);
     let isMounted = true;
 
     const rawChap = chapterId || '';
@@ -71,7 +76,7 @@ function MangaReader() {
               return;
             }
           }
-        } catch (e) {}
+        } catch {}
       }
 
       // 2. Thử file gộp theo Manga ID
@@ -107,7 +112,7 @@ function MangaReader() {
               }
             }
           }
-        } catch (e) {}
+        } catch {}
       }
     };
     tryFetch();
@@ -118,7 +123,9 @@ function MangaReader() {
     };
   }, [mangaId, chapterId, user, mangaItem, currentChapter]);
 
-  const images = restoredImages || currentChapter?.images || [];
+  const chapterImages = currentChapter?.images;
+  const images = useMemo(() => restoredImages || chapterImages || [], [restoredImages, chapterImages]);
+  const nextChapterImages = nextChapter?.images;
 
   // 1. Preload the first 10 images of current chapter immediately for instant reading
   useEffect(() => {
@@ -127,7 +134,7 @@ function MangaReader() {
   }, [images]);
 
   // 2. Preload subsequent pages as user scrolls through chapter
-  const handlePageVisible = useCallback((index) => {
+  const handlePageVisible = (index) => {
     // Preload next 5 images ahead of current scroll
     for (let i = 1; i <= 5; i++) {
       const nextIdx = index + i;
@@ -137,10 +144,10 @@ function MangaReader() {
     }
 
     // Proactively preload first 5 images of NEXT chapter when reader reaches 65% or last 5 pages
-    if (images.length > 0 && (index >= Math.floor(images.length * 0.65) || index >= images.length - 5) && nextChapter?.images?.length) {
-      nextChapter.images.slice(0, 5).forEach(preloadImageUrl);
+    if (images.length > 0 && (index >= Math.floor(images.length * 0.65) || index >= images.length - 5) && nextChapterImages?.length) {
+      nextChapterImages.slice(0, 5).forEach(preloadImageUrl);
     }
-  }, [images, nextChapter]);
+  };
 
   // Show/hide scroll-to-top button
   useEffect(() => {
@@ -159,7 +166,7 @@ function MangaReader() {
   }, []);
 
   useEffect(() => {
-    resetNavTimer();
+    hideNavTimer.current = setTimeout(() => setShowNav(false), 3000);
     const handleMouseMove = () => resetNavTimer();
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
     window.addEventListener('touchstart', handleMouseMove, { passive: true });
@@ -311,7 +318,7 @@ function MangaReader() {
         ) : (
           images.map((imgUrl, index) => (
             <LazyImage
-              key={`${chapterId}-${index}`}
+              key={`${chapterId}-${index}-${imgUrl}`}
               src={imgUrl}
               alt={`Trang ${index + 1}`}
               index={index}
@@ -373,19 +380,25 @@ function LazyImage({ src, alt, index, total, onVisible }) {
   const [hasError, setHasError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const imgRef = useRef(null);
-
+  const onVisibleRef = useRef(onVisible);
   useEffect(() => {
+    onVisibleRef.current = onVisible;
+  });
+
+  const [prevSrc, setPrevSrc] = useState(src);
+  if (prevSrc !== src) {
+    setPrevSrc(src);
     setLoaded(false);
     setHasError(false);
     setRetryCount(0);
-  }, [src]);
+  }
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
           setInView(true);
-          if (onVisible) onVisible();
+          if (onVisibleRef.current) onVisibleRef.current();
           observer.disconnect();
         }
       },
@@ -394,7 +407,7 @@ function LazyImage({ src, alt, index, total, onVisible }) {
 
     if (imgRef.current) observer.observe(imgRef.current);
     return () => observer.disconnect();
-  }, [onVisible]);
+  }, []);
 
   const handleRetry = () => {
     setHasError(false);

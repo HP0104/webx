@@ -2,9 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { 
-  CheckCircle2, ChevronDown, ChevronRight, Clock, Gamepad2, XCircle, Search, 
-  Film, Users, Shield, Wallet, Copy, Check, Plus, Minus, ArrowUpDown, 
-  Calendar, Mail, UserCheck, ChevronLeft, ChevronsLeft, ChevronsRight, X
+  ChevronDown, ChevronRight, Gamepad2, XCircle, Search, 
+  Film, Users, Shield, Wallet, Copy, Check, Plus, Minus, 
+  Mail, ChevronLeft, ChevronsLeft, ChevronsRight, X
 } from 'lucide-react';
 import { formatOwnershipDate, isOwnershipActive, normalizeOwnedGames } from '../../utils/ownership';
 

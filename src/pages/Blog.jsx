@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, query, orderBy, addDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useAppContext } from '../App';
-import { Edit, Image, MessageSquare, User, Calendar, Upload } from 'lucide-react';
+import { Edit, MessageSquare, User, Calendar, Upload } from 'lucide-react';
 
 const DEFAULT_BLOG_IMAGE = 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=800';
 

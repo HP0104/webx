@@ -1,38 +1,39 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, createContext, useContext, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import NotificationBanner from './components/NotificationBanner';
 import ChatBox from './components/ChatBox';
 import AdBanner, { AdBlockWall } from './components/AdBanner';
-import VideoAdBanner from './components/VideoAdBanner';
 import Home from './pages/Home';
-import Auth from './pages/Auth';
-import Wallet from './pages/Wallet';
-import GameDetail from './pages/GameDetail';
-import Profile from './pages/Profile';
-import Admin from './pages/Admin';
-import Category from './pages/Category';
-import Blog from './pages/Blog';
-import Report from './pages/Report';
-import GameSearch from './pages/GameSearch';
-import Videos from './pages/Videos';
-import VideoDetail from './pages/VideoDetail';
-import MangaList from './pages/MangaList';
-import MangaDetail from './pages/MangaDetail';
-import MangaReader from './pages/MangaReader';
-import UploaderDashboard from './pages/UploaderDashboard';
 import ExoClickPopunder from './components/ExoClickPopunder';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { findGameByRouteParam, getGamePath } from './utils/gameRoutes';
 import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './utils/ownership';
 import { ADS_CONFIG } from './config/ads';
 import MobileBottomNav from './components/MobileBottomNav';
 import DMCABadge from './components/DMCABadge';
 import ErrorBoundary from './components/ErrorBoundary';
-import { deleteMangaFromTelegram } from './utils/mangaUtils';
+
+// Lazy-loaded routes & heavy components for high initial load performance
+const Auth = lazy(() => import('./pages/Auth'));
+const Wallet = lazy(() => import('./pages/Wallet'));
+const GameDetail = lazy(() => import('./pages/GameDetail'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Admin = lazy(() => import('./pages/Admin'));
+const Category = lazy(() => import('./pages/Category'));
+const Blog = lazy(() => import('./pages/Blog'));
+const Report = lazy(() => import('./pages/Report'));
+const GameSearch = lazy(() => import('./pages/GameSearch'));
+const Videos = lazy(() => import('./pages/Videos'));
+const VideoDetail = lazy(() => import('./pages/VideoDetail'));
+const MangaList = lazy(() => import('./pages/MangaList'));
+const MangaDetail = lazy(() => import('./pages/MangaDetail'));
+const MangaReader = lazy(() => import('./pages/MangaReader'));
+const UploaderDashboard = lazy(() => import('./pages/UploaderDashboard'));
+const VideoAdBanner = lazy(() => import('./components/VideoAdBanner'));
 
 const AppContext = createContext();
 
@@ -202,25 +203,27 @@ function AppContent({ user }) {
       >
         <main className={`main-content ${isMangaReaderRoute ? 'main-content-full' : ''}`}>
           <ErrorBoundary>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/category/:categoryType" element={<Category />} />
-              <Route path="/games" element={<Category />} />
-              <Route path="/game/:gameSlug" element={<GameDetail />} />
-              <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
-              <Route path="/wallet" element={user ? <Wallet /> : <Navigate to="/auth" />} />
-              <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
-              <Route path="/admin" element={user?.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
-              <Route path="/uploader" element={(user?.role === 'uploader' || user?.role === 'admin') ? <UploaderDashboard /> : <Navigate to={user ? "/" : "/auth"} />} />
-              <Route path="/blog" element={<Blog />} />
-              <Route path="/report" element={<Report />} />
-              <Route path="/ai-search" element={<GameSearch />} />
-              <Route path="/videos/:category" element={<Videos />} />
-              <Route path="/video/:videoId" element={<VideoDetail />} />
-              <Route path="/manga" element={<MangaList />} />
-              <Route path="/manga/:mangaId" element={<MangaDetail />} />
-              <Route path="/manga/:mangaId/chapter/:chapterId" element={<MangaReader />} />
-            </Routes>
+            <Suspense fallback={<div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="loading-spinner" /></div>}>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/category/:categoryType" element={<Category />} />
+                <Route path="/games" element={<Category />} />
+                <Route path="/game/:gameSlug" element={<GameDetail />} />
+                <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
+                <Route path="/wallet" element={user ? <Wallet /> : <Navigate to="/auth" />} />
+                <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
+                <Route path="/admin" element={user?.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
+                <Route path="/uploader" element={(user?.role === 'uploader' || user?.role === 'admin') ? <UploaderDashboard /> : <Navigate to={user ? "/" : "/auth"} />} />
+                <Route path="/blog" element={<Blog />} />
+                <Route path="/report" element={<Report />} />
+                <Route path="/ai-search" element={<GameSearch />} />
+                <Route path="/videos/:category" element={<Videos />} />
+                <Route path="/video/:videoId" element={<VideoDetail />} />
+                <Route path="/manga" element={<MangaList />} />
+                <Route path="/manga/:mangaId" element={<MangaDetail />} />
+                <Route path="/manga/:mangaId/chapter/:chapterId" element={<MangaReader />} />
+              </Routes>
+            </Suspense>
           </ErrorBoundary>
 
           {!isMangaReaderRoute && (
@@ -234,7 +237,9 @@ function AppContent({ user }) {
           <aside className="sidebar">
             <ChatBox />
             <div style={{ marginTop: '1.5rem' }}>
-              <VideoAdBanner config={ADS_CONFIG.sidebar_video} />
+              <Suspense fallback={null}>
+                <VideoAdBanner config={ADS_CONFIG.sidebar_video} />
+              </Suspense>
             </div>
             <div style={{ marginTop: '1.5rem' }}>
               <AdBanner config={ADS_CONFIG.sidebar} />
@@ -562,8 +567,12 @@ function App() {
     const targetManga = mangaObj || manga.find(m => m.id?.toString() === mangaId?.toString());
     setManga(prev => prev.filter(m => m.id.toString() !== mangaId.toString()));
     if (targetManga) {
-      deleteMangaFromTelegram(targetManga).catch(error => {
-        console.warn('Lỗi khi xóa ảnh trên Telegram:', error);
+      import('./utils/mangaUtils').then(({ deleteMangaFromTelegram }) => {
+        deleteMangaFromTelegram(targetManga).catch(error => {
+          console.warn('Lỗi khi xóa ảnh trên Telegram:', error);
+        });
+      }).catch(err => {
+        console.warn('Cannot load mangaUtils:', err);
       });
     }
     try {
