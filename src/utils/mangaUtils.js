@@ -11,7 +11,7 @@
 export const MANGA_GENRES = [
   'Action', 'Adventure', 'Comedy', 'Drama', 'Fantasy', 'Horror',
   'Isekai', 'Romance', 'School Life', 'Sci-Fi', 'Slice of Life',
-  'Supernatural', 'Harem', 'Ecchi', 'Mature', 'Manhwa', 'Manhua', 'Việt Hóa'
+  'Supernatural', 'Harem', 'Ecchi', 'Mature', 'Manhwa', 'Manhua', '3D', 'Việt Hóa'
 ];
 
 export const MANGA_STATUS = {

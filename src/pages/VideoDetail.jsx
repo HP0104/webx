@@ -620,7 +620,7 @@ function VideoDetail() {
         <div className="video-detail-info-header">
           <h1 className="video-detail-title">{video.title}</h1>
           <span className="video-detail-badge">
-            {video.category === 'vam' ? 'VAM' : '3D'}
+            {video.category === 'vam' ? 'VAM' : (video.category === '3d' ? '3D Anime' : (video.category === 'cosplay' ? 'Cosplay' : (video.category === 'jav' || video.category === 'vietsub' ? 'JAV Vietsub' : (video.category === 'hentai' ? 'Hentai' : 'Phim'))))}
           </span>
         </div>
 

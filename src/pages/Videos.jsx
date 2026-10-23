@@ -7,7 +7,10 @@ import Pagination from '../components/Pagination';
 const CATEGORY_LABELS = {
   all: 'Tất Cả Phim',
   vam: 'Phim VAM',
-  '3d': 'Phim 3D'
+  '3d': 'Phim 3D Anime',
+  cosplay: 'Cosplay 18+',
+  vietsub: 'JAV Vietsub',
+  hentai: 'Hentai 2D'
 };
 
 import VideoCardItem from '../components/VideoCardItem';
@@ -24,7 +27,10 @@ function Videos() {
   const sortedVideos = useMemo(() => {
     const filtered = currentCategory === 'all'
       ? videos
-      : videos.filter(v => v.category === currentCategory);
+      : videos.filter(v => {
+          if (currentCategory === 'vietsub' && (v.category === 'vietsub' || v.category === 'jav')) return true;
+          return v.category === currentCategory;
+        });
 
     return [...filtered].sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;

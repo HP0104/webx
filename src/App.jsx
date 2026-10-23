@@ -182,6 +182,16 @@ function RouteAdBannerBottom() {
   return <AdBanner key={routeKey} config={ADS_CONFIG.slot2} />;
 }
 
+function MangaLegacyRedirect() {
+  const { mangaId, chapterId } = useParams();
+  return <Navigate to={`/manga/${mangaId}/chapter/${chapterId}`} replace />;
+}
+
+function VideoLegacyRedirect() {
+  const { videoId } = useParams();
+  return <Navigate to={`/video/${videoId}`} replace />;
+}
+
 function AppContent({ user, authLoading }) {
   const location = useLocation();
   const isMangaReaderRoute = location.pathname.includes('/chapter/');
@@ -225,9 +235,11 @@ function AppContent({ user, authLoading }) {
                 <Route path="/ai-search" element={<GameSearch />} />
                 <Route path="/videos/:category" element={<Videos />} />
                 <Route path="/video/:videoId" element={<VideoDetail />} />
+                <Route path="/watch/:videoId" element={<VideoLegacyRedirect />} />
                 <Route path="/manga" element={<MangaList />} />
                 <Route path="/manga/:mangaId" element={<MangaDetail />} />
                 <Route path="/manga/:mangaId/chapter/:chapterId" element={<MangaReader />} />
+                <Route path="/manga/:mangaId/:chapterId" element={<MangaLegacyRedirect />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
@@ -562,7 +574,13 @@ function App() {
   // ---- Manga CRUD ----
   const addMangaToStore = async (newManga) => {
     const mangaId = Date.now().toString();
-    const mangaData = { ...newManga, id: mangaId };
+    const mangaData = {
+      ...newManga,
+      id: mangaId,
+      uploaderId: newManga.uploaderId || user?.id || null,
+      uploaderName: newManga.uploaderName || user?.username || (user?.role === 'admin' ? 'Admin' : 'Uploader'),
+      createdAt: newManga.createdAt || new Date().toISOString()
+    };
     setManga(prev => [...prev, mangaData]);
     try {
       await setDoc(doc(db, 'manga', mangaId), mangaData);

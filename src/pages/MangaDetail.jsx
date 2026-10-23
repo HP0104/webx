@@ -52,7 +52,11 @@ function MangaDetail() {
   }
 
   const chapters = mangaItem.chapters || [];
-  const sortedChapters = [...chapters].sort((a, b) => (a.number || 0) - (b.number || 0));
+  const sortedChapters = [...chapters].sort((a, b) => {
+    const numA = Number(a.number ?? a.chapterNumber) || 0;
+    const numB = Number(b.number ?? b.chapterNumber) || 0;
+    return numA - numB;
+  });
   const firstChapter = sortedChapters[0];
   const latestChapter = sortedChapters[sortedChapters.length - 1];
 
@@ -163,8 +167,8 @@ function MangaDetail() {
                 className="manga-chapter-item"
               >
                 <div className="manga-chapter-item-left">
-                  <span className="manga-chapter-number">Ch. {chapter.number}</span>
-                  <span className="manga-chapter-name">{chapter.title || `Chapter ${chapter.number}`}</span>
+                  <span className="manga-chapter-number">Ch. {chapter.number ?? chapter.chapterNumber ?? ''}</span>
+                  <span className="manga-chapter-name">{chapter.title || `Chapter ${chapter.number ?? chapter.chapterNumber ?? ''}`}</span>
                 </div>
                 <div className="manga-chapter-item-right">
                   {chapter.images && (

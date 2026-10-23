@@ -33,7 +33,11 @@ function MangaReader() {
 
   const mangaItem = manga.find(m => m.id?.toString() === mangaId);
   const chapters = mangaItem?.chapters || [];
-  const sortedChapters = [...chapters].sort((a, b) => (a.number || 0) - (b.number || 0));
+  const sortedChapters = [...chapters].sort((a, b) => {
+    const numA = Number(a.number ?? a.chapterNumber) || 0;
+    const numB = Number(b.number ?? b.chapterNumber) || 0;
+    return numA - numB;
+  });
   const currentChapter = chapters.find(c => c.id === chapterId);
   const currentIndex = sortedChapters.findIndex(c => c.id === chapterId);
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;

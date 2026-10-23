@@ -8,6 +8,7 @@ const CATEGORIES = [
   { id: '3d', label: '3D Anime' },
   { id: 'cosplay', label: 'Cosplay 18+' },
   { id: 'vietsub', label: 'JAV Vietsub' },
+  { id: 'hentai', label: 'Hentai 2D' },
   { id: 'other', label: 'Khác' }
 ];
 
