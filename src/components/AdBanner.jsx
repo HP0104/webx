@@ -269,17 +269,19 @@ export function AdBlockWall({ user } = {}) {
   const [checking, setChecking] = useState(true);
   const wallRef = useRef(null);
 
-  const hasAdFreePrivilege = Boolean(user?.adFreeUntil && Date.now() < user.adFreeUntil);
+  const adFreeUntil = user?.adFreeUntil || 0;
 
   useEffect(() => {
-    if (hasAdFreePrivilege) {
-      setBlocked(false);
-      setChecking(false);
-      return;
-    }
-
     let cancelled = false;
     const timer = setTimeout(async () => {
+      if (adFreeUntil > Date.now()) {
+        if (!cancelled) {
+          setBlocked(false);
+          setChecking(false);
+        }
+        return;
+      }
+
       resetAdBlockCache();
       const result = await isAdBlockActive();
       if (!cancelled) {
@@ -292,9 +294,7 @@ export function AdBlockWall({ user } = {}) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [hasAdFreePrivilege]);
-    };
-  }, []);
+  }, [adFreeUntil]);
 
   // Popup bị chặn bởi trình duyệt KHÔNG phải ad blocker → không cần listener
 

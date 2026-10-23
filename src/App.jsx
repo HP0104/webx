@@ -182,9 +182,14 @@ function RouteAdBannerBottom() {
   return <AdBanner key={routeKey} config={ADS_CONFIG.slot2} />;
 }
 
-function AppContent({ user }) {
+function AppContent({ user, authLoading }) {
   const location = useLocation();
   const isMangaReaderRoute = location.pathname.includes('/chapter/');
+  const authFallback = (
+    <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="loading-spinner" />
+    </div>
+  );
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -210,11 +215,11 @@ function AppContent({ user }) {
                 <Route path="/category/:categoryType" element={<Category />} />
                 <Route path="/games" element={<Category />} />
                 <Route path="/game/:gameSlug" element={<GameDetail />} />
-                <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
-                <Route path="/wallet" element={user ? <Wallet /> : <Navigate to="/auth" />} />
-                <Route path="/profile" element={user ? <Profile /> : <Navigate to="/auth" />} />
-                <Route path="/admin" element={user?.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
-                <Route path="/uploader" element={(user?.role === 'uploader' || user?.role === 'admin') ? <UploaderDashboard /> : <Navigate to={user ? "/" : "/auth"} />} />
+                <Route path="/auth" element={authLoading ? authFallback : (!user ? <Auth /> : <Navigate to="/" />)} />
+                <Route path="/wallet" element={authLoading ? authFallback : (user ? <Wallet /> : <Navigate to="/auth" />)} />
+                <Route path="/profile" element={authLoading ? authFallback : (user ? <Profile /> : <Navigate to="/auth" />)} />
+                <Route path="/admin" element={authLoading ? authFallback : (user?.role === 'admin' ? <Admin /> : <Navigate to="/" />)} />
+                <Route path="/uploader" element={authLoading ? authFallback : ((user?.role === 'uploader' || user?.role === 'admin') ? <UploaderDashboard /> : <Navigate to={user ? "/" : "/auth"} />)} />
                 <Route path="/blog" element={<Blog />} />
                 <Route path="/report" element={<Report />} />
                 <Route path="/ai-search" element={<GameSearch />} />
@@ -257,6 +262,7 @@ function AppContent({ user }) {
 
 function App() {
   const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [balance, setBalance] = useState(0);
   const [ownedGames, setOwnedGames] = useState([]);
 
@@ -378,10 +384,12 @@ function App() {
             console.warn("Firestore ownership migration warn:", fsError.message);
           }
         }
+        setAuthLoading(false);
       } else {
         setUser(null);
         setBalance(0);
         setOwnedGames([]);
+        setAuthLoading(false);
       }
     });
     return () => unsubscribe();
@@ -600,7 +608,7 @@ function App() {
 
   return (
     <AppContext.Provider value={{
-      user, balance, ownedGames, logout, buyGame, updateUserInfo,
+      user, authLoading, balance, ownedGames, logout, buyGame, updateUserInfo,
       games, loadingGames, addGameToStore, deleteGameFromStore, updateGameInStore,
       videos, loadingVideos, addVideoToStore, deleteVideoFromStore, updateVideoInStore,
       manga, loadingManga, addMangaToStore, deleteMangaFromStore, updateMangaInStore
@@ -608,7 +616,7 @@ function App() {
       <Router>
         <ExoClickPopunder />
         <PageTitle games={games} videos={videos} manga={manga} />
-        <AppContent user={user} />
+        <AppContent user={user} authLoading={authLoading} />
       </Router>
     </AppContext.Provider>
   );
