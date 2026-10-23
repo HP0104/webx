@@ -85,7 +85,7 @@ function VideoDetail() {
     setReloadKey(prev => prev + 1);
   };
 
-  const video = videos.find(v => v.id.toString() === videoId);
+  const video = videos.find(v => v.id?.toString() === videoId?.toString());
 
   // Lắng nghe bình luận realtime
   useEffect(() => {
@@ -221,6 +221,10 @@ function VideoDetail() {
 
   useEffect(() => {
     if (video?.id) {
+      const viewedKey = `video_viewed_${video.id}`;
+      if (sessionStorage.getItem(viewedKey)) return;
+      sessionStorage.setItem(viewedKey, '1');
+
       const videoRef = doc(db, 'videos', video.id.toString());
       updateDoc(videoRef, {
         views: increment(1)

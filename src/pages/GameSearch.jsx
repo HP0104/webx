@@ -1,11 +1,17 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { searchGames, generateGameContentWithGemini } from "../services/gameInfo";
 import { Sparkles, Search, Loader2, ChevronDown, ChevronUp, Cpu, Monitor, HelpCircle, FileText, AlertTriangle } from "lucide-react";
 
 // Safe paragraph renderer to prevent XSS from AI output or raw API strings
 const renderSafeHtmlParagraphs = (htmlText) => {
   if (!htmlText) return null;
-  const paragraphs = htmlText
+  const rawString = Array.isArray(htmlText)
+    ? htmlText.join('\n')
+    : typeof htmlText === 'string'
+      ? htmlText
+      : String(htmlText);
+
+  const paragraphs = rawString
     .replace(/<\/?p[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, '') // Strip remaining HTML tags (<script>, <img>, etc.)
     .split('\n')
@@ -21,6 +27,7 @@ export default function GameSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState(null);
   const [aiContent, setAiContent] = useState({}); // Map of game.id to generated content
   const [aiLoading, setAiLoading] = useState(new Set()); // Set of game.id currently loading
   const [aiErrors, setAiErrors] = useState({}); // Map of game.id to error messages
@@ -28,30 +35,42 @@ export default function GameSearch() {
   const [hasSearched, setHasSearched] = useState(false);
   const [autoGenerateAi, setAutoGenerateAi] = useState(false);
   const resultsRef = useRef(null);
+  const aiContentRef = useRef(aiContent);
+
+  useEffect(() => {
+    aiContentRef.current = aiContent;
+  }, [aiContent]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!query.trim()) return;
     setLoading(true);
     setHasSearched(true);
+    setSearchError(null);
     setAiContent({});
     setAiErrors({});
     setExpandedCards(new Set());
     
-    const games = await searchGames(query.trim());
-    setResults(games);
-    setLoading(false);
+    try {
+      const games = await searchGames(query.trim());
+      setResults(games);
 
-    // Scroll to results smoothly
-    if (games.length > 0) {
-      setTimeout(() => {
-        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
+      // Scroll to results smoothly
+      if (games.length > 0) {
+        setTimeout(() => {
+          resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
 
-      // Tự động chạy ngầm viết bài nếu được chọn
-      if (autoGenerateAi) {
-        handleAiGenerateAll(games);
+        // Tự động chạy ngầm viết bài nếu được chọn
+        if (autoGenerateAi) {
+          handleAiGenerateAll(games);
+        }
       }
+    } catch (err) {
+      setSearchError(err.message || 'Lỗi khi tìm kiếm game.');
+      setResults([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -78,7 +97,11 @@ export default function GameSearch() {
           metacritic: game.metacritic
         }
       );
-      setAiContent(prev => ({ ...prev, [game.id]: content }));
+      setAiContent(prev => {
+        const next = { ...prev, [game.id]: content };
+        aiContentRef.current = next;
+        return next;
+      });
       // Auto-expand the card when content is ready
       setExpandedCards(prev => new Set(prev).add(game.id));
     } catch (error) {
@@ -103,7 +126,7 @@ export default function GameSearch() {
     
     // Viết bài lần lượt cho từng game để tránh rate limit
     for (const game of targetGames) {
-      if (aiContent[game.id]) continue;
+      if (aiContentRef.current[game.id]) continue;
       await handleAiClick(game);
     }
   };
@@ -182,7 +205,15 @@ export default function GameSearch() {
 
       {/* Results Area */}
       <div ref={resultsRef} className="gs-results-area">
-        {hasSearched && !loading && results.length === 0 && (
+        {searchError && (
+          <div className="gs-empty-state" style={{ color: '#ff7875', backgroundColor: 'rgba(255, 77, 79, 0.05)', padding: '2rem', borderRadius: '12px', border: '1px solid rgba(255, 77, 79, 0.2)' }}>
+            <AlertTriangle size={48} strokeWidth={1} />
+            <h3 style={{ color: '#ff4d4f', margin: '0.5rem 0' }}>Lỗi tìm kiếm</h3>
+            <p style={{ color: 'var(--color-text-muted)' }}>{searchError}</p>
+          </div>
+        )}
+
+        {hasSearched && !loading && !searchError && results.length === 0 && (
           <div className="gs-empty-state">
             <Search size={48} strokeWidth={1} />
             <h3>Không tìm thấy game nào</h3>
@@ -363,7 +394,11 @@ export default function GameSearch() {
                               <h4>Mẹo chơi & FAQ</h4>
                             </div>
                             <div className="gs-ai-faq">
-                              <p>{aiContent[game.id].faq}</p>
+                              <p style={{ whiteSpace: 'pre-wrap' }}>
+                                {typeof aiContent[game.id].faq === 'string'
+                                  ? aiContent[game.id].faq
+                                  : JSON.stringify(aiContent[game.id].faq)}
+                              </p>
                             </div>
                           </div>
                         </div>

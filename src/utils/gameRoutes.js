@@ -14,10 +14,10 @@ export const createGameSlug = (game) => {
 export const getGamePath = (game) => `/game/${createGameSlug(game)}`;
 
 export const findGameByRouteParam = (games, routeParam) => {
-  if (!routeParam) return null;
+  if (!routeParam || !Array.isArray(games)) return null;
 
   return games.find(game =>
-    game.id.toString() === routeParam ||
+    game?.id?.toString() === routeParam ||
     createGameSlug(game) === routeParam
   ) || null;
 };

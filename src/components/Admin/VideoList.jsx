@@ -58,10 +58,11 @@ function VideoList({ videos = [], onEditClick, onDeleteClick }) {
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredVideos.length / VIDEOS_PER_PAGE));
+  const safeCurrentPage = (totalPages > 0 && currentPage > totalPages) ? 1 : currentPage;
   const paginatedVideos = useMemo(() => {
-    const start = (currentPage - 1) * VIDEOS_PER_PAGE;
+    const start = (safeCurrentPage - 1) * VIDEOS_PER_PAGE;
     return filteredVideos.slice(start, start + VIDEOS_PER_PAGE);
-  }, [filteredVideos, currentPage]);
+  }, [filteredVideos, safeCurrentPage]);
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -297,7 +298,7 @@ function VideoList({ videos = [], onEditClick, onDeleteClick }) {
             type="button"
             className="btn btn-outline"
             onClick={() => handlePageChange(1)}
-            disabled={currentPage === 1}
+            disabled={safeCurrentPage === 1}
             style={{ padding: '0.35rem 0.55rem', fontSize: '0.8rem' }}
             title="Trang đầu"
           >
@@ -306,8 +307,8 @@ function VideoList({ videos = [], onEditClick, onDeleteClick }) {
           <button
             type="button"
             className="btn btn-outline"
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
+            onClick={() => handlePageChange(safeCurrentPage - 1)}
+            disabled={safeCurrentPage === 1}
             style={{ padding: '0.35rem 0.55rem', fontSize: '0.8rem' }}
             title="Trang trước"
           >
@@ -315,7 +316,7 @@ function VideoList({ videos = [], onEditClick, onDeleteClick }) {
           </button>
 
           {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+            .filter(p => p === 1 || p === totalPages || Math.abs(p - safeCurrentPage) <= 2)
             .map((pageNum, idx, arr) => {
               const showEllipsisBefore = idx > 0 && pageNum - arr[idx - 1] > 1;
               return (
@@ -323,15 +324,15 @@ function VideoList({ videos = [], onEditClick, onDeleteClick }) {
                   {showEllipsisBefore && <span style={{ color: 'var(--color-text-muted)', padding: '0 0.25rem' }}>...</span>}
                   <button
                     type="button"
-                    className={`btn ${currentPage === pageNum ? 'btn-success' : 'btn-outline'}`}
+                    className={`btn ${safeCurrentPage === pageNum ? 'btn-success' : 'btn-outline'}`}
                     onClick={() => handlePageChange(pageNum)}
                     style={{
                       padding: '0.35rem 0.7rem',
                       fontSize: '0.82rem',
-                      fontWeight: currentPage === pageNum ? 700 : 500,
-                      backgroundColor: currentPage === pageNum ? 'var(--color-accent)' : 'transparent',
-                      color: currentPage === pageNum ? '#000' : 'var(--color-text-light)',
-                      borderColor: currentPage === pageNum ? 'var(--color-accent)' : 'var(--color-border)'
+                      fontWeight: safeCurrentPage === pageNum ? 700 : 500,
+                      backgroundColor: safeCurrentPage === pageNum ? 'var(--color-accent)' : 'transparent',
+                      color: safeCurrentPage === pageNum ? '#000' : 'var(--color-text-light)',
+                      borderColor: safeCurrentPage === pageNum ? 'var(--color-accent)' : 'var(--color-border)'
                     }}
                   >
                     {pageNum}
@@ -343,8 +344,8 @@ function VideoList({ videos = [], onEditClick, onDeleteClick }) {
           <button
             type="button"
             className="btn btn-outline"
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
+            onClick={() => handlePageChange(safeCurrentPage + 1)}
+            disabled={safeCurrentPage === totalPages}
             style={{ padding: '0.35rem 0.55rem', fontSize: '0.8rem' }}
             title="Trang sau"
           >
@@ -354,7 +355,7 @@ function VideoList({ videos = [], onEditClick, onDeleteClick }) {
             type="button"
             className="btn btn-outline"
             onClick={() => handlePageChange(totalPages)}
-            disabled={currentPage === totalPages}
+            disabled={safeCurrentPage === totalPages}
             style={{ padding: '0.35rem 0.55rem', fontSize: '0.8rem' }}
             title="Trang cuối"
           >

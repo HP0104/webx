@@ -27,21 +27,49 @@ function Profile() {
     .filter(item => item.ownership.record);
   const activeGamesCount = myGames.filter(item => item.ownership.isActive).length;
 
-  const handleAvatarChange = (e) => {
+  const handleAvatarChange = async (e) => {
     const file = e.target.files[0];
+    e.target.value = '';
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert("Kích thước file ảnh đại diện không được vượt quá 2MB!");
+      if (file.size > 5 * 1024 * 1024) {
+        alert("Kích thước file ảnh đại diện không được vượt quá 5MB!");
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({
-          ...prev,
-          photoURL: reader.result
-        }));
-      };
-      reader.readAsDataURL(file);
+      try {
+        const img = new window.Image();
+        const objectUrl = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(objectUrl);
+          const maxDim = 256;
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/webp', 0.85);
+          setFormData(prev => ({
+            ...prev,
+            photoURL: compressedDataUrl
+          }));
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          alert('Không thể đọc file ảnh.');
+        };
+        img.src = objectUrl;
+      } catch (err) {
+        console.warn('Lỗi nén ảnh đại diện:', err);
+      }
     }
   };
 

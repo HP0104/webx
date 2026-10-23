@@ -45,8 +45,12 @@ function MangaReader() {
     setRestoredImages(null);
   }
 
-  // Tự động kiểm tra file khôi phục nếu có (reset ngay khi đổi chapter để tránh trùng ảnh chương trước)
+  // Tự động kiểm tra file khôi phục nếu có (chỉ chạy khi chapter hiện tại bị thiếu ảnh)
   useEffect(() => {
+    if (currentChapter?.images && currentChapter.images.length > 0) {
+      return;
+    }
+
     let isMounted = true;
 
     const rawChap = chapterId || '';
@@ -415,7 +419,9 @@ function LazyImage({ src, alt, index, total, onVisible }) {
     setRetryCount(prev => prev + 1);
   };
 
-  const imageSrc = retryCount > 0 ? `${src}?retry=${retryCount}` : src;
+  const imageSrc = retryCount > 0
+    ? (src.includes('?') ? `${src}&retry=${retryCount}` : `${src}?retry=${retryCount}`)
+    : src;
 
   return (
     <div className={`manga-reader-page ${loaded ? 'is-loaded' : ''}`} ref={imgRef}>

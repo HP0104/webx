@@ -36,15 +36,16 @@ export const authService = {
 
   // Đăng ký bằng Email
   async registerWithEmail(email, password) {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const cleanEmail = (email || '').trim();
+    const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
     await sendEmailVerification(userCredential.user);
     
     // Tạo profile mặc định
     const userRef = doc(db, 'users', userCredential.user.uid);
     await setDoc(userRef, {
       uid: userCredential.user.uid,
-      username: email.split('@')[0],
-      email: email,
+      username: cleanEmail.split('@')[0],
+      email: cleanEmail,
       balance: 0,
       ownedGames: [],
       role: 'user',
@@ -56,12 +57,13 @@ export const authService = {
 
   // Đăng nhập bằng Email hoặc Username
   async loginWithEmailOrUsername(identifier, password) {
-    let email = identifier;
+    const cleanId = (identifier || '').trim();
+    let email = cleanId;
     
     // Nếu là username (không có @)
-    if (!identifier.includes('@')) {
+    if (!cleanId.includes('@')) {
       const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('username', '==', identifier));
+      const q = query(usersRef, where('username', '==', cleanId));
       const querySnapshot = await getDocs(q);
       
       if (!querySnapshot.empty) {
@@ -71,13 +73,13 @@ export const authService = {
       }
     }
     
-    const result = await signInWithEmailAndPassword(auth, email, password);
+    const result = await signInWithEmailAndPassword(auth, email.trim(), password);
     return result.user;
   },
 
   // Quên mật khẩu
   async resetPassword(email) {
-    await sendPasswordResetEmail(auth, email);
+    await sendPasswordResetEmail(auth, (email || '').trim());
   },
 
   // Đăng xuất

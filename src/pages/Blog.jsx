@@ -58,19 +58,43 @@ function Blog() {
     return () => unsubscribeComments();
   }, [isUnderDevelopment]);
 
-  // Handle local image file upload and convert to base64
+  // Handle local image file upload and convert to lightweight WebP data URL
   const handleImageFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert("Kích thước file ảnh không được vượt quá 2MB!");
+      if (file.size > 5 * 1024 * 1024) {
+        alert("Kích thước file ảnh không được vượt quá 5MB!");
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImageUrl(reader.result); // Base64 string stored!
+      const img = new window.Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        let { width, height } = img;
+        const maxW = 900;
+        const maxH = 550;
+        if (width > maxW || height > maxH) {
+          if (width / maxW > height / maxH) {
+            height = Math.round((height * maxW) / width);
+            width = maxW;
+          } else {
+            width = Math.round((width * maxH) / height);
+            height = maxH;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressed = canvas.toDataURL('image/webp', 0.8);
+        setImageUrl(compressed);
       };
-      reader.readAsDataURL(file);
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        alert('Không thể đọc file ảnh.');
+      };
+      img.src = objectUrl;
     }
   };
 

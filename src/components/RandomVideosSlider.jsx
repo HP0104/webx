@@ -4,10 +4,13 @@ import { Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import VideoCardItem from './VideoCardItem';
 
-function pseudoRandomHash(str = '') {
+// Seeded daily hash so random videos rotate daily for all visitors
+function dailySeededHash(str = '') {
+  const today = new Date().toISOString().slice(0, 10);
+  const combined = `${today}_${str}`;
   let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+  for (let i = 0; i < combined.length; i++) {
+    hash = ((hash << 5) - hash) + combined.charCodeAt(i);
     hash |= 0;
   }
   return hash;
@@ -20,7 +23,7 @@ export default function RandomVideosSlider() {
   const randomVideos = useMemo(() => {
     if (!videos || videos.length === 0) return [];
     return [...videos]
-      .sort((a, b) => pseudoRandomHash(String(a.id || a.title)) - pseudoRandomHash(String(b.id || b.title)))
+      .sort((a, b) => dailySeededHash(String(a.id || a.title)) - dailySeededHash(String(b.id || b.title)))
       .slice(0, 6);
   }, [videos]);
 

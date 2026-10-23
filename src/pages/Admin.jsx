@@ -96,6 +96,8 @@ function Admin() {
         usersList.push({ id: doc.id, ...doc.data() });
       });
       setUsers(usersList);
+    }, (err) => {
+      console.warn("Firestore users query error:", err.message);
     });
     return () => unsubscribe();
   }, []);

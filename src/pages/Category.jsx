@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Gamepad2, Star, Download, Calendar, ArrowLeft } from 'lucide-react';
 import { useAppContext } from '../App';
@@ -7,9 +7,26 @@ import VideoCardItem from '../components/VideoCardItem';
 import Pagination from '../components/Pagination';
 import { matchSearch } from '../utils/searchUtils';
 
+// Helper to safely extract tags array from either Array or comma-delimited string
+const parseTags = (tags) => {
+  if (Array.isArray(tags)) return tags.filter(Boolean);
+  if (typeof tags === 'string') return tags.split(',').map(t => t.trim()).filter(Boolean);
+  return [];
+};
+
+// Helper to parse DD/MM/YYYY or YYYY-MM-DD to a Comparable Date Object
+const parseDate = (dateStr) => {
+  if (!dateStr) return new Date(0);
+  if (dateStr.includes('/')) {
+    const [day, month, year] = dateStr.split('/');
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+  return new Date(dateStr);
+};
+
 function Category() {
   const { categoryType } = useParams();
-  const { games, videos = [] } = useAppContext();
+  const { games, videos = [], loadingGames } = useAppContext();
   const location = useLocation();
   const navigate = useNavigate();
   const searchParams = new URLSearchParams(location.search);
@@ -25,97 +42,85 @@ function Category() {
   }
 
   // Map categoryType to display title and filter/sort logic
-  let title;
-  let filteredGames = [...games];
+  const { title, filteredGames } = useMemo(() => {
+    let computedTitle;
+    let list = [...games];
 
-  // Helper to safely extract tags array from either Array or comma-delimited string
-  const parseTags = (tags) => {
-    if (Array.isArray(tags)) return tags.filter(Boolean);
-    if (typeof tags === 'string') return tags.split(',').map(t => t.trim()).filter(Boolean);
-    return [];
-  };
+    if (searchQuery) {
+      computedTitle = `KẾT QUẢ TÌM KIẾM CHO "${searchQuery}"`;
+      
+      const gameMatches = games.filter(g => 
+        matchSearch(g.title, searchQuery) || 
+        matchSearch(g.developer, searchQuery) ||
+        parseTags(g.tags).some(t => matchSearch(t, searchQuery)) ||
+        matchSearch(g.description, searchQuery)
+      ).map(g => ({ ...g, itemType: 'game' }));
 
-  // Helper to parse DD/MM/YYYY or YYYY-MM-DD to a Comparable Date Object
-  const parseDate = (dateStr) => {
-    if (!dateStr) return new Date(0);
-    if (dateStr.includes('/')) {
-      const [day, month, year] = dateStr.split('/');
-      return new Date(Number(year), Number(month) - 1, Number(day));
+      const videoMatches = videos.filter(v => 
+        matchSearch(v.title, searchQuery) || 
+        matchSearch(v.description, searchQuery) ||
+        parseTags(v.tags).some(t => matchSearch(t, searchQuery))
+      ).map(v => ({ ...v, itemType: 'video' }));
+
+      list = [...gameMatches, ...videoMatches];
+    } else {
+      switch (categoryType) {
+        case 'hot':
+          computedTitle = 'GAME HOT';
+          list = list.sort((a, b) => (b.views || 0) - (a.views || 0));
+          break;
+        case '18-plus':
+          computedTitle = 'GAME 18+';
+          list = list.filter(g => g.is18Plus || g.is18Vn || g.is18Uncensored || g.is18Pc || g.is18Android || parseTags(g.tags).some(t => ['Mature', '18+'].includes(t)));
+          break;
+        case 'new':
+          computedTitle = 'GAME MỚI NHẤT';
+          list = list.filter(g => g.isNew);
+          list.sort((a, b) => parseDate(b.releaseDate) - parseDate(a.releaseDate));
+          break;
+        case 'popular':
+          computedTitle = 'GAME NHIỀU NGƯỜI CHƠI';
+          list = list.filter(g => g.isPopular);
+          list.sort((a, b) => (b.downloads || 0) - (a.downloads || 0));
+          break;
+        case 'top-rated':
+          computedTitle = 'GAME ĐÁNH GIÁ CAO';
+          list = list.filter(g => g.isTopRated);
+          list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+          break;
+        case '18-all':
+          computedTitle = 'TẤT CẢ GAME 18+';
+          list = list.filter(g => g.is18Plus || g.is18Vn || g.is18Uncensored || g.is18Pc || g.is18Android || parseTags(g.tags).some(t => ['Mature', '18+'].includes(t)));
+          break;
+        case '18-vn':
+          computedTitle = 'VIỆT HÓA 18+';
+          list = list.filter(g => g.is18Vn);
+          break;
+        case '18-uncensored':
+          computedTitle = '18+ KHÔNG CHE';
+          list = list.filter(g => g.is18Uncensored);
+          break;
+        case '18-pc':
+          computedTitle = 'GAME 18+ CHO PC';
+          list = list.filter(g => g.is18Pc);
+          break;
+        case '18-android':
+          computedTitle = 'GAME 18+ CHO ANDROID';
+          list = list.filter(g => g.is18Android);
+          break;
+        case 'games':
+        default:
+          computedTitle = 'TẤT CẢ TRÒ CHƠI';
+          break;
+      }
     }
-    return new Date(dateStr);
-  };
-
-  if (searchQuery) {
-    title = `KẾT QUẢ TÌM KIẾM CHO "${searchQuery}"`;
-    
-    const gameMatches = games.filter(g => 
-      matchSearch(g.title, searchQuery) || 
-      matchSearch(g.developer, searchQuery) ||
-      parseTags(g.tags).some(t => matchSearch(t, searchQuery)) ||
-      matchSearch(g.description, searchQuery)
-    ).map(g => ({ ...g, itemType: 'game' }));
-
-    const videoMatches = videos.filter(v => 
-      matchSearch(v.title, searchQuery) || 
-      matchSearch(v.description, searchQuery) ||
-      parseTags(v.tags).some(t => matchSearch(t, searchQuery))
-    ).map(v => ({ ...v, itemType: 'video' }));
-
-    filteredGames = [...gameMatches, ...videoMatches];
-  } else {
-    switch (categoryType) {
-      case 'hot':
-      case '18-plus':
-        title = categoryType === 'hot' ? 'GAME HOT' : 'GAME 18+';
-        filteredGames = categoryType === 'hot'
-          ? filteredGames.sort((a, b) => (b.views || 0) - (a.views || 0))
-          : filteredGames.filter(g => g.is18Plus || g.is18Vn || g.is18Uncensored || g.is18Pc || g.is18Android || parseTags(g.tags).some(t => ['Mature', '18+'].includes(t)));
-        break;
-      case 'new':
-        title = 'GAME MỚI NHẤT';
-        filteredGames = filteredGames.filter(g => g.isNew);
-        filteredGames.sort((a, b) => parseDate(b.releaseDate) - parseDate(a.releaseDate));
-        break;
-      case 'popular':
-        title = 'GAME NHIỀU NGƯỜI CHƠI';
-        filteredGames = filteredGames.filter(g => g.isPopular);
-        filteredGames.sort((a, b) => (b.downloads || 0) - (a.downloads || 0));
-        break;
-      case 'top-rated':
-        title = 'GAME ĐÁNH GIÁ CAO';
-        filteredGames = filteredGames.filter(g => g.isTopRated);
-        filteredGames.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-        break;
-      case '18-all':
-        title = 'TẤT CẢ GAME 18+';
-        filteredGames = filteredGames.filter(g => g.is18Plus || g.is18Vn || g.is18Uncensored || g.is18Pc || g.is18Android || parseTags(g.tags).some(t => ['Mature', '18+'].includes(t)));
-        break;
-      case '18-vn':
-        title = 'VIỆT HÓA 18+';
-        filteredGames = filteredGames.filter(g => g.is18Vn);
-        break;
-      case '18-uncensored':
-        title = '18+ KHÔNG CHE';
-        filteredGames = filteredGames.filter(g => g.is18Uncensored);
-        break;
-      case '18-pc':
-        title = 'GAME 18+ CHO PC';
-        filteredGames = filteredGames.filter(g => g.is18Pc);
-        break;
-      case '18-android':
-        title = 'GAME 18+ CHO ANDROID';
-        filteredGames = filteredGames.filter(g => g.is18Android);
-        break;
-      case 'games':
-      default:
-        title = 'TẤT CẢ TRÒ CHƠI';
-        break;
-    }
-  }
+    return { title: computedTitle, filteredGames: list };
+  }, [games, videos, categoryType, searchQuery]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredGames.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const safeCurrentPage = (totalPages > 0 && currentPage > totalPages) ? 1 : currentPage;
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
   const paginatedGames = filteredGames.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   const handlePageChange = (page) => {
@@ -169,6 +174,11 @@ function Category() {
       </div>
 
       {filteredGames.length === 0 ? (
+        loadingGames ? (
+          <div style={{ minHeight: '40vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="loading-spinner" />
+          </div>
+        ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '6rem 2rem', backgroundColor: 'var(--color-bg-secondary)', borderRadius: '16px', border: '1px solid var(--color-border)', textAlign: 'center' }}>
             <Gamepad2 size={64} style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem', opacity: 0.3 }} />
             <h3 style={{ color: 'var(--color-text-light)', marginBottom: '0.5rem', fontSize: '1.4rem' }}>Chưa có game nào trong mục này</h3>
@@ -177,6 +187,7 @@ function Category() {
               Quay về Trang chủ
             </Link>
           </div>
+        )
       ) : (
         <>
           <div className="game-grid category-game-grid" style={{ marginBottom: '2rem' }}>
@@ -253,7 +264,7 @@ function Category() {
 
           {/* Pagination */}
           <Pagination
-            currentPage={currentPage}
+            currentPage={safeCurrentPage}
             totalPages={totalPages}
             onPageChange={handlePageChange}
           />

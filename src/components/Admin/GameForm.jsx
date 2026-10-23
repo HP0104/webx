@@ -70,18 +70,42 @@ function GameForm({
   const handleScreenshotFilesUpload = (e) => {
     const files = Array.from(e.target.files);
     files.forEach(file => {
-      if (file.size > 2 * 1024 * 1024) {
-        alert("Kích thước file ảnh không được vượt quá 2MB!");
+      if (file.size > 5 * 1024 * 1024) {
+        alert("Kích thước file ảnh không được vượt quá 5MB!");
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
+      const img = new window.Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        let { width, height } = img;
+        const maxW = 1024;
+        const maxH = 640;
+        if (width > maxW || height > maxH) {
+          if (width / maxW > height / maxH) {
+            height = Math.round((height * maxW) / width);
+            width = maxW;
+          } else {
+            width = Math.round((width * maxH) / height);
+            height = maxH;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedDataUrl = canvas.toDataURL('image/webp', 0.78);
         setNewGame(prev => ({
           ...prev,
-          screenshots: [...prev.screenshots, reader.result]
+          screenshots: [...prev.screenshots, compressedDataUrl]
         }));
       };
-      reader.readAsDataURL(file);
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        alert(`Không thể đọc ảnh: ${file.name}`);
+      };
+      img.src = objectUrl;
     });
   };
 

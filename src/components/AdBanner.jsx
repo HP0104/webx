@@ -264,12 +264,20 @@ function getExoClickZones(config) {
 // Chặn truy cập web cho đến khi user tắt ad blocker.
 // Đặt component này ở App.jsx, bên ngoài mọi nội dung.
 
-export function AdBlockWall() {
+export function AdBlockWall({ user } = {}) {
   const [blocked, setBlocked] = useState(false);
   const [checking, setChecking] = useState(true);
   const wallRef = useRef(null);
 
+  const hasAdFreePrivilege = Boolean(user?.adFreeUntil && Date.now() < user.adFreeUntil);
+
   useEffect(() => {
+    if (hasAdFreePrivilege) {
+      setBlocked(false);
+      setChecking(false);
+      return;
+    }
+
     let cancelled = false;
     const timer = setTimeout(async () => {
       resetAdBlockCache();
@@ -283,6 +291,8 @@ export function AdBlockWall() {
     return () => {
       cancelled = true;
       clearTimeout(timer);
+    };
+  }, [hasAdFreePrivilege]);
     };
   }, []);
 

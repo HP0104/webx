@@ -258,7 +258,7 @@ function Navbar() {
                   {/* Thumbnail Cover */}
                   <div style={{ width: '80px', height: '45px', overflow: 'hidden', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
                     <img 
-                      src={item.thumbnail || item.image || item.videoUrl} 
+                      src={item.cover || item.thumbnail || item.image || item.videoUrl} 
                       alt={item.title} 
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                     />

@@ -15,6 +15,38 @@ const STICKERS = [
   'https://fonts.gstatic.com/s/e/notoemoji/latest/1f44d/512.gif'
 ];
 
+// Helper to compress sticker image to tiny WebP before saving to Firestore (prevents 1MB document limit crash)
+const compressStickerImage = (file, maxWidth = 128, maxHeight = 128, quality = 0.8) => {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > maxWidth || height > maxHeight) {
+        if (width > height) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        } else {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/webp', quality));
+    };
+    img.onerror = (err) => {
+      URL.revokeObjectURL(objectUrl);
+      reject(err);
+    };
+    img.src = objectUrl;
+  });
+};
+
 function ChatBox() {
   const { user, balance } = useAppContext();
   const [messages, setMessages] = useState([]);
@@ -45,21 +77,22 @@ function ChatBox() {
     return () => unsubscribe();
   }, []);
 
-  // Sync custom stickers in real-time
+  // Sync custom stickers in real-time only when sticker picker is opened
   useEffect(() => {
-    const qStickers = query(collection(db, 'stickers'), orderBy('createdAt', 'asc'));
+    if (!showStickers) return;
+    const qStickers = query(collection(db, 'stickers'), orderBy('createdAt', 'desc'), limit(50));
     const unsubscribeStickers = onSnapshot(qStickers, (snapshot) => {
       const list = snapshot.docs.map(doc => ({
         id: doc.id,
         url: doc.data().url,
         userId: doc.data().userId || doc.data().addedBy || ''
-      }));
+      })).reverse();
       setDynamicStickers(list);
     }, (err) => {
       console.warn("Firestore stickers query warning:", err.message);
     });
     return () => unsubscribeStickers();
-  }, []);
+  }, [showStickers]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -123,6 +156,7 @@ function ChatBox() {
 
   const handleUploadCustomSticker = async (e) => {
     const file = e.target.files[0];
+    e.target.value = '';
     if (!file || !user) return;
 
     if (file.size > 1 * 1024 * 1024) {
@@ -146,38 +180,35 @@ function ChatBox() {
       if (!confirmBuy) return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      try {
-        setError(null);
+    try {
+      const compressedDataUrl = await compressStickerImage(file, 128, 128, 0.82);
+      setError(null);
 
-        // Deduct 1,000đ if charged
-        if (isCharged) {
-          const userRef = doc(db, 'users', user.id || user.uid);
-          await updateDoc(userRef, {
-            balance: (Number(balance) || 0) - 1000
-          });
-        }
-
-        // Add to stickers collection
-        await addDoc(collection(db, 'stickers'), {
-          url: reader.result,
-          createdAt: serverTimestamp(),
-          addedBy: user.username,
-          userId: user.id || user.uid
+      // Deduct 1,000đ if charged
+      if (isCharged) {
+        const userRef = doc(db, 'users', user.id || user.uid);
+        await updateDoc(userRef, {
+          balance: (Number(balance) || 0) - 1000
         });
-
-        if (isCharged) {
-          alert("Đã thanh toán 1.000đ và thêm sticker thành công!");
-        } else {
-          alert(`Đã thêm sticker miễn phí thành công! (Bạn đã dùng ${count + 1}/5 lượt miễn phí).`);
-        }
-      } catch (err) {
-        console.error("Error adding custom sticker:", err);
-        alert("Lỗi thêm sticker: " + err.message);
       }
-    };
-    reader.readAsDataURL(file);
+
+      // Add to stickers collection
+      await addDoc(collection(db, 'stickers'), {
+        url: compressedDataUrl,
+        createdAt: serverTimestamp(),
+        addedBy: user.username,
+        userId: user.id || user.uid
+      });
+
+      if (isCharged) {
+        alert("Đã thanh toán 1.000đ và thêm sticker thành công!");
+      } else {
+        alert(`Đã thêm sticker miễn phí thành công! (Bạn đã dùng ${count + 1}/5 lượt miễn phí).`);
+      }
+    } catch (err) {
+      console.error("Error adding custom sticker:", err);
+      alert("Lỗi thêm sticker: " + err.message);
+    }
   };
 
   const allStickers = [...STICKERS, ...dynamicStickers.map(s => s.url)];

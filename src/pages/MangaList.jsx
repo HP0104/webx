@@ -72,11 +72,16 @@ function MangaList() {
 
   // Pagination
   const totalPages = Math.ceil(filteredManga.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const safeCurrentPage = (totalPages > 0 && currentPage > totalPages) ? 1 : currentPage;
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
   const paginatedManga = filteredManga.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   const handlePageChange = (page) => {
-    setSearchParams({ page: page.toString() });
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('page', page.toString());
+      return next;
+    });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -180,11 +185,17 @@ function MangaList() {
 
       {/* Manga Grid */}
       {filteredManga.length === 0 ? (
-        <div className="manga-empty">
-          <BookOpen size={64} />
-          <h3>Không tìm thấy truyện nào</h3>
-          <p>{searchQuery ? 'Thử tìm kiếm với từ khóa khác.' : 'Chưa có truyện nào được đăng. Hãy quay lại sau!'}</p>
-        </div>
+        loadingManga ? (
+          <div style={{ minHeight: '40vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="loading-spinner" />
+          </div>
+        ) : (
+          <div className="manga-empty">
+            <BookOpen size={64} />
+            <h3>Không tìm thấy truyện nào</h3>
+            <p>{searchQuery ? 'Thử tìm kiếm với từ khóa khác.' : 'Chưa có truyện nào được đăng. Hãy quay lại sau!'}</p>
+          </div>
+        )
       ) : (
         <>
           <div className="manga-grid">
@@ -194,7 +205,7 @@ function MangaList() {
           </div>
 
           <Pagination
-            currentPage={currentPage}
+            currentPage={safeCurrentPage}
             totalPages={totalPages}
             onPageChange={handlePageChange}
           />

@@ -4,11 +4,11 @@ import { useAppContext } from '../App';
 import { BookOpen, User, Eye, Clock, Layers, ChevronRight, ArrowLeft, PlayCircle } from 'lucide-react';
 import { MANGA_STATUS } from '../utils/mangaUtils';
 import { db } from '../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, increment } from 'firebase/firestore';
 
 function MangaDetail() {
   const { mangaId } = useParams();
-  const { manga = [] } = useAppContext();
+  const { manga = [], loadingManga } = useAppContext();
   const navigate = useNavigate();
 
   const mangaItem = manga.find(m => m.id?.toString() === mangaId);
@@ -22,13 +22,21 @@ function MangaDetail() {
     sessionStorage.setItem(viewedKey, '1');
     try {
       const mangaRef = doc(db, 'manga', mangaId);
-      updateDoc(mangaRef, { views: (mangaItem.views || 0) + 1 }).catch(() => {});
+      updateDoc(mangaRef, { views: increment(1) }).catch(() => {});
     } catch (e) {
       console.warn('View count error:', e);
     }
   }, [mangaId, mangaItem]);
 
   if (!mangaItem) {
+    if (loadingManga) {
+      return (
+        <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="loading-spinner" />
+        </div>
+      );
+    }
+
     return (
       <div className="container manga-page">
         <div className="manga-empty">

@@ -31,10 +31,11 @@ function GameList({ games = [], onEditClick, onDeleteClick }) {
   }, [games, searchTerm, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(filteredGames.length / GAMES_PER_PAGE));
+  const safeCurrentPage = (totalPages > 0 && currentPage > totalPages) ? 1 : currentPage;
   const paginatedGames = useMemo(() => {
-    const start = (currentPage - 1) * GAMES_PER_PAGE;
+    const start = (safeCurrentPage - 1) * GAMES_PER_PAGE;
     return filteredGames.slice(start, start + GAMES_PER_PAGE);
-  }, [filteredGames, currentPage]);
+  }, [filteredGames, safeCurrentPage]);
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {
@@ -192,7 +193,7 @@ function GameList({ games = [], onEditClick, onDeleteClick }) {
             type="button"
             className="btn btn-outline"
             onClick={() => handlePageChange(1)}
-            disabled={currentPage === 1}
+            disabled={safeCurrentPage === 1}
             style={{ padding: '0.35rem 0.55rem', fontSize: '0.8rem' }}
           >
             <ChevronsLeft size={16} />
@@ -200,20 +201,20 @@ function GameList({ games = [], onEditClick, onDeleteClick }) {
           <button
             type="button"
             className="btn btn-outline"
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
+            onClick={() => handlePageChange(safeCurrentPage - 1)}
+            disabled={safeCurrentPage === 1}
             style={{ padding: '0.35rem 0.55rem', fontSize: '0.8rem' }}
           >
             <ChevronLeft size={16} />
           </button>
           <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', padding: '0 0.5rem' }}>
-            Trang {currentPage} / {totalPages}
+            Trang {safeCurrentPage} / {totalPages}
           </span>
           <button
             type="button"
             className="btn btn-outline"
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
+            onClick={() => handlePageChange(safeCurrentPage + 1)}
+            disabled={safeCurrentPage === totalPages}
             style={{ padding: '0.35rem 0.55rem', fontSize: '0.8rem' }}
           >
             <ChevronRight size={16} />
@@ -222,7 +223,7 @@ function GameList({ games = [], onEditClick, onDeleteClick }) {
             type="button"
             className="btn btn-outline"
             onClick={() => handlePageChange(totalPages)}
-            disabled={currentPage === totalPages}
+            disabled={safeCurrentPage === totalPages}
             style={{ padding: '0.35rem 0.55rem', fontSize: '0.8rem' }}
           >
             <ChevronsRight size={16} />

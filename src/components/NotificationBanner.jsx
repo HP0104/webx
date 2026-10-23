@@ -1,11 +1,22 @@
 import { useState } from 'react';
 import { AlertCircle, X } from 'lucide-react';
 
+const NOTICE_STORAGE_KEY = 'web18p_notice_dismissed';
+
 function NotificationBanner() {
-  const [isVisible, setIsVisible] = useState(true);
+  const [isVisible, setIsVisible] = useState(() => {
+    return localStorage.getItem(NOTICE_STORAGE_KEY) !== '1';
+  });
   const [notification] = useState(
     '📌 LƯU Ý: Tất cả game được admin dịch. Nếu trùng với web khác thì admin chân thành xin lỗi. (Có thể vào phần báo lỗi và báo để admin gỡ)'
   );
+
+  const handleDismiss = () => {
+    setIsVisible(false);
+    try {
+      localStorage.setItem(NOTICE_STORAGE_KEY, '1');
+    } catch {}
+  };
 
   if (!isVisible) return null;
 
@@ -42,7 +53,8 @@ function NotificationBanner() {
         </p>
       </div>
       <button
-        onClick={() => setIsVisible(false)}
+        onClick={handleDismiss}
+        aria-label="Đóng thông báo"
         style={{
           background: 'none',
           border: 'none',

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useAppContext } from '../App';
 import { MessageSquare, Send, Bug, Image as ImageIcon } from 'lucide-react';
 
@@ -29,10 +29,16 @@ function Report() {
     reader.readAsDataURL(file);
   };
 
-  // Sub to all reports messages
+  // Sub to reports messages (Admins see all channels, users only listen to their channel)
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'reports'), orderBy('createdAt', 'asc'));
+    const userId = user.id || user.uid;
+    const isAdminUser = user.role === 'admin';
+
+    const q = isAdminUser
+      ? query(collection(db, 'reports'), orderBy('createdAt', 'asc'))
+      : query(collection(db, 'reports'), where('channelId', '==', userId), orderBy('createdAt', 'asc'));
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(doc => ({
         id: doc.id,

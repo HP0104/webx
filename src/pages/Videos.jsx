@@ -15,7 +15,7 @@ import RandomVideosSlider from '../components/RandomVideosSlider';
 
 function Videos() {
   const { category } = useParams();
-  const { videos = [] } = useAppContext();
+  const { videos = [], loadingVideos } = useAppContext();
 
   const currentCategory = category || 'all';
   const pageTitle = CATEGORY_LABELS[currentCategory] || 'Tất Cả Phim';
@@ -40,11 +40,16 @@ function Videos() {
   const currentPage = isNaN(pageParam) ? 1 : pageParam;
 
   const totalPages = Math.ceil(sortedVideos.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const safeCurrentPage = (totalPages > 0 && currentPage > totalPages) ? 1 : currentPage;
+  const startIndex = (safeCurrentPage - 1) * ITEMS_PER_PAGE;
   const paginatedVideos = sortedVideos.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   const handlePageChange = (page) => {
-    setSearchParams({ page: page.toString() });
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('page', page.toString());
+      return next;
+    });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -83,11 +88,17 @@ function Videos() {
 
       {/* Videos Grid */}
       {sortedVideos.length === 0 ? (
-        <div className="videos-empty">
-          <Film size={64} />
-          <h3>Chưa có phim nào</h3>
-          <p>Danh mục này hiện chưa có video. Hãy quay lại sau!</p>
-        </div>
+        loadingVideos ? (
+          <div style={{ minHeight: '40vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="loading-spinner" />
+          </div>
+        ) : (
+          <div className="videos-empty">
+            <Film size={64} />
+            <h3>Chưa có phim nào</h3>
+            <p>Danh mục này hiện chưa có video. Hãy quay lại sau!</p>
+          </div>
+        )
       ) : (
         <>
         <div className="videos-grid">
@@ -98,7 +109,7 @@ function Videos() {
 
         {/* Pagination */}
         <Pagination
-          currentPage={currentPage}
+          currentPage={safeCurrentPage}
           totalPages={totalPages}
           onPageChange={handlePageChange}
         />

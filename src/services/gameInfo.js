@@ -2,11 +2,20 @@
 // Documentation: https://rawg.io/apidocs
 // This simple wrapper provides a function to search games by name.
 
+const RAWG_STORAGE_KEY = 'web18p_rawg_api_key';
 const API_KEY = import.meta.env.VITE_RAWG_API_KEY || "YOUR_RAWG_API_KEY"; // Replace with your actual API key if required
 const BASE_URL = "https://api.rawg.io/api/games";
 
 // Gemini API configuration
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "YOUR_GEMINI_API_KEY"; // Replace with your actual Gemini API key
+
+/**
+ * Get active RAWG API Key
+ */
+export function getActiveRawgKey() {
+  const custom = typeof window !== 'undefined' ? localStorage.getItem(RAWG_STORAGE_KEY) : null;
+  return (custom && custom.trim()) || (API_KEY !== 'YOUR_RAWG_API_KEY' ? API_KEY : '');
+}
 
 /**
  * Search for games matching the given query.
@@ -16,18 +25,25 @@ const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "YOUR_GEMINI_API_K
  */
 export async function searchGames(query, pageSize = 10) {
   if (!query) return [];
-  const url = `${BASE_URL}?search=${encodeURIComponent(query)}&page_size=${pageSize}&key=${API_KEY}`;
+  const activeRawgKey = getActiveRawgKey();
+  if (!activeRawgKey) {
+    throw new Error('Chưa cấu hình RAWG API Key. Vui lòng thêm VITE_RAWG_API_KEY vào .env hoặc cấu hình trong Admin.');
+  }
+
+  const url = `${BASE_URL}?search=${encodeURIComponent(query)}&page_size=${pageSize}&key=${activeRawgKey}`;
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      console.error('Failed to fetch game data:', response.statusText);
-      return [];
+      if (response.status === 401) {
+        throw new Error('RAWG API Key không hợp lệ hoặc đã hết hạn.');
+      }
+      throw new Error(`Lỗi kết nối RAWG Database (${response.status}: ${response.statusText})`);
     }
     const data = await response.json();
     return data.results || [];
   } catch (err) {
     console.error('Error fetching game data:', err);
-    return [];
+    throw err;
   }
 }
 
@@ -37,9 +53,7 @@ export async function searchGames(query, pageSize = 10) {
 async function getAvailableGeminiModels(apiKey) {
   const PREFERRED_GEMINI_MODELS = [
     'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
     'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
     'gemini-1.5-flash'
   ];
   try {
@@ -173,16 +187,31 @@ Respond with a JSON object matching this exact structure:
 
       const jsonData = JSON.parse(cleanText);
 
-      // Validate required fields exist
-      const requiredFields = ['seo_title', 'summary', 'gameplay', 'system_requirements', 'faq'];
-      for (const field of requiredFields) {
-        if (!jsonData[field]) {
-          console.warn(`Missing field in AI response: ${field}`);
-        }
+      // Normalize gameplay to string
+      if (Array.isArray(jsonData.gameplay)) {
+        jsonData.gameplay = jsonData.gameplay.join('\n\n');
+      } else if (typeof jsonData.gameplay !== 'string') {
+        jsonData.gameplay = String(jsonData.gameplay || '');
+      }
+
+      // Normalize FAQ to string
+      if (Array.isArray(jsonData.faq)) {
+        jsonData.faq = jsonData.faq.map(item => {
+          if (typeof item === 'object' && item !== null) {
+            return `Q: ${item.question || item.q || ''}\nA: ${item.answer || item.a || ''}`;
+          }
+          return String(item);
+        }).join('\n\n');
+      } else if (typeof jsonData.faq === 'object' && jsonData.faq !== null) {
+        jsonData.faq = `Q: ${jsonData.faq.question || jsonData.faq.q || ''}\nA: ${jsonData.faq.answer || jsonData.faq.a || ''}`;
+      } else {
+        jsonData.faq = String(jsonData.faq || '');
       }
 
       // Ensure system_requirements has the expected structure
-      if (jsonData.system_requirements && typeof jsonData.system_requirements === 'string') {
+      if (!jsonData.system_requirements) {
+        jsonData.system_requirements = { minimum: 'N/A', recommended: 'N/A' };
+      } else if (typeof jsonData.system_requirements === 'string') {
         jsonData.system_requirements = {
           minimum: jsonData.system_requirements,
           recommended: 'Không có thông tin cụ thể'

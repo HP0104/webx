@@ -34,6 +34,7 @@ const MangaDetail = lazy(() => import('./pages/MangaDetail'));
 const MangaReader = lazy(() => import('./pages/MangaReader'));
 const UploaderDashboard = lazy(() => import('./pages/UploaderDashboard'));
 const VideoAdBanner = lazy(() => import('./components/VideoAdBanner'));
+const NotFound = lazy(() => import('./pages/NotFound'));
 
 const AppContext = createContext();
 
@@ -187,7 +188,7 @@ function AppContent({ user }) {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <AdBlockWall />
+      <AdBlockWall user={user} />
       <Navbar />
       <NotificationBanner />
 
@@ -222,6 +223,7 @@ function AppContent({ user }) {
                 <Route path="/manga" element={<MangaList />} />
                 <Route path="/manga/:mangaId" element={<MangaDetail />} />
                 <Route path="/manga/:mangaId/chapter/:chapterId" element={<MangaReader />} />
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
           </ErrorBoundary>

@@ -197,7 +197,10 @@ function Wallet() {
             body: JSON.stringify({ ...orderData, signature })
           });
 
-          const result = await response.json();
+          const result = await response.json().catch(() => ({
+        success: false,
+        message: 'Không nhận được phản hồi hợp lệ từ máy chủ thanh toán. Vui lòng thử lại sau.'
+      }));
 
           if (result.code === '00' && result.data) {
             // Chuyển đổi mã QR raw dạng text của PayOS thành ảnh QR qua qrserver.com
@@ -253,7 +256,10 @@ function Wallet() {
         body: JSON.stringify(requestBody)
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({
+        success: false,
+        message: 'Không nhận được phản hồi hợp lệ từ máy chủ thanh toán. Vui lòng thử lại sau.'
+      }));
 
       if (response.ok && result.success) {
         // Cập nhật state số dư mới ở Frontend từ database Firestore

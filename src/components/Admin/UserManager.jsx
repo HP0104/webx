@@ -118,10 +118,11 @@ function UserManager({ users = [], games = [] }) {
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(processedUsers.length / USERS_PER_PAGE));
+  const safeCurrentPage = (totalPages > 0 && currentPage > totalPages) ? 1 : currentPage;
   const paginatedUsers = useMemo(() => {
-    const start = (currentPage - 1) * USERS_PER_PAGE;
+    const start = (safeCurrentPage - 1) * USERS_PER_PAGE;
     return processedUsers.slice(start, start + USERS_PER_PAGE);
-  }, [processedUsers, currentPage]);
+  }, [processedUsers, safeCurrentPage]);
 
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= totalPages) {

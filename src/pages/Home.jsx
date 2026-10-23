@@ -1,18 +1,26 @@
 import { useState, useMemo } from 'react';
-import { Gamepad2, TrendingUp, Clock, Star, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Gamepad2, TrendingUp, Clock, Star, Eye } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
 import RandomVideosSlider from '../components/RandomVideosSlider';
+import Pagination from '../components/Pagination';
 
 function Home() {
   const { games, loadingGames } = useAppContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const pageParam = parseInt(searchParams.get('page') || '1', 10);
-  const currentPage = isNaN(pageParam) ? 1 : pageParam;
-  const setCurrentPage = (page) => setSearchParams(prev => { prev.set('page', page); return prev; });
+  const currentPage = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
   const GAMES_PER_PAGE = 9;
   const [hotFilter, setHotFilter] = useState('day');
+
+  const handlePageChange = (page) => {
+    setSearchParams(prev => {
+      prev.set('page', page.toString());
+      return prev;
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Sắp xếp Game mới cập nhật (updatedAt hoặc createdAt giảm dần)
   const sortedNewGames = useMemo(() => [...games].sort((a, b) => {
@@ -30,7 +38,7 @@ function Home() {
   };
 
   // Sắp xếp Game Hot nhất theo tốc độ tăng trưởng lượt xem (views velocity) hoặc tổng views
-  const hotGames = (() => {
+  const hotGames = useMemo(() => {
     let sorted = [...games];
     if (hotFilter === 'day') {
       sorted.sort((a, b) => {
@@ -48,7 +56,7 @@ function Home() {
       sorted.sort((a, b) => (b.views || 0) - (a.views || 0));
     }
     return sorted.slice(0, 6); // Lấy top 6 game hot nhất
-  })();
+  }, [games, hotFilter]);
 
   // Phân trang
   const totalPages = Math.ceil(sortedNewGames.length / GAMES_PER_PAGE);
@@ -177,76 +185,13 @@ function Home() {
           </div>
 
           {/* Điều hướng Phân trang (Pagination) */}
-          {totalPages > 1 && (
-            <div className="pagination-row" style={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              alignItems: 'center', 
-              gap: '0.5rem', 
-              marginBottom: '5rem',
-              marginTop: '1rem'
-            }}>
-              <button 
-                disabled={currentPage === 1} 
-                onClick={() => {
-                  setCurrentPage(prev => prev - 1);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="btn btn-outline" 
-                style={{ 
-                  padding: '0.5rem 1rem', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '0.3rem',
-                  opacity: currentPage === 1 ? 0.4 : 1,
-                  cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
-                }}
-              >
-                <ChevronLeft size={16} /> Trước
-              </button>
-              
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <button 
-                  key={page} 
-                  onClick={() => {
-                    setCurrentPage(page);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }} 
-                  className={`btn ${currentPage === page ? 'btn-primary' : 'btn-outline'}`} 
-                  style={{ 
-                    padding: '0.5rem', 
-                    minWidth: '40px', 
-                    borderRadius: '8px',
-                    fontWeight: 'bold',
-                    boxShadow: currentPage === page ? '0 0 15px rgba(102, 192, 244, 0.4)' : 'none'
-                  }}
-                >
-                  {page}
-                </button>
-              ))}
-
-              <button 
-                disabled={currentPage === totalPages} 
-                onClick={() => {
-                  setCurrentPage(prev => prev + 1);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="btn btn-outline" 
-                style={{ 
-                  padding: '0.5rem 1rem', 
-                  borderRadius: '8px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '0.3rem',
-                  opacity: currentPage === totalPages ? 0.4 : 1,
-                  cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
-                }}
-              >
-                Sau <ChevronRight size={16} />
-              </button>
-            </div>
-          )}
+          <div style={{ marginTop: '1.5rem', marginBottom: '3rem' }}>
+            <Pagination 
+              currentPage={currentPage} 
+              totalPages={totalPages} 
+              onPageChange={handlePageChange} 
+            />
+          </div>
         </>
       )}
 

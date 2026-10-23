@@ -73,6 +73,7 @@ export default function NativeVideoPlayer({ src, poster, title, autoPlay = true,
       // Native MP4 / Safari native HLS
       video.src = src;
       video.load();
+      setIsLoading(false);
       if (autoPlay) {
         video.play().catch(() => {});
       }
@@ -115,6 +116,9 @@ export default function NativeVideoPlayer({ src, poster, title, autoPlay = true,
         x5-video-player-fullscreen="true"
         preload="auto"
         onWaiting={() => setIsLoading(true)}
+        onLoadedData={() => setIsLoading(false)}
+        onLoadedMetadata={() => setIsLoading(false)}
+        onPause={() => setIsLoading(false)}
         onPlaying={() => {
           setIsLoading(false);
           setHasError(false);
