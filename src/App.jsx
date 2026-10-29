@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { useState, createContext, useContext, lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import NotificationBanner from './components/NotificationBanner';
 import ChatBox from './components/ChatBox';
@@ -14,7 +14,7 @@ import { findGameByRouteParam, getGamePath } from './utils/gameRoutes';
 import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './utils/ownership';
 import { ADS_CONFIG } from './config/ads';
 import MobileBottomNav from './components/MobileBottomNav';
-import DMCABadge from './components/DMCABadge';
+import Footer from './components/Footer';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Lazy-loaded routes & heavy components for high initial load performance
@@ -35,6 +35,9 @@ const MangaReader = lazy(() => import('./pages/MangaReader'));
 const UploaderDashboard = lazy(() => import('./pages/UploaderDashboard'));
 const VideoAdBanner = lazy(() => import('./components/VideoAdBanner'));
 const NotFound = lazy(() => import('./pages/NotFound'));
+const About = lazy(() => import('./pages/About'));
+const Contact = lazy(() => import('./pages/Contact'));
+const Privacy = lazy(() => import('./pages/Privacy'));
 
 const AppContext = createContext();
 
@@ -93,6 +96,15 @@ function PageTitle({ games = [], videos = [], manga = [] }) {
     } else if (pathname === '/report') {
       pageTitle = 'Báo Lỗi';
       description = 'Gửi báo lỗi và góp ý cho WEB18P.';
+    } else if (pathname === '/about') {
+      pageTitle = 'Về Chúng Tôi';
+      description = 'Tìm hiểu về WEB18P - Nền tảng game Việt Hóa, phim bộ không gián đoạn và truyện tranh online hàng đầu.';
+    } else if (pathname === '/contact') {
+      pageTitle = 'Liên Hệ & Hỗ Trợ';
+      description = 'Kênh liên hệ chính thức, giải đáp kỹ thuật và xử lý bản quyền DMCA tại WEB18P.';
+    } else if (pathname === '/privacy') {
+      pageTitle = 'Chính Sách Quyền Riêng Tư';
+      description = 'Cam kết bảo mật dữ liệu cá nhân và an toàn thông tin người dùng tại WEB18P.';
     } else if (pathname === '/auth') {
       pageTitle = 'Đăng Nhập';
     } else if (pathname === '/wallet') {
@@ -232,6 +244,9 @@ function AppContent({ user, authLoading }) {
                 <Route path="/uploader" element={authLoading ? authFallback : ((user?.role === 'uploader' || user?.role === 'admin') ? <UploaderDashboard /> : <Navigate to={user ? "/" : "/auth"} />)} />
                 <Route path="/blog" element={<Blog />} />
                 <Route path="/report" element={<Report />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/contact" element={<Contact />} />
+                <Route path="/privacy" element={<Privacy />} />
                 <Route path="/ai-search" element={<GameSearch />} />
                 <Route path="/videos/:category" element={<Videos />} />
                 <Route path="/video/:videoId" element={<VideoDetail />} />
@@ -267,7 +282,7 @@ function AppContent({ user, authLoading }) {
         )}
       </div>
       <MobileBottomNav />
-      <DMCABadge />
+      <Footer />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useDeferredValue, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Wallet, User, LogOut, ShieldAlert, Menu, X, ChevronDown, Search, Film } from 'lucide-react';
 import { useAppContext } from '../App';
@@ -11,7 +11,29 @@ function Navbar() {
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [navSearch, setNavSearch] = useState('');
+  const deferredSearch = useDeferredValue(navSearch);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Performance: Memoize search filter and useDeferredValue to avoid input freezing (INP optimization)
+  const searchMatches = useMemo(() => {
+    const q = deferredSearch.trim();
+    if (!q) return [];
+    const gameMatches = (games || []).filter(g => 
+      matchSearch(g.title, q) ||
+      matchSearch(g.developer, q)
+    ).map(g => ({ ...g, itemType: 'game' }));
+
+    const videoMatches = (videos || []).filter(v => 
+      matchSearch(v.title, q)
+    ).map(v => ({ ...v, itemType: 'video' }));
+
+    const mangaMatches = (manga || []).filter(m => 
+      matchSearch(m.title, q) ||
+      matchSearch(m.author, q)
+    ).map(m => ({ ...m, itemType: 'manga' }));
+
+    return [...gameMatches, ...videoMatches, ...mangaMatches].slice(0, 6);
+  }, [games, videos, manga, deferredSearch]);
 
   const handleLogout = () => {
     logout();
@@ -208,32 +230,12 @@ function Navbar() {
               KẾT QUẢ TÌM KIẾM
             </div>
             
-            {(() => {
-              const gameMatches = games.filter(g => 
-                matchSearch(g.title, navSearch) ||
-                matchSearch(g.developer, navSearch)
-              ).map(g => ({ ...g, itemType: 'game' }));
-
-              const videoMatches = videos.filter(v => 
-                matchSearch(v.title, navSearch)
-              ).map(v => ({ ...v, itemType: 'video' }));
-
-              const mangaMatches = manga.filter(m => 
-                matchSearch(m.title, navSearch) ||
-                matchSearch(m.author, navSearch)
-              ).map(m => ({ ...m, itemType: 'manga' }));
-
-              const matches = [...gameMatches, ...videoMatches, ...mangaMatches].slice(0, 6);
-
-              if (matches.length === 0) {
-                return (
-                  <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
-                    Không tìm thấy trò chơi nào
-                  </div>
-                );
-              }
-
-              return matches.map(item => (
+            {searchMatches.length === 0 ? (
+              <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
+                Không tìm thấy kết quả nào
+              </div>
+            ) : (
+              searchMatches.map(item => (
                 <Link
                   key={`${item.itemType}-${item.id}`}
                   className="nav-search-suggestion"
@@ -299,8 +301,8 @@ function Navbar() {
                     </div>
                   </div>
                 </Link>
-              ));
-            })()}
+              ))
+            )}
           </div>
         )}
       </form>

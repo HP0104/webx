@@ -5,14 +5,19 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="WEB18P - Kho game và Phim Việt hóa, game PC và Android được cập nhật thường xuyên với thông tin chi tiết, ảnh minh họa và link tải." />
+  <title>WEB18P - Kho Game Việt Hóa, Phim Bộ & Truyện Tranh Online</title>
+  <meta name="description" content="WEB18P là nền tảng giải trí trực tuyến hàng đầu cung cấp kho game Việt hóa cho PC và Android, xem phim bộ không gián đoạn và đọc truyện tranh online miễn phí." />
+  <meta name="keywords" content="WEB18P, game việt hóa, tải game pc việt hóa, game android việt hóa, xem phim bộ không ngắt quãng, đọc truyện tranh online" />
   <meta name="robots" content="index, follow" />
   <meta name="theme-color" content="#0a0a0c" />
   <meta name="6a97888e-site-verification" content="a9927200f00a9acccfdfff2e78537f73" />
   <meta name="dmca-site-verification" content="aWUrd0VnYnRaRTJaazdBRVRrNUxBQT090" />
   <link rel="canonical" href="https://web18p.xyz/" />
 
-  <!-- Preconnect & DNS Prefetch to accelerate Manga CDN & Video Streaming -->
+  <!-- Preconnect & DNS Prefetch to accelerate Google Fonts, Manga CDN & Video Streaming -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="preconnect" href="https://img-cdn.takarvn.workers.dev" crossorigin />
   <link rel="dns-prefetch" href="https://img-cdn.takarvn.workers.dev" />
   <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
@@ -29,36 +34,122 @@
 
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="WEB18P" />
-  <meta property="og:title" content="WEB18P - Kho game Việt hóa và Phim" />
-  <meta property="og:description" content="Kho game Việt hóa và Phim, game PC và Android được cập nhật thường xuyên." />
+  <meta property="og:title" content="WEB18P - Kho Game Việt Hóa, Phim Bộ & Truyện Tranh Online" />
+  <meta property="og:description" content="Kho game Việt hóa, xem phim bộ không gián đoạn và đọc truyện tranh online được cập nhật liên tục trên WEB18P." />
   <meta property="og:url" content="https://web18p.xyz/" />
   <meta property="og:image" content="https://web18p.xyz/og-banner.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
 
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="WEB18P - Kho game Việt hóa và Phim" />
-  <meta name="twitter:description" content="Kho game Việt hóa và Phim, game PC và Android được cập nhật thường xuyên." />
+  <meta name="twitter:title" content="WEB18P - Kho Game Việt Hóa, Phim Bộ & Truyện Tranh Online" />
+  <meta name="twitter:description" content="Kho game Việt hóa, xem phim bộ không gián đoạn và đọc truyện tranh online được cập nhật liên tục trên WEB18P." />
   <meta name="twitter:image" content="https://web18p.xyz/og-banner.jpg" />
 
   <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "WEB18P",
-        "url": "https://web18p.xyz/",
-        "potentialAction": {
-          "@type": "SearchAction",
-          "target": "https://web18p.xyz/games?search={search_term_string}",
-          "query-input": "required name=search_term_string"
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://web18p.xyz/#organization",
+          "name": "WEB18P",
+          "url": "https://web18p.xyz/",
+          "logo": "https://web18p.xyz/favicon.svg",
+          "description": "Nền tảng chia sẻ và lưu trữ kho game Việt hóa cho PC và Android, phát phim bộ trực tuyến chất lượng cao và truyện tranh online.",
+          "email": "contact@web18p.xyz",
+          "sameAs": [
+            "https://t.me/web18p"
+          ],
+          "contactPoint": [
+            {
+              "@type": "ContactPoint",
+              "telephone": "+84-900-1818",
+              "contactType": "customer service",
+              "email": "contact@web18p.xyz",
+              "availableLanguage": ["vi", "en"]
+            },
+            {
+              "@type": "ContactPoint",
+              "contactType": "copyright inquiries",
+              "email": "dmca@web18p.xyz",
+              "availableLanguage": ["vi", "en"]
+            }
+          ],
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "18 Nguyen Hue",
+            "addressLocality": "District 1",
+            "addressRegion": "Ho Chi Minh City",
+            "postalCode": "70000",
+            "addressCountry": "VN"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://web18p.xyz/#website",
+          "url": "https://web18p.xyz/",
+          "name": "WEB18P",
+          "description": "Kho Game Việt Hóa, Phim Bộ & Truyện Tranh Online Hàng Đầu",
+          "publisher": {
+            "@id": "https://web18p.xyz/#organization"
+          },
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://web18p.xyz/games?search={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://web18p.xyz/#webapp",
+          "name": "WEB18P Portal",
+          "url": "https://web18p.xyz/",
+          "applicationCategory": "EntertainmentApplication",
+          "operatingSystem": "All",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "VND"
+          },
+          "provider": {
+            "@id": "https://web18p.xyz/#organization"
+          }
         }
-      }
-    </script>
-  <title>WEB18P - Kho game Việt hóa và Phim</title>
+      ]
+    }
+  </script>
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <header style="padding: 2rem; border-bottom: 1px solid #222;">
+      <h1>WEB18P - Kho Game Việt Hóa, Phim Bộ &amp; Truyện Tranh Online</h1>
+      <p>Chào mừng bạn đến với WEB18P - Nền tảng chia sẻ và trải nghiệm giải trí trực tuyến hàng đầu Việt Nam.</p>
+      <nav aria-label="Điều hướng chính" style="margin-top: 1rem;">
+        <a href="/games">Kho Game Việt Hóa</a> | 
+        <a href="/videos">Phim &amp; Video HD</a> | 
+        <a href="/manga">Truyện Tranh Online</a> | 
+        <a href="/about">Về Chúng Tôi</a> | 
+        <a href="/contact">Liên Hệ &amp; Hỗ Trợ</a> | 
+        <a href="/privacy">Chính Sách Riêng Tư</a> | 
+        <a href="/llms.txt">Agent Guide</a>
+      </nav>
+    </header>
+    <main style="padding: 2rem; max-width: 900px; line-height: 1.8;">
+      <section>
+        <h2>Khám Phá Nội Dung Phong Phú Trên WEB18P</h2>
+        <p>WEB18P cung cấp kho lưu trữ game Việt hóa đa nền tảng cho PC và Android, được tuyển chọn kỹ lưỡng với đầy đủ hướng dẫn cài đặt và cấu hình chi tiết. Hệ thống phát phim bộ trực tuyến chất lượng cao với công nghệ phát liên tục không gián đoạn (gapless continuous streaming), mang đến trải nghiệm liền mạch tối đa cho người xem. Đọc truyện tranh manga bản đẹp, tải trang siêu tốc trên mọi thiết bị máy tính và di động.</p>
+      </section>
+      <section>
+        <h2>Tính Năng Nổi Bật Dành Cho Người Dùng</h2>
+        <p>Trải nghiệm xem phim không quảng cáo gián đoạn, hỗ trợ đa nguồn phát mượt mà cùng hệ thống tìm kiếm thông minh. Tính năng lưu danh sách yêu thích, đánh giá cộng đồng và bình luận thảo luận sôi nổi. Mọi đóng góp bản quyền và yêu cầu hỗ trợ xin liên hệ với ban quản trị qua trang liên hệ chính thức hoặc email contact@web18p.xyz.</p>
+      </section>
+    </main>
+    <footer style="padding: 2rem; border-top: 1px solid #222; text-align: center;">
+      <p>&copy; 2026 WEB18P (web18p.xyz). Tất cả các quyền được bảo lưu. Xem thêm tài liệu hướng dẫn AI tại <a href="/llms.txt">llms.txt</a>.</p>
+    </footer>
+  </div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 

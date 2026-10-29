@@ -38,7 +38,10 @@ const INITIAL_VIDEO_STATE = {
   category: 'vam',
   description: '',
   tags: '',
-  views: 0
+  views: 0,
+  isSeries: false,
+  episodes: [],
+  totalEpisodes: 0
 };
 
 function UploaderDashboard() {

@@ -1,13 +1,14 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../App';
-import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, Download, Loader2, Maximize, Minimize, RotateCcw, Server, Smartphone } from 'lucide-react';
+import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, Download, Loader2, Maximize, Minimize, RotateCcw, Server, Smartphone, Layers } from 'lucide-react';
 import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getDownloadUrl, isDirectVideo, getAlternateEmbedUrl } from '../utils/videoUtils';
 import ErrorReportButton from '../components/ErrorReportButton';
 import { doc, updateDoc, increment, collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import VideoCardItem from '../components/VideoCardItem';
 import NativeVideoPlayer from '../components/NativeVideoPlayer';
+import SeamlessSeriesPlayer from '../components/SeamlessSeriesPlayer';
 
 /**
  * Get thumbnail from video URL.
@@ -86,6 +87,53 @@ function VideoDetail() {
   };
 
   const video = videos.find(v => v.id?.toString() === videoId?.toString());
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Series / Episode state
+  const isSeries = Boolean(video?.isSeries && Array.isArray(video?.episodes) && video.episodes.length > 0);
+  const episodes = useMemo(() => (video?.isSeries && Array.isArray(video?.episodes)) ? video.episodes : [], [video]);
+
+  const [selectedEpisodeIndex, setSelectedEpisodeIndex] = useState(() => {
+    if (!video) return 0;
+    const eps = video.isSeries && Array.isArray(video.episodes) ? video.episodes : [];
+    if (!eps.length) return 0;
+    try {
+      const saved = localStorage.getItem(`web18p_last_ep_${video.id}`);
+      if (saved) {
+        const parsedSaved = parseInt(saved, 10);
+        const foundSaved = eps.findIndex(e => e.episodeNumber === parsedSaved);
+        if (foundSaved !== -1) return foundSaved;
+      }
+    } catch {}
+    return 0;
+  });
+
+  const epParam = searchParams.get('ep');
+  const currentEpisodeIndex = useMemo(() => {
+    if (!isSeries || !episodes.length) return 0;
+    if (epParam) {
+      const parsedNum = parseInt(epParam, 10);
+      const foundIdx = episodes.findIndex(e => e.episodeNumber === parsedNum);
+      if (foundIdx !== -1) return foundIdx;
+      if (parsedNum >= 1 && parsedNum <= episodes.length) return parsedNum - 1;
+    }
+    return selectedEpisodeIndex < episodes.length ? selectedEpisodeIndex : 0;
+  }, [epParam, isSeries, episodes, selectedEpisodeIndex]);
+
+  const handleEpisodeChange = (newIndex) => {
+    if (newIndex < 0 || newIndex >= episodes.length) return;
+    setSelectedEpisodeIndex(newIndex);
+    const targetEp = episodes[newIndex];
+    const epNum = targetEp?.episodeNumber || (newIndex + 1);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('ep', String(epNum));
+      return next;
+    }, { replace: true });
+    try {
+      localStorage.setItem(`web18p_last_ep_${video?.id}`, String(epNum));
+    } catch {}
+  };
 
   // Lắng nghe bình luận realtime
   useEffect(() => {
@@ -306,10 +354,13 @@ function VideoDetail() {
   }
 
   // Support both new field name (videoUrl) and legacy (streamtapeUrl)
-  const rawUrl = video.videoUrl || video.streamtapeUrl;
+  const currentEp = isSeries ? (episodes[currentEpisodeIndex] || episodes[0]) : null;
+  const rawUrl = isSeries
+    ? (currentEp?.videoUrl || video.videoUrl)
+    : (video.videoUrl || video.streamtapeUrl);
   const embedUrl = getAlternateEmbedUrl(rawUrl, currentServer);
   const downloadUrl = getDownloadUrl(rawUrl);
-  let thumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
+  let thumbnail = (isSeries && currentEp?.thumbnail) || video.thumbnail || getVideoThumbnail(rawUrl);
   if (thumbnail && thumbnail.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
     thumbnail = thumbnail.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
   }
@@ -350,258 +401,346 @@ function VideoDetail() {
         <span>{video.title}</span>
       </div>
 
-      {/* Video Player Wrapper */}
-      <div ref={playerWrapperRef} className="video-detail-player-wrapper">
-        {/* Floating exit fullscreen button for mobile/desktop */}
-        {isFullscreen && (
-          <button
-            type="button"
-            className="video-floating-fs-btn"
-            onClick={toggleFullscreen}
-            title="Thoát toàn màn hình"
-          >
-            <Minimize size={16} /> Thoát toàn màn hình
-          </button>
-        )}
+      {/* Video Player: Phim Bộ (SeamlessSeriesPlayer với Double-Buffering) hoặc Phim Lẻ */}
+      {isSeries ? (
+        <SeamlessSeriesPlayer
+          episodes={episodes}
+          currentEpisodeIndex={currentEpisodeIndex}
+          onEpisodeChange={handleEpisodeChange}
+          title={video.title}
+          poster={thumbnail}
+          currentServer={currentServer}
+          onServerChange={switchServer}
+        />
+      ) : (
+        <>
+          <div ref={playerWrapperRef} className="video-detail-player-wrapper">
+            {/* Floating exit fullscreen button for mobile/desktop */}
+            {isFullscreen && (
+              <button
+                type="button"
+                className="video-floating-fs-btn"
+                onClick={toggleFullscreen}
+                title="Thoát toàn màn hình"
+              >
+                <Minimize size={16} /> Thoát toàn màn hình
+              </button>
+            )}
 
-        <div className="video-detail-player" style={{ position: 'relative', overflow: 'hidden' }}>
-          {isDirectVideo(rawUrl) ? (
-            <NativeVideoPlayer
-              src={rawUrl}
-              poster={thumbnail}
-              title={video.title}
-              autoPlay={true}
-              onEnded={() => {}}
-            />
-          ) : !isPlaying && thumbnail ? (
-            <div 
-              className="video-player-overlay" 
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                backgroundImage: `url(${thumbnail})`,
-                backgroundSize: 'contain',
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'center',
-                backgroundColor: '#000',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 2
-              }}
-              onClick={() => {
-                setIsPlaying(true);
-                setIframeLoading(true);
-              }}
-            >
-              <div style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0, bottom: 0,
-                backgroundColor: 'rgba(0,0,0,0.5)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <div style={{
-                  width: '64px',
-                  height: '64px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--color-accent)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
-                  transition: 'transform 0.2s ease',
-                  cursor: 'pointer'
-                }}>
-                  <Play size={32} color="white" style={{ marginLeft: '4px' }} />
+            <div className="video-detail-player" style={{ position: 'relative', overflow: 'hidden' }}>
+              {isDirectVideo(rawUrl) ? (
+                <NativeVideoPlayer
+                  src={rawUrl}
+                  poster={thumbnail}
+                  title={video.title}
+                  autoPlay={true}
+                  onEnded={() => {}}
+                />
+              ) : !isPlaying && thumbnail ? (
+                <div 
+                  className="video-player-overlay" 
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    backgroundImage: `url(${thumbnail})`,
+                    backgroundSize: 'contain',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'center',
+                    backgroundColor: '#000',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 2
+                  }}
+                  onClick={() => {
+                    setIsPlaying(true);
+                    setIframeLoading(true);
+                  }}
+                >
+                  <div style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <div style={{
+                      width: '64px',
+                      height: '64px',
+                      borderRadius: '50%',
+                      backgroundColor: 'var(--color-accent)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
+                      transition: 'transform 0.2s ease',
+                      cursor: 'pointer'
+                    }}>
+                      <Play size={32} color="white" style={{ marginLeft: '4px' }} />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          ) : rawUrl && rawUrl.trim().toLowerCase().startsWith('<iframe') ? (
-            /* SECURITY: Parse iframe src and validate against trusted domains instead of using dangerouslySetInnerHTML */
-            (() => {
-              const TRUSTED_DOMAINS = [
-                'streamtape.com', 'streamtape.to',
-                'filemoon.sx', 'filemoon.to', 'filemoon.in', 'fmoonembed.com',
-                'streamhg.com', 'hgcloud.to', 'vibuxer.com', 'huntrexus.com',
-                'doodstream.com', 'dood.pm', 'dood.to', 'dood.so', 'dood.watch', 'dood.wf', 'ds2play.com', 'd0000d.com',
-                'upstream.to',
-                'mixdrop.co', 'mixdrop.to', 'mixdrop.sx',
-                'vidoza.net',
-                'voe.sx',
-                'mp4upload.com',
-                'wishonly.site',
-                'player.vimeo.com',
-                'youtube.com', 'youtube-nocookie.com',
-                'iframe.mediadelivery.net'
-              ];
-              try {
-                if (effectiveIframeSrc) {
-                  const hostname = new URL(effectiveIframeSrc).hostname.toLowerCase();
-                  const isTrusted = TRUSTED_DOMAINS.some(domain => hostname === domain || hostname.endsWith('.' + domain));
-                  if (isTrusted) {
-                    return (
-                      <>
-                        {iframeLoading && (
-                          <div style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            backgroundColor: 'rgba(13, 17, 23, 0.6)',
-                            pointerEvents: 'none',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 1,
-                            gap: '0.8rem',
-                            color: 'var(--color-text-light)'
-                          }}>
-                            <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
-                            <span style={{ fontSize: '0.9rem', color: 'var(--color-text-light)', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Đang tải luồng phát video...</span>
-                          </div>
-                        )}
-                        <iframe
-                          key={`${effectiveIframeSrc}-${reloadKey}`}
-                          src={effectiveIframeSrc.includes('?') ? `${effectiveIframeSrc}&autoplay=1` : `${effectiveIframeSrc}?autoplay=1`}
-                          width="100%"
-                          height="100%"
-                          allowFullScreen
-                          webkitallowfullscreen="true"
-                          mozallowfullscreen="true"
-                          frameBorder="0"
-                          scrolling="no"
-                          loading="eager"
-                          referrerPolicy="no-referrer-when-downgrade"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *"
-                          onLoad={() => setIframeLoading(false)}
-                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
-                        />
-                      </>
-                    );
+              ) : rawUrl && rawUrl.trim().toLowerCase().startsWith('<iframe') ? (
+                /* SECURITY: Parse iframe src and validate against trusted domains instead of using dangerouslySetInnerHTML */
+                (() => {
+                  const TRUSTED_DOMAINS = [
+                    'streamtape.com', 'streamtape.to',
+                    'filemoon.sx', 'filemoon.to', 'filemoon.in', 'fmoonembed.com',
+                    'streamhg.com', 'hgcloud.to', 'vibuxer.com', 'huntrexus.com',
+                    'doodstream.com', 'dood.pm', 'dood.to', 'dood.so', 'dood.watch', 'dood.wf', 'ds2play.com', 'd0000d.com',
+                    'upstream.to',
+                    'mixdrop.co', 'mixdrop.to', 'mixdrop.sx',
+                    'vidoza.net',
+                    'voe.sx',
+                    'mp4upload.com',
+                    'wishonly.site',
+                    'player.vimeo.com',
+                    'youtube.com', 'youtube-nocookie.com',
+                    'iframe.mediadelivery.net'
+                  ];
+                  try {
+                    if (effectiveIframeSrc) {
+                      const hostname = new URL(effectiveIframeSrc).hostname.toLowerCase();
+                      const isTrusted = TRUSTED_DOMAINS.some(domain => hostname === domain || hostname.endsWith('.' + domain));
+                      if (isTrusted) {
+                        return (
+                          <>
+                            {iframeLoading && (
+                              <div style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '100%',
+                                height: '100%',
+                                backgroundColor: 'rgba(13, 17, 23, 0.6)',
+                                pointerEvents: 'none',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 1,
+                                gap: '0.8rem',
+                                color: 'var(--color-text-light)'
+                              }}>
+                                <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
+                                <span style={{ fontSize: '0.9rem', color: 'var(--color-text-light)', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Đang tải luồng phát video...</span>
+                              </div>
+                            )}
+                            <iframe
+                              key={`${effectiveIframeSrc}-${reloadKey}`}
+                              src={effectiveIframeSrc.includes('?') ? `${effectiveIframeSrc}&autoplay=1` : `${effectiveIframeSrc}?autoplay=1`}
+                              width="100%"
+                              height="100%"
+                              allowFullScreen
+                              webkitallowfullscreen="true"
+                              mozallowfullscreen="true"
+                              frameBorder="0"
+                              scrolling="no"
+                              loading="eager"
+                              referrerPolicy="no-referrer-when-downgrade"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *"
+                              onLoad={() => setIframeLoading(false)}
+                              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+                            />
+                          </>
+                        );
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('Failed to parse embed code:', e.message);
                   }
-                }
-              } catch (e) {
-                console.warn('Failed to parse embed code:', e.message);
-              }
-              return (
-                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d1117', color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem' }}>
-                  ⚠️ Embed code không hợp lệ hoặc domain không được tin cậy. Vui lòng liên hệ Admin.
-                </div>
-              );
-            })()
-          ) : (
-            <>
-              {iframeLoading && (
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  backgroundColor: 'rgba(13, 17, 23, 0.6)',
-                  pointerEvents: 'none',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  zIndex: 1,
-                  gap: '0.8rem',
-                  color: 'var(--color-text-light)'
-                }}>
-                  <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
-                  <span style={{ fontSize: '0.9rem', color: 'var(--color-text-light)', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Đang tải luồng phát video...</span>
-                </div>
+                  return (
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d1117', color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem' }}>
+                      ⚠️ Embed code không hợp lệ hoặc domain không được tin cậy. Vui lòng liên hệ Admin.
+                    </div>
+                  );
+                })()
+              ) : (
+                <>
+                  {iframeLoading && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      backgroundColor: 'rgba(13, 17, 23, 0.6)',
+                      pointerEvents: 'none',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 1,
+                      gap: '0.8rem',
+                      color: 'var(--color-text-light)'
+                    }}>
+                      <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
+                      <span style={{ fontSize: '0.9rem', color: 'var(--color-text-light)', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Đang tải luồng phát video...</span>
+                    </div>
+                  )}
+                  <iframe
+                    key={`${effectiveIframeSrc}-${reloadKey}`}
+                    src={effectiveIframeSrc ? (effectiveIframeSrc.includes('?') ? `${effectiveIframeSrc}&autoplay=1` : `${effectiveIframeSrc}?autoplay=1`) : ''}
+                    width="100%"
+                    height="100%"
+                    allowFullScreen
+                    webkitallowfullscreen="true"
+                    mozallowfullscreen="true"
+                    frameBorder="0"
+                    scrolling="no"
+                    loading="eager"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *"
+                    onLoad={() => setIframeLoading(false)}
+                    style={{ border: 'none' }}
+                  />
+                </>
               )}
-              <iframe
-                key={`${effectiveIframeSrc}-${reloadKey}`}
-                src={effectiveIframeSrc ? (effectiveIframeSrc.includes('?') ? `${effectiveIframeSrc}&autoplay=1` : `${effectiveIframeSrc}?autoplay=1`) : ''}
-                width="100%"
-                height="100%"
-                allowFullScreen
-                webkitallowfullscreen="true"
-                mozallowfullscreen="true"
-                frameBorder="0"
-                scrolling="no"
-                loading="eager"
-                referrerPolicy="no-referrer-when-downgrade"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *"
-                onLoad={() => setIframeLoading(false)}
-                style={{ border: 'none' }}
-              />
-            </>
-          )}
+            </div>
+          </div>
+
+          {/* Video Player Toolbar */}
+          <div className="video-player-toolbar">
+            {/* Server Switcher */}
+            <div className="video-server-group">
+              <span className="video-server-label">
+                <Server size={14} color="var(--color-accent)" /> Máy chủ:
+              </span>
+              <button
+                type="button"
+                className={`video-server-btn ${currentServer === 'server1' ? 'active' : ''}`}
+                onClick={() => switchServer('server1')}
+                title="Máy chủ chính HGCloud"
+              >
+                <span>Server 1 (HGCloud)</span>
+              </button>
+              <button
+                type="button"
+                className={`video-server-btn ${currentServer === 'server2' ? 'active' : ''}`}
+                onClick={() => switchServer('server2')}
+                title="Máy chủ dự phòng Vibuxer - Dùng khi Server 1 quay mãi hoặc bị chặn mạng"
+              >
+                <span>Server 2 (Vibuxer)</span>
+              </button>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="video-player-actions">
+              <button
+                type="button"
+                className="video-action-btn btn-fullscreen"
+                onClick={toggleFullscreen}
+                title="Xem toàn màn hình (Tối ưu cho Android & xoay ngang)"
+              >
+                {isFullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
+                <span>{isFullscreen ? 'Thu Nhỏ' : 'Toàn Màn Hình'}</span>
+              </button>
+
+              <button
+                type="button"
+                className="video-action-btn"
+                onClick={reloadPlayer}
+                title="Tải lại trình phát nếu video bị đứng hoặc đơ"
+              >
+                <RotateCcw size={14} />
+                <span>Làm Mới</span>
+              </button>
+
+              {downloadUrl && (
+                <a
+                  href={downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="video-action-btn"
+                  title="Tải video này về máy"
+                >
+                  <Download size={14} />
+                  <span>Tải Video</span>
+                </a>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* DANH SÁCH TẬP PHIM (NẾU LÀ PHIM BỘ) */}
+      {isSeries && episodes.length > 0 && (
+        <div className="video-episodes-section" style={{
+          marginTop: '1.25rem',
+          padding: '1.25rem',
+          borderRadius: '10px',
+          backgroundColor: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(168, 85, 247, 0.25)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.8rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <Layers size={20} color="#c084fc" />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--color-text-light)' }}>
+                Danh Sách Tập Phim
+              </h3>
+              <span style={{ fontSize: '0.78rem', backgroundColor: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 700 }}>
+                {episodes.length} Tập
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                Đang phát: <strong style={{ color: '#00d2d3' }}>{currentEp?.title || `Tập ${currentEpisodeIndex + 1}`}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Grid nút tập phim */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))',
+            gap: '0.6rem',
+            maxHeight: '320px',
+            overflowY: 'auto',
+            paddingRight: '4px'
+          }}>
+            {episodes.map((ep, idx) => {
+              const isActive = idx === currentEpisodeIndex;
+              return (
+                <button
+                  key={ep.id || idx}
+                  type="button"
+                  onClick={() => handleEpisodeChange(idx)}
+                  style={{
+                    padding: '0.65rem 0.4rem',
+                    borderRadius: '6px',
+                    border: isActive ? '2px solid #00d2d3' : '1px solid rgba(255, 255, 255, 0.1)',
+                    backgroundColor: isActive ? 'rgba(0, 210, 211, 0.18)' : 'rgba(255, 255, 255, 0.04)',
+                    color: isActive ? '#00d2d3' : 'var(--color-text-light)',
+                    fontWeight: isActive ? 800 : 600,
+                    fontSize: '0.85rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.2rem',
+                    boxShadow: isActive ? '0 0 12px rgba(0, 210, 211, 0.35)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                  title={ep.title || `Tập ${idx + 1}`}
+                >
+                  <span style={{ fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    {isActive && <Play size={10} fill="#00d2d3" />}
+                    Tập {ep.episodeNumber || idx + 1}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
-
-      {/* Video Player Toolbar */}
-      <div className="video-player-toolbar">
-        {/* Server Switcher */}
-        <div className="video-server-group">
-          <span className="video-server-label">
-            <Server size={14} color="var(--color-accent)" /> Máy chủ:
-          </span>
-          <button
-            type="button"
-            className={`video-server-btn ${currentServer === 'server1' ? 'active' : ''}`}
-            onClick={() => switchServer('server1')}
-            title="Máy chủ chính HGCloud"
-          >
-            <span>Server 1 (HGCloud)</span>
-          </button>
-          <button
-            type="button"
-            className={`video-server-btn ${currentServer === 'server2' ? 'active' : ''}`}
-            onClick={() => switchServer('server2')}
-            title="Máy chủ dự phòng Vibuxer - Dùng khi Server 1 quay mãi hoặc bị chặn mạng"
-          >
-            <span>Server 2 (Vibuxer)</span>
-          </button>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="video-player-actions">
-          <button
-            type="button"
-            className="video-action-btn btn-fullscreen"
-            onClick={toggleFullscreen}
-            title="Xem toàn màn hình (Tối ưu cho Android & xoay ngang)"
-          >
-            {isFullscreen ? <Minimize size={15} /> : <Maximize size={15} />}
-            <span>{isFullscreen ? 'Thu Nhỏ' : 'Toàn Màn Hình'}</span>
-          </button>
-
-          <button
-            type="button"
-            className="video-action-btn"
-            onClick={reloadPlayer}
-            title="Tải lại trình phát nếu video bị đứng hoặc đơ"
-          >
-            <RotateCcw size={14} />
-            <span>Làm Mới</span>
-          </button>
-
-          {downloadUrl && (
-            <a
-              href={downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="video-action-btn"
-              title="Tải video này về máy"
-            >
-              <Download size={14} />
-              <span>Tải Video</span>
-            </a>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Android and Mobile network guidance */}
       <div className="video-detail-vpn-notice" style={{ border: '1px solid rgba(102, 192, 244, 0.25)', backgroundColor: 'rgba(102, 192, 244, 0.05)' }}>
@@ -618,9 +757,11 @@ function VideoDetail() {
       {/* Video Info */}
       <div className="video-detail-info">
         <div className="video-detail-info-header">
-          <h1 className="video-detail-title">{video.title}</h1>
-          <span className="video-detail-badge">
-            {video.category === 'vam' ? 'VAM' : (video.category === '3d' ? '3D Anime' : (video.category === 'cosplay' ? 'Cosplay' : (video.category === 'jav' || video.category === 'vietsub' ? 'JAV Vietsub' : (video.category === 'hentai' ? 'Hentai' : 'Phim'))))}
+          <h1 className="video-detail-title">
+            {video.title} {isSeries && currentEp?.title ? `- ${currentEp.title}` : ''}
+          </h1>
+          <span className="video-detail-badge" style={isSeries ? { background: 'linear-gradient(135deg, #9333ea, #c084fc)', color: '#fff' } : {}}>
+            {isSeries ? `Phim Bộ (${episodes.length} Tập)` : (video.category === 'vam' ? 'VAM' : (video.category === '3d' ? '3D Anime' : (video.category === 'cosplay' ? 'Cosplay' : (video.category === 'jav' || video.category === 'vietsub' ? 'JAV Vietsub' : (video.category === 'hentai' ? 'Hentai' : 'Phim')))))}
           </span>
         </div>
 

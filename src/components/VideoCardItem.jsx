@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Play, Eye, Calendar, Tag, Film } from 'lucide-react';
+import { Play, Eye, Calendar, Tag, Film, Layers } from 'lucide-react';
 import { getVideoThumbnail, toEmbedUrl } from '../utils/videoUtils';
 
 export default function VideoCardItem({ video }) {
@@ -71,6 +71,30 @@ export default function VideoCardItem({ video }) {
         <span className="video-card-badge">
           {video.category === 'vam' ? 'VAM' : '3D'}
         </span>
+        {video.isSeries && (
+          <span 
+            className="video-card-series-badge" 
+            style={{
+              position: 'absolute',
+              bottom: '8px',
+              right: '8px',
+              background: 'linear-gradient(135deg, #9333ea 0%, #c084fc 100%)',
+              color: '#fff',
+              padding: '2px 7px',
+              borderRadius: '4px',
+              fontSize: '0.72rem',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.7)',
+              zIndex: 2,
+              letterSpacing: '0.2px'
+            }}
+          >
+            <Layers size={11} /> {video.episodes?.length ? `${video.episodes.length} Tập` : 'Phim Bộ'}
+          </span>
+        )}
       </div>
 
       <div className="video-card-info">

@@ -60,7 +60,10 @@ function Admin() {
     category: 'vam',
     description: '',
     tags: '',
-    views: 0
+    views: 0,
+    isSeries: false,
+    episodes: [],
+    totalEpisodes: 0
   };
   const [videoData, setVideoData] = useState(INITIAL_VIDEO_STATE);
   const [editingVideoId, setEditingVideoId] = useState(null);

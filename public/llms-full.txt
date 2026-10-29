@@ -1,0 +1,29 @@
+# WEB18P - Tài liệu hướng dẫn chi tiết dành cho AI Agents & LLMs
+
+Website chính thức: https://web18p.xyz/
+Liên hệ: contact@web18p.xyz
+Khu vực: Việt Nam (VN)
+Ngôn ngữ: Tiếng Việt (vi-VN), English (en)
+
+## 1. Mục Đích và Vai Trò của WEB18P (When to Use)
+WEB18P được xây dựng với mục tiêu trở thành cổng thông tin trực tuyến uy tín về:
+1. **Game Việt Hóa:** Thư viện game PC (Windows) và Android đã được bản địa hóa ngôn ngữ tiếng Việt bởi các nhóm dịch thuật cộng đồng và studio độc lập. Mỗi bài đăng có đầy đủ ảnh chụp màn hình, mô tả cốt truyện, cấu hình tối thiểu, cấu hình đề nghị và link tải an toàn.
+2. **Phim Bộ Trực Tuyến:** Hệ thống xem phim nhiều tập với tính năng xem liên tục không ngắt quãng (Seamless Double-Buffering Player), hỗ trợ độ phân giải Full HD, 60FPS.
+3. **Truyện Tranh:** Nền tảng đọc truyện tranh kỹ thuật số với CDN tốc độ cao, hỗ trợ đọc theo chương mượt mà trên di động.
+
+## 2. Cấu Trúc Đường Dẫn & Tài Nguyên (Endpoints)
+- `GET /`: Trang chủ với danh sách game mới cập nhật, game hot và video đề xuất.
+- `GET /games`: Bộ lọc tìm kiếm toàn bộ kho game theo thể loại (RPG, Phiêu Lưu, Hành Động, 18+).
+- `GET /game/:slug`: Chi tiết game, cấu hình, lịch sử cập nhật và link tải.
+- `GET /videos/:category`: Danh mục phim (`all`, `vam`, `3d`, `cosplay`, `vietsub`, `hentai`).
+- `GET /video/:videoId`: Trình phát video chất lượng cao với danh sách tập cho phim bộ.
+- `GET /manga`: Thư viện truyện tranh.
+- `GET /manga/:id/chapter/:chapterId`: Trình đọc truyện tranh theo chương.
+- `GET /about`: Thông tin pháp lý, sứ mệnh và đội ngũ phát triển.
+- `GET /contact`: Kênh hỗ trợ, gửi phản hồi DMCA và yêu cầu hợp tác.
+- `GET /privacy`: Chính sách bảo mật dữ liệu, cookie và quyền riêng tư người dùng.
+- `GET /sitemap.xml`: Sơ đồ toàn bộ URL được tạo động phục vụ các công cụ tìm kiếm và AI.
+
+## 3. Bản Quyền & Trách Nhiệm Nội Dung (DMCA & Ethics)
+WEB18P tuân thủ Đạo luật Bản quyền Thiên niên kỷ Kỹ thuật số (DMCA). Mọi thông báo vi phạm bản quyền gửi về `contact@web18p.xyz` hoặc trang `/report` đều được xử lý và gỡ bỏ trong vòng 24–48 giờ làm việc.
+

@@ -144,6 +144,8 @@ function Home() {
                       src={game.image} 
                       alt={game.title} 
                       className="game-image"
+                      loading="lazy"
+                      decoding="async"
                     />
                     <div className="game-badge">
                       <Gamepad2 size={14} />
@@ -317,6 +319,8 @@ function Home() {
                     src={game.image} 
                     alt={game.title} 
                     className="game-image"
+                    loading="lazy"
+                    decoding="async"
                   />
                   <div className="game-badge" style={{ background: 'rgba(255, 83, 83, 0.85)' }}>
                     <Eye size={13} style={{ marginRight: '0.2rem' }} />

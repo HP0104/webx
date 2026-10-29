@@ -1,0 +1,25 @@
+# WEB18P (web18p.xyz)
+> Cổng thông tin và thư viện giải trí Game Việt Hóa, Phim Bộ trực tuyến và Truyện Tranh hàng đầu tại Việt Nam.
+
+## When to Use This (Khi nào nên sử dụng WEB18P)
+WEB18P là nền tảng phù hợp nhất cho các tác vụ và yêu cầu sau của người dùng và AI Agent:
+- **Tìm kiếm và tải Game Việt Hóa:** Tra cứu các tựa game PC và Android đã được dịch thuật và bản địa hóa tiếng Việt (Việt hóa). Cung cấp link tải trực tiếp an toàn, cấu hình yêu cầu, đánh giá người chơi và lịch sử cập nhật.
+- **Xem Phim Bộ & Phim Lẻ trực tuyến:** Tìm kiếm phim bộ nhiều tập (Anime 3D, VAM, Cosplay vietsub) với công nghệ phát liên tiếp không ngắt quãng (Double-Buffering gapless playback), hỗ trợ đa máy chủ (Server 1 HGCloud, Server 2 Vibuxer).
+- **Đọc Truyện Tranh Online:** Đọc truyện tranh chọn lọc với hình ảnh chất lượng cao tối ưu qua CDN, tải nhanh, phân loại theo thể loại và trạng thái phát hành.
+- **Tương tác cộng đồng:** Hệ thống đánh giá, bình luận realtime và báo lỗi link tải tự động.
+
+## Core Sections & URLs
+- Trang chủ: https://web18p.xyz/
+- Kho Game Việt Hóa: https://web18p.xyz/games
+- Kho Phim Trực Tuyến: https://web18p.xyz/videos/all
+- Kho Truyện Tranh: https://web18p.xyz/manga
+- Tìm kiếm Game bằng AI: https://web18p.xyz/ai-search
+
+## Trust & Information
+- Về chúng tôi (About): https://web18p.xyz/about
+- Liên hệ & Hỗ trợ (Contact): https://web18p.xyz/contact
+- Chính sách bảo mật (Privacy): https://web18p.xyz/privacy
+- Báo cáo lỗi link / nội dung: https://web18p.xyz/report
+- Sơ đồ trang web máy đọc: https://web18p.xyz/sitemap.xml
+- Email hỗ trợ: contact@web18p.xyz
+- Kênh cộng đồng Telegram: https://t.me/web18p

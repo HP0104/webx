@@ -13,9 +13,10 @@ export default function VideoAdBanner({ config }) {
   const [adCycle, setAdCycle] = useState(0);
   const [hasError, setHasError] = useState(false);
 
-  // 1. Kiểm tra điều kiện mạng:
-  // Nếu mạng yếu / 3G / bật tiết kiệm dữ liệu -> KHÔNG tải và KHÔNG phát video
-  const shouldPlayVideo = networkStatus.canStreamVideo;
+  // 1. Kiểm tra điều kiện mạng & thiết bị:
+  // Nếu màn hình mobile/tablet (sidebar ẩn) hoặc mạng yếu / 3G / bật tiết kiệm dữ liệu -> KHÔNG tải và KHÔNG phát video
+  const isDesktop = typeof window !== 'undefined' && window.innerWidth > 1024;
+  const shouldPlayVideo = networkStatus.canStreamVideo && isDesktop;
 
   useEffect(() => {
     // Nếu mạng không đủ mạnh hoặc không có config VAST thì dọn dẹp player

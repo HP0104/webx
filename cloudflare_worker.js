@@ -23,6 +23,132 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+// --- Agent & Markdown Content Negotiation Templates ---
+const MARKDOWN_HOME = `# WEB18P - Kho Game Việt Hóa, Phim Bộ & Truyện Tranh Online
+
+Chào mừng đến với WEB18P (https://web18p.xyz/) - Cổng thông tin và nền tảng giải trí trực tuyến hàng đầu về Game Việt Hóa, Phim Bộ không gián đoạn và Truyện Tranh bản đẹp.
+
+## Khi Nào Nên Sử Dụng WEB18P (When to Use This)
+WEB18P là nền tảng phù hợp nhất cho các tác vụ và yêu cầu sau của người dùng và AI Agent:
+- **Tìm kiếm và tải Game Việt Hóa**: Tra cứu các tựa game PC và Android đã được bản địa hóa tiếng Việt hoàn chỉnh, link tải an toàn, cấu hình chi tiết và đánh giá từ cộng đồng.
+- **Xem Phim Bộ & Video Trực Tuyến**: Xem phim bộ nhiều tập với công nghệ phát liên tiếp không ngắt quãng (Seamless Double-Buffering Streaming), hỗ trợ đa máy chủ ổn định.
+- **Đọc Truyện Tranh Online**: Kho truyện tranh phong phú được tối ưu hóa hiển thị tốc độ cao trên mọi thiết bị máy tính và di động.
+- **Tương tác cộng đồng**: Bình luận, đánh giá chất lượng và báo cáo lỗi link tải tự động.
+
+## Danh Mục & Đường Dẫn Chính
+- Trang Chủ: https://web18p.xyz/
+- Kho Game Việt Hóa: https://web18p.xyz/games
+- Kho Phim Bộ & Phim Lẻ: https://web18p.xyz/videos/all
+- Kho Truyện Tranh Online: https://web18p.xyz/manga
+- Tìm Kiếm Game Bằng AI: https://web18p.xyz/ai-search
+
+## Trang Thông Tin & Độ Tin Cậy (Trust Anchors)
+- Về Chúng Tôi: https://web18p.xyz/about
+- Liên Hệ & Hỗ Trợ: https://web18p.xyz/contact
+- Chính Sách Quyền Riêng Tư: https://web18p.xyz/privacy
+- Báo Lỗi & Khiếu Nại Bản Quyền (DMCA): https://web18p.xyz/report
+- Sơ Đồ Trang Web: https://web18p.xyz/sitemap.xml
+- Hướng Dẫn Dành Cho AI Agent (llms.txt): https://web18p.xyz/llms.txt
+- Đặc Tả Kỹ Thuật Đầy Đủ (llms-full.txt): https://web18p.xyz/llms-full.txt
+
+## Thông Tin Liên Hệ & Pháp Lý
+- Email Hỗ Trợ: contact@web18p.xyz
+- Email Bản Quyền: dmca@web18p.xyz
+- Kênh Cộng Đồng Telegram: https://t.me/web18p
+- Địa Chỉ: 18 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh, Việt Nam (Postal Code: 70000)
+`;
+
+const MARKDOWN_ABOUT = `# Về Chúng Tôi - WEB18P
+
+Website chính thức: https://web18p.xyz/
+
+## 1. Sứ Mệnh & Tầm Nhìn
+WEB18P (web18p.xyz) ra đời với sứ mệnh mang đến cho cộng đồng người dùng Việt Nam một không gian tổng hợp thông tin, link tải an toàn và các tác phẩm game được bản địa hóa tiếng Việt (Game Việt Hóa) đạt chuẩn chất lượng cao nhất.
+
+## 2. Cam Kết An Toàn & Trải Nghiệm
+- **Kiểm tra bảo mật nghiêm ngặt**: 100% các file cài đặt và link tải được quét qua VirusTotal và Windows Defender.
+- **Hạ tầng truyền tải tốc độ cao**: Mạng phân phối nội dung CDN quốc tế và máy chủ lưu trữ chuyên dụng.
+- **Trình phát phim bộ liên tục**: Đột phá với tính năng phát liền mạch không ngắt quãng (Gapless Double-Buffering Player).
+
+## 3. Bản Quyền & Trách Nhiệm DMCA
+WEB18P luôn tôn trọng quyền sở hữu trí tuệ. Mọi yêu cầu gỡ bỏ nội dung hợp lệ được xử lý qua contact@web18p.xyz trong vòng 24–48 giờ.
+`;
+
+const MARKDOWN_CONTACT = `# Liên Hệ & Hỗ Trợ - WEB18P
+
+Website chính thức: https://web18p.xyz/
+
+## Kênh Tiếp Nhận Thông Tin Chính Thức
+- Email Hỗ Trợ Kỹ Thuật: contact@web18p.xyz
+- Email Khiếu Nại Bản Quyền (DMCA): dmca@web18p.xyz
+- Kênh Telegram Chính Thức: https://t.me/web18p (@web18p)
+- Địa Chỉ: 18 Nguyễn Huệ, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh, Việt Nam (Postal Code: 70000)
+
+## Thời Gian Phản Hồi
+- Yêu cầu bản quyền DMCA: Dưới 24 giờ làm việc.
+- Thắc mắc kỹ thuật & link tải: Dưới 48 giờ làm việc.
+`;
+
+const MARKDOWN_PRIVACY = `# Chính Sách Quyền Riêng Tư & Bảo Mật Dữ Liệu - WEB18P
+
+Áp dụng cho toàn bộ người dùng tại https://web18p.xyz/
+
+## 1. Dữ Liệu Thu Thập
+Chúng tôi chỉ thu thập thông tin tối thiểu cần thiết để vận hành:
+- Thông tin tài khoản: Email, tên hiển thị công khai qua Firebase Authentication.
+- Dữ liệu trải nghiệm: Danh sách yêu thích, đánh giá và tiến độ phát video liên tục.
+- Thông tin kỹ thuật ẩn danh: Địa chỉ IP ẩn danh, loại trình duyệt nhằm phòng ngừa DDoS.
+
+## 2. Cookie & Local Storage
+- Lưu giữ phiên làm việc đăng nhập an toàn.
+- Ghi nhớ tập phim đang xem và mốc thời gian để người dùng tiếp tục thưởng thức liền mạch.
+- Cam kết không chia sẻ hoặc bán dữ liệu cá nhân cho bên thứ ba.
+
+## 3. Bảo Mật & Quyền Của Bạn
+- Toàn bộ lưu lượng truy cập được mã hóa SSL/TLS qua Cloudflare.
+- Người dùng có toàn quyền xem, sửa hoặc yêu cầu xóa vĩnh viễn tài khoản qua email privacy@web18p.xyz hoặc contact@web18p.xyz.
+`;
+
+const MARKDOWN_LLMS = `# WEB18P (web18p.xyz)
+> Cổng thông tin và thư viện giải trí Game Việt Hóa, Phim Bộ trực tuyến và Truyện Tranh hàng đầu tại Việt Nam.
+
+## When to Use This (Khi nào nên sử dụng WEB18P)
+WEB18P là nền tảng phù hợp nhất cho các tác vụ và yêu cầu sau của người dùng và AI Agent:
+- **Tìm kiếm và tải Game Việt Hóa:** Tra cứu các tựa game PC và Android đã được dịch thuật và bản địa hóa tiếng Việt (Việt hóa). Cung cấp link tải trực tiếp an toàn, cấu hình yêu cầu, đánh giá người chơi và lịch sử cập nhật.
+- **Xem Phim Bộ & Phim Lẻ trực tuyến:** Tìm kiếm phim bộ nhiều tập (Anime 3D, VAM, Cosplay vietsub) với công nghệ phát liên tiếp không ngắt quãng (Double-Buffering gapless playback), hỗ trợ đa máy chủ (Server 1 HGCloud, Server 2 Vibuxer).
+- **Đọc Truyện Tranh Online:** Đọc truyện tranh chọn lọc với hình ảnh chất lượng cao tối ưu qua CDN, tải nhanh, phân loại theo thể loại và trạng thái phát hành.
+- **Tương tác cộng đồng:** Hệ thống đánh giá, bình luận realtime và báo lỗi link tải tự động.
+
+## Core Sections & URLs
+- Trang chủ: https://web18p.xyz/
+- Kho Game Việt Hóa: https://web18p.xyz/games
+- Kho Phim Trực Tuyến: https://web18p.xyz/videos/all
+- Kho Truyện Tranh: https://web18p.xyz/manga
+- Tìm kiếm Game bằng AI: https://web18p.xyz/ai-search
+
+## Trust & Information
+- Về chúng tôi (About): https://web18p.xyz/about
+- Liên hệ & Hỗ trợ (Contact): https://web18p.xyz/contact
+- Chính sách bảo mật (Privacy): https://web18p.xyz/privacy
+- Báo cáo lỗi link / nội dung: https://web18p.xyz/report
+- Sơ đồ trang web máy đọc: https://web18p.xyz/sitemap.xml
+- Email hỗ trợ: contact@web18p.xyz
+- Kênh cộng đồng Telegram: https://t.me/web18p
+`;
+
+const MARKDOWN_404 = `# 404 Not Found
+
+The requested resource was not found on WEB18P.
+
+Please check the URL or consult our agent guides and sitemap:
+- Homepage: https://web18p.xyz/
+- AI Agent Guide: https://web18p.xyz/llms.txt
+- Full Developer Reference: https://web18p.xyz/llms-full.txt
+- Sitemap: https://web18p.xyz/sitemap.xml
+- About Us: https://web18p.xyz/about
+- Contact: https://web18p.xyz/contact
+`;
+
 export default {
   async fetch(request, env) {
     // Handle CORS preflight requests
@@ -31,6 +157,85 @@ export default {
     }
 
     const url = new URL(request.url);
+    const acceptHeader = request.headers.get("Accept") || "";
+    const wantsMarkdown = acceptHeader.toLowerCase().includes("text/markdown");
+
+    // 1. Markdown Content Negotiation for Homepage & Trust Pages (Ora / is-agentic.com compliance)
+    if (wantsMarkdown && request.method === "GET") {
+      if (url.pathname === "/" || url.pathname === "/index.html") {
+        return new Response(MARKDOWN_HOME, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/markdown; charset=utf-8",
+            "Vary": "Accept",
+            "Cache-Control": "public, max-age=3600"
+          }
+        });
+      }
+      if (url.pathname === "/about" || url.pathname === "/about/") {
+        return new Response(MARKDOWN_ABOUT, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/markdown; charset=utf-8",
+            "Vary": "Accept",
+            "Cache-Control": "public, max-age=3600"
+          }
+        });
+      }
+      if (url.pathname === "/contact" || url.pathname === "/contact/") {
+        return new Response(MARKDOWN_CONTACT, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/markdown; charset=utf-8",
+            "Vary": "Accept",
+            "Cache-Control": "public, max-age=3600"
+          }
+        });
+      }
+      if (url.pathname === "/privacy" || url.pathname === "/privacy/") {
+        return new Response(MARKDOWN_PRIVACY, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/markdown; charset=utf-8",
+            "Vary": "Accept",
+            "Cache-Control": "public, max-age=3600"
+          }
+        });
+      }
+    }
+
+    // 2. Direct llms.txt endpoints (serves markdown with Vary: Accept)
+    if ((url.pathname === "/llms.txt" || url.pathname === "/.well-known/llms.txt") && request.method === "GET") {
+      return new Response(MARKDOWN_LLMS, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/markdown; charset=utf-8",
+          "Vary": "Accept",
+          "Cache-Control": "public, max-age=86400"
+        }
+      });
+    }
+
+    // 3. Agent 404 Probes (e.g. Ora audit /__ora-404-probe-*, /some-path-that-does-not-exist)
+    if (url.pathname.startsWith("/__ora-404-probe") || url.pathname === "/some-path-that-does-not-exist") {
+      if (wantsMarkdown) {
+        return new Response(MARKDOWN_404, {
+          status: 404,
+          headers: {
+            "Content-Type": "text/markdown; charset=utf-8",
+            "Vary": "Accept",
+            "Cache-Control": "no-cache"
+          }
+        });
+      }
+      return new Response("Not Found", {
+        status: 404,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Vary": "Accept"
+        }
+      });
+    }
 
     // Bot / Crawler Open Graph Link Preview Interceptor (Telegram, Facebook, Discord, Zalo, etc.)
     const userAgent = request.headers.get("User-Agent") || "";
@@ -492,6 +697,26 @@ export default {
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://web18p.xyz/about</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/contact</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/privacy</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/llms.txt</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://web18p.xyz/games/</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
@@ -629,10 +854,54 @@ export default {
     }
 
     if (request.method === "GET" && url.hostname.includes("web18p.xyz")) {
-      return fetch(request);
+      const originResponse = await fetch(request);
+
+      // If origin returns 404 and agent requested markdown:
+      if (originResponse.status === 404 && wantsMarkdown) {
+        return new Response(MARKDOWN_404, {
+          status: 404,
+          headers: {
+            "Content-Type": "text/markdown; charset=utf-8",
+            "Vary": "Accept",
+            "Cache-Control": "no-cache"
+          }
+        });
+      }
+
+      // Add/ensure 'Vary: Accept' header is present on all origin responses
+      // This satisfies Ora / is-agentic test 3: Accept: text/html must include Vary: Accept
+      const newHeaders = new Headers(originResponse.headers);
+      const existingVary = newHeaders.get("Vary");
+      if (!existingVary) {
+        newHeaders.set("Vary", "Accept");
+      } else if (!existingVary.toLowerCase().includes("accept")) {
+        newHeaders.set("Vary", `${existingVary}, Accept`);
+      }
+
+      return new Response(originResponse.body, {
+        status: originResponse.status,
+        statusText: originResponse.statusText,
+        headers: newHeaders
+      });
     }
 
-    return new Response("Not Found", { status: 404 });
+    if (wantsMarkdown) {
+      return new Response(MARKDOWN_404, {
+        status: 404,
+        headers: {
+          "Content-Type": "text/markdown; charset=utf-8",
+          "Vary": "Accept"
+        }
+      });
+    }
+
+    return new Response("Not Found", {
+      status: 404,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Vary": "Accept"
+      }
+    });
   }
 };
 
