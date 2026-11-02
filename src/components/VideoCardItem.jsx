@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Play, Eye, Calendar, Tag, Film, Layers } from 'lucide-react';
+import { Play, Eye, Calendar, Tag, Film, Layers, Flame, Sparkles } from 'lucide-react';
 import { getVideoThumbnail, toEmbedUrl } from '../utils/videoUtils';
 
 export default function VideoCardItem({ video }) {
@@ -9,6 +9,41 @@ export default function VideoCardItem({ video }) {
     thumbnail = thumbnail.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
   }
   thumbnail = thumbnail || 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail';
+
+  // Tính toán nhãn Mới / Tập Mới trong vòng 48h (hoặc 24h)
+  const now = Date.now();
+  const TWO_DAYS_MS = 48 * 60 * 60 * 1000;
+  const createdTime = video.createdAt ? new Date(video.createdAt).getTime() : 0;
+  const updatedTime = video.updatedAt ? new Date(video.updatedAt).getTime() : createdTime;
+
+  const isRecentlyUpdated = updatedTime > 0 && (now - updatedTime) <= TWO_DAYS_MS;
+  const isRecentlyCreated = createdTime > 0 && (now - createdTime) <= TWO_DAYS_MS;
+
+  let newBadge = null;
+  if (video.isSeries) {
+    if (isRecentlyUpdated) {
+      const epCount = Array.isArray(video.episodes) ? video.episodes.length : 0;
+      // Nếu có từ 2 tập trở lên hoặc được cập nhật sau khi tạo
+      if (epCount > 1 || (updatedTime - createdTime > 120000)) {
+        newBadge = {
+          text: epCount > 0 ? `TẬP ${epCount} MỚI` : 'TẬP MỚI',
+          isUpdate: true
+        };
+      } else {
+        newBadge = {
+          text: 'BỘ MỚI',
+          isUpdate: false
+        };
+      }
+    }
+  } else {
+    if (isRecentlyCreated || isRecentlyUpdated) {
+      newBadge = {
+        text: 'MỚI',
+        isUpdate: false
+      };
+    }
+  }
 
   const handleMouseEnter = () => {
     if (!rawUrl) return;
@@ -71,6 +106,37 @@ export default function VideoCardItem({ video }) {
         <span className="video-card-badge">
           {video.category === 'vam' ? 'VAM' : '3D'}
         </span>
+        {newBadge && (
+          <span 
+            className="video-card-update-badge"
+            style={{
+              position: 'absolute',
+              top: '10px',
+              left: '10px',
+              background: newBadge.isUpdate
+                ? 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)'
+                : 'linear-gradient(135deg, #10b981 0%, #06b6d4 100%)',
+              color: '#ffffff',
+              padding: '2.5px 7.5px',
+              borderRadius: '4px',
+              fontSize: '0.68rem',
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3.5px',
+              boxShadow: newBadge.isUpdate
+                ? '0 0 14px rgba(239, 68, 68, 0.75), 0 2px 6px rgba(0,0,0,0.85)'
+                : '0 0 14px rgba(16, 185, 129, 0.65), 0 2px 6px rgba(0,0,0,0.85)',
+              zIndex: 3,
+              letterSpacing: '0.4px',
+              textTransform: 'uppercase',
+              animation: newBadge.isUpdate ? 'pulseFireBadge 2.2s infinite' : 'none'
+            }}
+          >
+            {newBadge.isUpdate ? <Flame size={12} fill="#ffedd5" color="#ffedd5" /> : <Sparkles size={11} />}
+            {newBadge.text}
+          </span>
+        )}
         {video.isSeries && (
           <span 
             className="video-card-series-badge" 
@@ -78,7 +144,9 @@ export default function VideoCardItem({ video }) {
               position: 'absolute',
               bottom: '8px',
               right: '8px',
-              background: 'linear-gradient(135deg, #9333ea 0%, #c084fc 100%)',
+              background: newBadge?.isUpdate 
+                ? 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)' 
+                : 'linear-gradient(135deg, #9333ea 0%, #c084fc 100%)',
               color: '#fff',
               padding: '2px 7px',
               borderRadius: '4px',

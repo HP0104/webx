@@ -95,6 +95,7 @@ function VideoDetail() {
 
   // Series / Episode state
   const isSeries = Boolean(video?.isSeries && Array.isArray(video?.episodes) && video.episodes.length > 0);
+  const isRecentlyUpdated = Boolean(video?.updatedAt && (Date.now() - new Date(video.updatedAt).getTime()) <= 48 * 3600 * 1000);
   const episodes = useMemo(() => (video?.isSeries && Array.isArray(video?.episodes)) ? video.episodes : [], [video]);
 
   const [selectedEpisodeIndex, setSelectedEpisodeIndex] = useState(() => {
@@ -753,6 +754,21 @@ function VideoDetail() {
                     {isActive && <Play size={10} fill="#00d2d3" />}
                     Tập {ep.episodeNumber || idx + 1}
                   </span>
+                  {idx === episodes.length - 1 && isRecentlyUpdated && episodes.length > 1 && (
+                    <span style={{
+                      fontSize: '0.58rem',
+                      background: 'linear-gradient(135deg, #ef4444 0%, #f97316 100%)',
+                      color: '#fff',
+                      padding: '1px 5px',
+                      borderRadius: '3px',
+                      fontWeight: 800,
+                      letterSpacing: '0.3px',
+                      marginTop: '2px',
+                      boxShadow: '0 0 6px rgba(239, 68, 68, 0.6)'
+                    }}>
+                      🔥 MỚI
+                    </span>
+                  )}
                 </button>
               );
             })}
