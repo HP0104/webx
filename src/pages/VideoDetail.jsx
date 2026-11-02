@@ -9,6 +9,8 @@ import { db } from '../firebase';
 import VideoCardItem from '../components/VideoCardItem';
 import NativeVideoPlayer from '../components/NativeVideoPlayer';
 import SeamlessSeriesPlayer from '../components/SeamlessSeriesPlayer';
+import PreRollVideoAd from '../components/PreRollVideoAd';
+import { ADS_CONFIG } from '../config/ads';
 
 /**
  * Get thumbnail from video URL.
@@ -22,6 +24,8 @@ function VideoDetail() {
   const { videos = [], user } = useAppContext();
   const navigate = useNavigate();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showPreRoll, setShowPreRoll] = useState(false);
+  const [hasWatchedPreRoll, setHasWatchedPreRoll] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(false);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -428,13 +432,15 @@ function VideoDetail() {
             )}
 
             <div className="video-detail-player" style={{ position: 'relative', overflow: 'hidden' }}>
-              {isDirectVideo(rawUrl) ? (
-                <NativeVideoPlayer
-                  src={rawUrl}
-                  poster={thumbnail}
-                  title={video.title}
-                  autoPlay={true}
-                  onEnded={() => {}}
+              {showPreRoll ? (
+                <PreRollVideoAd
+                  config={ADS_CONFIG.preroll_video}
+                  onComplete={() => {
+                    setShowPreRoll(false);
+                    setHasWatchedPreRoll(true);
+                    setIsPlaying(true);
+                    setIframeLoading(true);
+                  }}
                 />
               ) : !isPlaying && thumbnail ? (
                 <div 
@@ -457,8 +463,12 @@ function VideoDetail() {
                     zIndex: 2
                   }}
                   onClick={() => {
-                    setIsPlaying(true);
-                    setIframeLoading(true);
+                    if (!hasWatchedPreRoll && ADS_CONFIG.preroll_video?.enabled) {
+                      setShowPreRoll(true);
+                    } else {
+                      setIsPlaying(true);
+                      setIframeLoading(true);
+                    }
                   }}
                 >
                   <div style={{
@@ -485,6 +495,14 @@ function VideoDetail() {
                     </div>
                   </div>
                 </div>
+              ) : isDirectVideo(rawUrl) ? (
+                <NativeVideoPlayer
+                  src={rawUrl}
+                  poster={thumbnail}
+                  title={video.title}
+                  autoPlay={true}
+                  onEnded={() => {}}
+                />
               ) : rawUrl && rawUrl.trim().toLowerCase().startsWith('<iframe') ? (
                 /* SECURITY: Parse iframe src and validate against trusted domains instead of using dangerouslySetInnerHTML */
                 (() => {

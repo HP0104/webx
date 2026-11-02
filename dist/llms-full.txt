@@ -26,3 +26,4 @@ WEB18P được xây dựng với mục tiêu trở thành cổng thông tin tr�
 
 ## 3. Bản Quyền & Trách Nhiệm Nội Dung (DMCA & Ethics)
 WEB18P tuân thủ Đạo luật Bản quyền Thiên niên kỷ Kỹ thuật số (DMCA). Mọi thông báo vi phạm bản quyền gửi về `contact@web18p.xyz` hoặc trang `/report` đều được xử lý và gỡ bỏ trong vòng 24–48 giờ làm việc.
+

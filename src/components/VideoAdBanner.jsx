@@ -78,39 +78,39 @@ export default function VideoAdBanner({ config }) {
               },
             ],
             vastAdvanced: {
-              // Khi video quảng cáo chạy xong -> phát liên tục video mới sau 2 giây
+              // Khi video quảng cáo chạy xong -> giãn cách 45s trước khi phát video mới để bảo vệ chỉ số CPM
               vastVideoEndedCallback: () => {
                 if (isCancelled) return;
                 timer = setTimeout(() => {
                   setAdCycle((prev) => prev + 1);
-                }, 2000);
+                }, 45000);
               },
-              // Khi user skip quảng cáo -> chuyển sang video mới liên tục
+              // Khi user skip quảng cáo -> chờ 45s mới đổi quảng cáo tiếp theo
               vastVideoSkippedCallback: () => {
                 if (isCancelled) return;
                 timer = setTimeout(() => {
                   setAdCycle((prev) => prev + 1);
-                }, 2000);
+                }, 45000);
               },
-              // Khi tạm thời hết quảng cáo từ mạng ad -> thử lại sau 10 giây
+              // Khi tạm thời hết quảng cáo từ mạng ad -> thử lại sau 30 giây
               noVastVideoCallback: () => {
                 if (isCancelled) return;
                 timer = setTimeout(() => {
                   setAdCycle((prev) => prev + 1);
-                }, 10000);
+                }, 30000);
               },
             },
           },
         });
 
-        // Lắng nghe sự kiện ended trên thẻ video làm lớp bảo vệ dự phòng để luôn phát liên tục
+        // Lắng nghe sự kiện ended trên thẻ video làm lớp bảo vệ dự phòng
         const videoEl = videoPlayerRef.current;
         const handleEnded = () => {
           if (isCancelled) return;
           if (!timer) {
             timer = setTimeout(() => {
               setAdCycle((prev) => prev + 1);
-            }, 2000);
+            }, 45000);
           }
         };
         videoEl?.addEventListener('ended', handleEnded);

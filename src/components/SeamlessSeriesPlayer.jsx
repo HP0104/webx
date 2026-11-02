@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Hls from 'hls.js';
 import { 
+  Play,
   RotateCcw, 
   Maximize, 
   Minimize, 
@@ -15,6 +16,8 @@ import {
   isDirectVideo, 
   getAlternateEmbedUrl 
 } from '../utils/videoUtils';
+import PreRollVideoAd from './PreRollVideoAd';
+import { ADS_CONFIG } from '../config/ads';
 
 /**
  * Trusted domains list for secure iframe parsing
@@ -88,6 +91,8 @@ export default function SeamlessSeriesPlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [autoContinuousPlay, setAutoContinuousPlay] = useState(true);
   const [transitionNotification, setTransitionNotification] = useState(null);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [showPreRoll, setShowPreRoll] = useState(false);
 
   // Active Slot: 'A' | 'B'
   const [activeSlot, setActiveSlot] = useState('A');
@@ -251,6 +256,7 @@ export default function SeamlessSeriesPlayer({
 
   // Keep track of when stream needs initialization on episode change
   useEffect(() => {
+    if (!hasStarted) return;
     if (activeSlot === 'A') {
       const epA = episodes[currentEpisodeIndex];
       if (epA && isDirect(epA)) {
@@ -262,7 +268,7 @@ export default function SeamlessSeriesPlayer({
         initStream(videoRefB.current, hlsRefB, epB.videoUrl, true, setIsLoadingB, setHasErrorB);
       }
     }
-  }, [currentEpisodeIndex, activeSlot, episodes, initStream]);
+  }, [currentEpisodeIndex, activeSlot, episodes, initStream, hasStarted]);
 
   // -------------------------------------------------------------
   // Double-Buffering Preloading Logic (Cách 2)
@@ -394,6 +400,74 @@ export default function SeamlessSeriesPlayer({
       {/* Main Dual Player Screen (Double-Buffering Canvas) */}
       <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', height: 0, overflow: 'hidden', backgroundColor: '#000' }}>
         
+        {/* Pre-roll Video Ad Buffer */}
+        {showPreRoll ? (
+          <PreRollVideoAd
+            config={ADS_CONFIG.preroll_video}
+            onComplete={() => {
+              setShowPreRoll(false);
+              setHasStarted(true);
+            }}
+          />
+        ) : !hasStarted && (epA?.thumbnail || poster) ? (
+          <div
+            className="video-player-overlay"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              backgroundImage: `url(${epA?.thumbnail || poster})`,
+              backgroundSize: 'contain',
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center',
+              backgroundColor: '#000',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10
+            }}
+            onClick={() => {
+              if (ADS_CONFIG.preroll_video?.enabled) {
+                setShowPreRoll(true);
+              } else {
+                setHasStarted(true);
+              }
+            }}
+          >
+            <div style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px'
+            }}>
+              <div style={{
+                width: '68px',
+                height: '68px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--color-accent)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 25px rgba(0,210,211,0.6)',
+                transition: 'transform 0.2s ease',
+                cursor: 'pointer'
+              }}>
+                <Play size={34} color="white" style={{ marginLeft: '4px' }} />
+              </div>
+              <span style={{ color: '#fff', fontSize: '1rem', fontWeight: 600, textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+                Bắt đầu xem {epA?.title || `Tập ${currentEpisodeIndex + 1}`}
+              </span>
+            </div>
+          </div>
+        ) : null}
+
         {/* ================= SLOT A ================= */}
         <div style={{
           position: 'absolute',
@@ -415,7 +489,7 @@ export default function SeamlessSeriesPlayer({
               webkit-playsinline="true"
               x5-video-player-type="h5"
               x5-video-player-fullscreen="true"
-              preload="auto"
+              preload={hasStarted ? "auto" : "none"}
               onTimeUpdate={() => activeSlot === 'A' && handleTimeUpdate('A')}
               onEnded={() => activeSlot === 'A' && handleEnded('A')}
               onError={() => setHasErrorA(true)}
@@ -424,7 +498,7 @@ export default function SeamlessSeriesPlayer({
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           ) : (
-            iframeSrcA && (
+            hasStarted && iframeSrcA && (
               <iframe
                 key={`iframe-a-${reloadKey}`}
                 src={iframeSrcA.includes('?') ? `${iframeSrcA}&autoplay=1` : `${iframeSrcA}?autoplay=1`}
@@ -483,7 +557,7 @@ export default function SeamlessSeriesPlayer({
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           ) : (
-            iframeSrcB && (
+            hasStarted && iframeSrcB && (
               <iframe
                 key={`iframe-b-${reloadKey}`}
                 src={iframeSrcB.includes('?') ? `${iframeSrcB}&autoplay=1` : `${iframeSrcB}?autoplay=1`}

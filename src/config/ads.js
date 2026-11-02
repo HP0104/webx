@@ -55,6 +55,17 @@ export const ADS_CONFIG = {
     altText: 'Quảng cáo ExoClick sidebar dưới',
   },
 
+  // Vị trí In-Stream Video (Pre-Roll đệm trước khi xem phim chính)
+  preroll_video: {
+    enabled: true,
+    provider: 'vast',
+    zoneId: '6022002',
+    vastUrl: 'https://s.magsrv.com/v1/vast.php?idz=6022002',
+    skipOffset: 5, // Cho phép bỏ qua sau 5 giây
+    timeout: 5000, // Timeout 5s nếu mạng ad không tải được -> tự động vào phim
+    altText: 'Quảng cáo tài trợ trước video',
+  },
+
   // Vị trí Sidebar Video: Ngay dưới chatbox (Outstream VAST Video Player)
   sidebar_video: {
     provider: 'vast',
