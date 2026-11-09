@@ -89,17 +89,50 @@ export default function VideoCardItem({ video }) {
           />
         ) : null}
         <div 
+          className="video-card-fallback-poster"
           style={{ 
             width: '100%', 
             height: '100%', 
-            background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+            background: video.category === 'vam' 
+              ? 'linear-gradient(135deg, #2c0b38 0%, #181233 50%, #0d1117 100%)' 
+              : 'linear-gradient(135deg, #091f3d 0%, #101c38 50%, #0d1117 100%)',
             display: (video.thumbnail || getVideoThumbnail(rawUrl)) ? 'none' : 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'var(--color-text-muted)'
+            padding: '1rem',
+            textAlign: 'center',
+            position: 'relative',
+            overflow: 'hidden'
           }}
         >
-          <Film size={48} opacity={0.5} />
+          {/* Ambient Glow */}
+          <div style={{
+            position: 'absolute',
+            width: '110px',
+            height: '110px',
+            borderRadius: '50%',
+            background: video.category === 'vam' ? 'rgba(236, 72, 153, 0.18)' : 'rgba(56, 189, 248, 0.18)',
+            filter: 'blur(28px)',
+            pointerEvents: 'none'
+          }} />
+          
+          <Film size={34} opacity={0.4} color={video.category === 'vam' ? '#f472b6' : '#38bdf8'} style={{ marginBottom: '0.45rem', zIndex: 1 }} />
+          
+          <div style={{
+            fontSize: '0.8rem',
+            fontWeight: 700,
+            color: 'rgba(255, 255, 255, 0.9)',
+            lineHeight: 1.35,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textShadow: '0 2px 8px rgba(0,0,0,0.85)',
+            zIndex: 1
+          }}>
+            {video.title}
+          </div>
         </div>
         <div className="video-card-overlay">
           <div className="video-card-play-btn">
