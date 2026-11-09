@@ -233,10 +233,10 @@ function Category() {
                           {game.releaseDate}
                         </span>
                       )}
-                      {categoryType === 'popular' && game.downloads !== undefined && (
+                      {categoryType === 'popular' && game.downloads !== undefined && game.downloads !== null && (
                         <span style={{ fontSize: '0.75rem', color: 'var(--color-accent)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontWeight: 600 }}>
                           <Download size={12} />
-                          {game.downloads.toLocaleString('vi-VN')} lượt tải
+                          {(Number(game.downloads) || 0).toLocaleString('vi-VN')} lượt tải
                         </span>
                       )}
                       {parseTags(game.tags).slice(0, 2).map((tag, idx) => (
@@ -248,7 +248,7 @@ function Category() {
 
                     <div className="game-meta">
                       <span className="game-price">
-                        {game.price === 0 ? 'MIỄN PHÍ' : `${game.price.toLocaleString('vi-VN')} đ`}
+                        {(!game.price || Number(game.price) === 0) ? 'MIỄN PHÍ' : `${(Number(game.price) || 0).toLocaleString('vi-VN')} đ`}
                       </span>
                       <div className="game-stats">
                         <Star size={14} fill="currentColor" />

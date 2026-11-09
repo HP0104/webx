@@ -150,7 +150,7 @@ function GameList({ games = [], onEditClick, onDeleteClick }) {
                   {game.developer || '-'}
                 </td>
                 <td style={{ padding: '0.75rem 0.8rem', color: 'var(--color-accent)', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
-                  {game.price === 0 ? <span style={{ color: '#10b981' }}>Miễn phí</span> : `${game.price.toLocaleString('vi-VN')} đ`}
+                  {(!game.price || Number(game.price) === 0) ? <span style={{ color: '#10b981' }}>Miễn phí</span> : `${(Number(game.price) || 0).toLocaleString('vi-VN')} đ`}
                 </td>
                 <td style={{ padding: '0.75rem 1rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <div style={{ display: 'inline-flex', gap: '0.4rem', justifyContent: 'flex-end' }}>

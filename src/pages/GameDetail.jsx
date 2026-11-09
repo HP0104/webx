@@ -11,7 +11,7 @@ import ErrorReportButton from '../components/ErrorReportButton';
 function GameDetail() {
   const { gameSlug } = useParams();
   const navigate = useNavigate();
-  const { user, buyGame, ownedGames, games } = useAppContext();
+  const { user, buyGame, ownedGames, games, loadingGames } = useAppContext();
   
   const game = findGameByRouteParam(games, gameSlug);
 
@@ -41,7 +41,23 @@ function GameDetail() {
   }, [game?.id]);
 
   if (!game) {
-    return <div style={{ color: 'white', textAlign: 'center', marginTop: '4rem' }}>Không tìm thấy game!</div>;
+    if (loadingGames) {
+      return (
+        <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', color: 'var(--color-text-muted)' }}>
+          <div className="loading-spinner" />
+          <span>Đang nạp dữ liệu trò chơi...</span>
+        </div>
+      );
+    }
+    return (
+      <div className="container" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
+        <h2 style={{ color: 'var(--color-text-light)', marginBottom: '0.5rem' }}>Không tìm thấy game!</h2>
+        <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>Trò chơi này không tồn tại hoặc đã được gỡ bỏ.</p>
+        <button onClick={() => navigate('/games')} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+          <ArrowLeft size={16} /> Quay lại kho game
+        </button>
+      </div>
+    );
   }
 
   const ownership = getGameOwnership(ownedGames, game.id);
@@ -70,7 +86,15 @@ function GameDetail() {
       </button>
       
       <div className="card" style={{ padding: '0', overflow: 'hidden' }}>
-        <img className="detail-hero-image" src={game.image} alt={game.title} style={{ width: '100%', height: '400px', objectFit: 'cover' }} />
+        <img
+          className="detail-hero-image"
+          src={game.image || 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Image'}
+          alt={game.title}
+          style={{ width: '100%', height: '400px', objectFit: 'cover' }}
+          onError={(e) => {
+            e.currentTarget.src = 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Image';
+          }}
+        />
         
         <div className="detail-body-grid" style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
           <div>
@@ -237,7 +261,7 @@ function GameDetail() {
           <div className="detail-buy-panel" style={{ position: 'sticky', top: '100px', backgroundColor: 'var(--color-bg-secondary)', padding: '1.5rem', borderRadius: '12px', height: 'fit-content', border: '1px solid var(--color-border)' }}>
             <h2 style={{ color: 'var(--color-text-light)', marginBottom: '1.5rem', fontSize: '1.2rem' }}>Mua {game.title}</h2>
             <div style={{ fontSize: '1.8rem', color: 'var(--color-success)', fontWeight: 'bold', marginBottom: '1.5rem' }}>
-              {game.price === 0 ? 'Miễn phí' : `${game.price.toLocaleString('vi-VN')} VNĐ`}
+              {(!game.price || Number(game.price) === 0) ? 'Miễn phí' : `${(Number(game.price) || 0).toLocaleString('vi-VN')} VNĐ`}
             </div>
             
             {isOwned ? (

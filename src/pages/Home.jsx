@@ -173,7 +173,7 @@ function Home() {
 
                     <div className="game-meta" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span className="game-price" style={{ color: 'var(--color-success)', fontWeight: 'bold', fontSize: '1rem' }}>
-                        {game.price === 0 ? 'MIỄN PHÍ' : `${game.price.toLocaleString('vi-VN')} đ`}
+                        {(!game.price || Number(game.price) === 0) ? 'MIỄN PHÍ' : `${(Number(game.price) || 0).toLocaleString('vi-VN')} đ`}
                       </span>
                       <div className="game-stats" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', color: '#f8b319' }}>
                         <Star size={14} fill="currentColor" />
@@ -347,7 +347,7 @@ function Home() {
 
                   <div className="game-meta" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span className="game-price" style={{ color: 'var(--color-success)', fontWeight: 'bold', fontSize: '1rem' }}>
-                      {game.price === 0 ? 'MIỄN PHÍ' : `${game.price.toLocaleString('vi-VN')} đ`}
+                      {(!game.price || Number(game.price) === 0) ? 'MIỄN PHÍ' : `${(Number(game.price) || 0).toLocaleString('vi-VN')} đ`}
                     </span>
                     <div className="game-stats" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', color: '#f8b319' }}>
                       <Star size={14} fill="currentColor" />

@@ -65,7 +65,7 @@ function AdminStats({ usersCount, gamesCount, videosCount = 0, mangaCount = 0, o
                   {stat.title}
                 </div>
                 <div style={{ fontSize: '1.6rem', color: 'var(--color-text-light)', fontWeight: 800, lineHeight: 1.2 }}>
-                  {stat.value.toLocaleString('vi-VN')}
+                  {(Number(stat.value) || 0).toLocaleString('vi-VN')}
                 </div>
                 <div style={{ fontSize: '0.72rem', color: stat.color, marginTop: '0.25rem', fontWeight: 600 }}>
                   {stat.desc} →

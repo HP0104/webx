@@ -21,7 +21,7 @@ function preloadImageUrl(url) {
 
 function MangaReader() {
   const { mangaId, chapterId } = useParams();
-  const { manga = [], user } = useAppContext();
+  const { manga = [], loadingManga, user } = useAppContext();
   const navigate = useNavigate();
 
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -226,6 +226,15 @@ function MangaReader() {
   }, []);
 
   if (!mangaItem || !currentChapter) {
+    if (loadingManga) {
+      return (
+        <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', color: 'var(--color-text-muted)' }}>
+          <div className="loading-spinner" />
+          <span>Đang nạp dữ liệu chương truyện...</span>
+        </div>
+      );
+    }
+
     return (
       <div className="container manga-page">
         <div className="manga-empty">

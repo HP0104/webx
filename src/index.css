@@ -8,8 +8,8 @@
   --color-text-muted: #96969b;
   --color-border: #222228;
   --color-success: #52c41a;
-  --font-main: 'Outfit', sans-serif;
-  --font-nav: 'Inter', sans-serif;
+  --font-main: 'Outfit', 'Segoe UI', Arial, Calibri, sans-serif;
+  --font-nav: 'Inter', 'Segoe UI', Arial, Calibri, sans-serif;
   --nav-height: 70px;
 }
 

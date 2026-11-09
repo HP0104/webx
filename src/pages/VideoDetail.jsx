@@ -21,7 +21,7 @@ function getVideoThumbnail(url) {
 
 function VideoDetail() {
   const { videoId } = useParams();
-  const { videos = [], user } = useAppContext();
+  const { videos = [], loadingVideos, user } = useAppContext();
   const navigate = useNavigate();
   const [isPlaying, setIsPlaying] = useState(false);
   const [showPreRoll, setShowPreRoll] = useState(false);
@@ -125,8 +125,19 @@ function VideoDetail() {
       if (foundIdx !== -1) return foundIdx;
       if (parsedNum >= 1 && parsedNum <= episodes.length) return parsedNum - 1;
     }
+    // Tự động khôi phục tập dở từ localStorage nếu selectedEpisodeIndex ban đầu chưa được set
+    if (selectedEpisodeIndex === 0 && video?.id) {
+      try {
+        const saved = localStorage.getItem(`web18p_last_ep_${video.id}`);
+        if (saved) {
+          const parsedSaved = parseInt(saved, 10);
+          const foundSaved = episodes.findIndex(e => e.episodeNumber === parsedSaved);
+          if (foundSaved !== -1) return foundSaved;
+        }
+      } catch {}
+    }
     return selectedEpisodeIndex < episodes.length ? selectedEpisodeIndex : 0;
-  }, [epParam, isSeries, episodes, selectedEpisodeIndex]);
+  }, [epParam, isSeries, episodes, selectedEpisodeIndex, video]);
 
   const handleEpisodeChange = (newIndex) => {
     if (newIndex < 0 || newIndex >= episodes.length) return;
@@ -349,6 +360,14 @@ function VideoDetail() {
   }, [video?.videoUrl, video?.streamtapeUrl]);
 
   if (!video) {
+    if (loadingVideos) {
+      return (
+        <div style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem', color: 'var(--color-text-muted)' }}>
+          <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
+          <span>Đang nạp dữ liệu phim...</span>
+        </div>
+      );
+    }
     return (
       <div className="container" style={{ padding: '4rem 1.5rem', textAlign: 'center' }}>
         <Film size={64} style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }} />

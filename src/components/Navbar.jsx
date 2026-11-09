@@ -277,23 +277,23 @@ function Navbar() {
                       ) : item.itemType === 'manga' ? (
                         <span style={{ fontSize: '0.75rem', color: '#a855f7', border: '1px solid #a855f7', padding: '1px 4px', borderRadius: '4px' }}>Truyện</span>
                       ) : (
-                        item.price === 0 ? (
+                        (!item.price || Number(item.price) === 0) ? (
                           <span style={{ fontSize: '0.8rem', color: '#a3a3a3' }}>Game Miễn phí</span>
                         ) : (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                             <span style={{ fontSize: '0.75rem', color: '#1a9fff', border: '1px solid #1a9fff', padding: '1px 4px', borderRadius: '4px' }}>Game</span>
-                            {item.discount > 0 && (
+                            {Number(item.discount) > 0 && (
                               <span style={{ backgroundColor: '#4c6b22', color: '#a3cf06', fontSize: '0.7rem', padding: '0.05rem 0.2rem', borderRadius: '2px', fontWeight: 'bold' }}>
                                 -{item.discount}%
                               </span>
                             )}
-                            {item.discount > 0 && (
+                            {Number(item.discount) > 0 && (
                               <span style={{ fontSize: '0.7rem', textDecoration: 'line-through', color: '#626366' }}>
-                                {item.price.toLocaleString('vi-VN')}đ
+                                {(Number(item.price) || 0).toLocaleString('vi-VN')}đ
                               </span>
                             )}
                             <span style={{ fontSize: '0.8rem', color: '#acb2b8', fontWeight: 'bold' }}>
-                              {(item.discount > 0 ? (item.price * (1 - item.discount / 100)) : item.price).toLocaleString('vi-VN')}đ
+                              {(Number(item.discount) > 0 ? ((Number(item.price) || 0) * (1 - Number(item.discount) / 100)) : (Number(item.price) || 0)).toLocaleString('vi-VN')}đ
                             </span>
                           </div>
                         )
