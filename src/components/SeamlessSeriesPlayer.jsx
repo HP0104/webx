@@ -124,6 +124,23 @@ export default function SeamlessSeriesPlayer({
   // Reload key for iframes
   const [reloadKey, setReloadKey] = useState(0);
 
+  // Safety Timeout: Tự động tắt loading spinner sau tối đa 4s để không bao giờ bị kẹt spinner
+  useEffect(() => {
+    let t;
+    if (isLoadingA) {
+      t = setTimeout(() => setIsLoadingA(false), 4000);
+    }
+    return () => clearTimeout(t);
+  }, [isLoadingA]);
+
+  useEffect(() => {
+    let t;
+    if (isLoadingB) {
+      t = setTimeout(() => setIsLoadingB(false), 4000);
+    }
+    return () => clearTimeout(t);
+  }, [isLoadingB]);
+
   // Current active episode info
   const currentEpisode = episodes[currentEpisodeIndex] || episodes[0];
   const nextEpisode = episodes[currentEpisodeIndex + 1];
@@ -401,7 +418,7 @@ export default function SeamlessSeriesPlayer({
       <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', height: 0, overflow: 'hidden', backgroundColor: '#000' }}>
         
         {/* Pre-roll Video Ad Buffer */}
-        {showPreRoll ? (
+        {showPreRoll && ADS_CONFIG.preroll_video?.enabled ? (
           <PreRollVideoAd
             config={ADS_CONFIG.preroll_video}
             onComplete={() => {
@@ -409,7 +426,7 @@ export default function SeamlessSeriesPlayer({
               setHasStarted(true);
             }}
           />
-        ) : !hasStarted && (epA?.thumbnail || poster) ? (
+        ) : !hasStarted ? (
           <div
             className="video-player-overlay"
             style={{
@@ -418,11 +435,11 @@ export default function SeamlessSeriesPlayer({
               left: 0,
               width: '100%',
               height: '100%',
-              backgroundImage: `url(${epA?.thumbnail || poster})`,
+              backgroundImage: (epA?.thumbnail || poster) ? `url(${epA?.thumbnail || poster})` : 'none',
               backgroundSize: 'contain',
               backgroundRepeat: 'no-repeat',
               backgroundPosition: 'center',
-              backgroundColor: '#000',
+              backgroundColor: '#0a0d14',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -498,15 +515,16 @@ export default function SeamlessSeriesPlayer({
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           ) : (
-            hasStarted && iframeSrcA && (
+            hasStarted && activeSlot === 'A' && iframeSrcA && (
               <iframe
-                key={`iframe-a-${reloadKey}`}
+                key={`iframe-a-${slotAEpisodeIndex}-${reloadKey}`}
                 src={iframeSrcA.includes('?') ? `${iframeSrcA}&autoplay=1` : `${iframeSrcA}?autoplay=1`}
                 width="100%"
                 height="100%"
                 allowFullScreen
                 scrolling="no"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *"
+                onLoad={() => setIsLoadingA(false)}
                 style={{ width: '100%', height: '100%', border: 'none' }}
                 title={`Player A - ${epA?.title || 'Tập'}`}
               />
@@ -557,15 +575,16 @@ export default function SeamlessSeriesPlayer({
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           ) : (
-            hasStarted && iframeSrcB && (
+            hasStarted && activeSlot === 'B' && iframeSrcB && (
               <iframe
-                key={`iframe-b-${reloadKey}`}
+                key={`iframe-b-${slotBEpisodeIndex}-${reloadKey}`}
                 src={iframeSrcB.includes('?') ? `${iframeSrcB}&autoplay=1` : `${iframeSrcB}?autoplay=1`}
                 width="100%"
                 height="100%"
                 allowFullScreen
                 scrolling="no"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *"
+                onLoad={() => setIsLoadingB(false)}
                 style={{ width: '100%', height: '100%', border: 'none' }}
                 title={`Player B - ${epB?.title || 'Tập'}`}
               />

@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Eye, Calendar, Tag, Film, Layers, Flame, Sparkles } from 'lucide-react';
 import { getVideoThumbnail, toEmbedUrl } from '../utils/videoUtils';
 
 export default function VideoCardItem({ video }) {
+  const [mountedTime] = useState(() => Date.now());
   const rawUrl = video.videoUrl || video.streamtapeUrl;
   let thumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
   if (thumbnail && thumbnail.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
@@ -11,13 +13,12 @@ export default function VideoCardItem({ video }) {
   thumbnail = thumbnail || 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail';
 
   // Tính toán nhãn Mới / Tập Mới trong vòng 48h (hoặc 24h)
-  const now = Date.now();
   const TWO_DAYS_MS = 48 * 60 * 60 * 1000;
   const createdTime = video.createdAt ? new Date(video.createdAt).getTime() : 0;
   const updatedTime = video.updatedAt ? new Date(video.updatedAt).getTime() : createdTime;
 
-  const isRecentlyUpdated = updatedTime > 0 && (now - updatedTime) <= TWO_DAYS_MS;
-  const isRecentlyCreated = createdTime > 0 && (now - createdTime) <= TWO_DAYS_MS;
+  const isRecentlyUpdated = updatedTime > 0 && (mountedTime - updatedTime) <= TWO_DAYS_MS;
+  const isRecentlyCreated = createdTime > 0 && (mountedTime - createdTime) <= TWO_DAYS_MS;
 
   let newBadge = null;
   if (video.isSeries) {

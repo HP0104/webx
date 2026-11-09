@@ -63,8 +63,18 @@ export default function PreRollVideoAd({ onComplete, config }) {
       }
     }, timeoutMs);
 
-    return () => clearTimeout(safetyTimer);
-  }, [isAdPlaying, timeoutMs, finishAd]);
+    // Hard Max Timeout: Tuyệt đối không cho phép quảng cáo chặn người xem quá (skipOffset + 4)s
+    const hardTimer = setTimeout(() => {
+      if (!hasFinishedRef.current) {
+        finishAd('hard-timeout');
+      }
+    }, (skipOffset + 4) * 1000);
+
+    return () => {
+      clearTimeout(safetyTimer);
+      clearTimeout(hardTimer);
+    };
+  }, [isAdPlaying, timeoutMs, skipOffset, finishAd]);
 
   // Khởi tạo Fluid Player VAST
   useEffect(() => {
@@ -301,7 +311,9 @@ export default function PreRollVideoAd({ onComplete, config }) {
           ref={videoRef}
           style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           playsInline
-        />
+        >
+          <source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAAhmZGF0AAAAAA==" type="video/mp4" />
+        </video>
       </div>
     </div>
   );

@@ -94,8 +94,11 @@ function VideoDetail() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Series / Episode state
+  const [mountedTime] = useState(() => Date.now());
   const isSeries = Boolean(video?.isSeries && Array.isArray(video?.episodes) && video.episodes.length > 0);
-  const isRecentlyUpdated = Boolean(video?.updatedAt && (Date.now() - new Date(video.updatedAt).getTime()) <= 48 * 3600 * 1000);
+  const isRecentlyUpdated = Boolean(
+    video?.updatedAt && (mountedTime - new Date(video.updatedAt).getTime()) <= 48 * 3600 * 1000
+  );
   const episodes = useMemo(() => (video?.isSeries && Array.isArray(video?.episodes)) ? video.episodes : [], [video]);
 
   const [selectedEpisodeIndex, setSelectedEpisodeIndex] = useState(() => {
@@ -287,13 +290,13 @@ function VideoDetail() {
     }
   }, [video?.id]);
 
-  // Auto-hide iframe loading spinner after 5 seconds to prevent permanent block
+  // Auto-hide iframe loading spinner after 3.5 seconds to prevent permanent block
   useEffect(() => {
     let timer;
     if (iframeLoading) {
       timer = setTimeout(() => {
         setIframeLoading(false);
-      }, 5000);
+      }, 3500);
     }
     return () => clearTimeout(timer);
   }, [iframeLoading]);
@@ -433,7 +436,7 @@ function VideoDetail() {
             )}
 
             <div className="video-detail-player" style={{ position: 'relative', overflow: 'hidden' }}>
-              {showPreRoll ? (
+              {showPreRoll && ADS_CONFIG.preroll_video?.enabled ? (
                 <PreRollVideoAd
                   config={ADS_CONFIG.preroll_video}
                   onComplete={() => {
@@ -443,7 +446,7 @@ function VideoDetail() {
                     setIframeLoading(true);
                   }}
                 />
-              ) : !isPlaying && thumbnail ? (
+              ) : !isPlaying ? (
                 <div 
                   className="video-player-overlay" 
                   style={{
@@ -452,11 +455,11 @@ function VideoDetail() {
                     left: 0,
                     width: '100%',
                     height: '100%',
-                    backgroundImage: `url(${thumbnail})`,
+                    backgroundImage: thumbnail ? `url(${thumbnail})` : 'none',
                     backgroundSize: 'contain',
                     backgroundRepeat: 'no-repeat',
                     backgroundPosition: 'center',
-                    backgroundColor: '#000',
+                    backgroundColor: '#0a0d14',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
