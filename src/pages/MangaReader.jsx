@@ -31,15 +31,27 @@ function MangaReader() {
   const readerRef = useRef(null);
   const hideNavTimer = useRef(null);
 
-  const mangaItem = manga.find(m => m.id?.toString() === mangaId);
+  const mangaItem = manga.find(m => String(m.id) === String(mangaId));
   const chapters = mangaItem?.chapters || [];
   const sortedChapters = [...chapters].sort((a, b) => {
     const numA = Number(a.number ?? a.chapterNumber) || 0;
     const numB = Number(b.number ?? b.chapterNumber) || 0;
     return numA - numB;
   });
-  const currentChapter = chapters.find(c => c.id === chapterId);
-  const currentIndex = sortedChapters.findIndex(c => c.id === chapterId);
+  const currentChapter = chapters.find(c => 
+    String(c.id) === String(chapterId) || 
+    String(c.number) === String(chapterId) ||
+    String(c.chapterNumber) === String(chapterId) ||
+    `chap-${c.number}` === String(chapterId) ||
+    `chapter-${c.number}` === String(chapterId)
+  );
+  const currentIndex = sortedChapters.findIndex(c => 
+    String(c.id) === String(chapterId) || 
+    String(c.number) === String(chapterId) ||
+    String(c.chapterNumber) === String(chapterId) ||
+    `chap-${c.number}` === String(chapterId) ||
+    `chapter-${c.number}` === String(chapterId)
+  );
   const prevChapter = currentIndex > 0 ? sortedChapters[currentIndex - 1] : null;
   const nextChapter = currentIndex < sortedChapters.length - 1 ? sortedChapters[currentIndex + 1] : null;
 
@@ -280,7 +292,7 @@ function MangaReader() {
 
             <select
               className="manga-reader-chapter-select"
-              value={chapterId}
+              value={currentChapter?.id || chapterId}
               onChange={e => navigate(`/manga/${mangaId}/chapter/${e.target.value}`)}
             >
               {sortedChapters.map(ch => (
