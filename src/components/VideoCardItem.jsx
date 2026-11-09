@@ -83,7 +83,9 @@ export default function VideoCardItem({ video }) {
             src={thumbnail}
             alt={video.title}
             loading="lazy"
-            onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+            decoding="async"
+            referrerPolicy="no-referrer"
+            onError={e => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'; }}
           />
         ) : null}
         <div 
