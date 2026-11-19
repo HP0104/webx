@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Eye, Calendar, Tag, Film, Layers, Flame, Sparkles } from 'lucide-react';
 import { getVideoThumbnail, toEmbedUrl } from '../utils/videoUtils';
@@ -6,11 +6,55 @@ import { getVideoThumbnail, toEmbedUrl } from '../utils/videoUtils';
 export default function VideoCardItem({ video }) {
   const [mountedTime] = useState(() => Date.now());
   const rawUrl = video.videoUrl || video.streamtapeUrl;
-  let thumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
-  if (thumbnail && thumbnail.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
-    thumbnail = thumbnail.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
+  const rawThumbnail = video.thumbnail || getVideoThumbnail(rawUrl);
+
+  // Build ordered thumbnail candidates (prefer high-res, fall back to _t variant if needed)
+  const thumbnailCandidates = useMemo(() => {
+    if (!rawThumbnail) return [];
+    const list = [];
+    const upgraded = rawThumbnail.match(/_t\.(jpg|jpeg|png|webp)$/i)
+      ? rawThumbnail.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1')
+      : rawThumbnail;
+    list.push(upgraded);
+    if (upgraded !== rawThumbnail) {
+      list.push(rawThumbnail);
+    } else {
+      const huntrexusMatch = upgraded.match(/^(https?:\/\/huntrexus\.com\/[a-zA-Z0-9_-]+)\.(jpg|jpeg|png|webp)$/i);
+      if (huntrexusMatch) {
+        list.push(`${huntrexusMatch[1]}_t.${huntrexusMatch[2]}`);
+      }
+    }
+    return list;
+  }, [rawThumbnail]);
+
+  const [prevRawThumbnail, setPrevRawThumbnail] = useState(rawThumbnail);
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const [imgStatus, setImgStatus] = useState(() => (thumbnailCandidates.length > 0 ? 'loading' : 'error'));
+
+  if (prevRawThumbnail !== rawThumbnail) {
+    setPrevRawThumbnail(rawThumbnail);
+    setCandidateIndex(0);
+    setImgStatus(thumbnailCandidates.length > 0 ? 'loading' : 'error');
   }
-  thumbnail = thumbnail || 'https://placehold.co/640x360/1a1a2e/66c0f4?text=No+Thumbnail';
+
+  const activeThumbnail = thumbnailCandidates[candidateIndex] || null;
+
+  const handleImageError = () => {
+    if (candidateIndex + 1 < thumbnailCandidates.length) {
+      setCandidateIndex(candidateIndex + 1);
+      setImgStatus('loading');
+    } else {
+      setImgStatus('error');
+    }
+  };
+
+  const handleImageLoad = (e) => {
+    if (e.currentTarget.naturalWidth > 0) {
+      setImgStatus('loaded');
+    } else {
+      handleImageError();
+    }
+  };
 
   // Tính toán nhãn Mới / Tập Mới trong vòng 48h (hoặc 24h)
   const TWO_DAYS_MS = 48 * 60 * 60 * 1000;
@@ -67,7 +111,7 @@ export default function VideoCardItem({ video }) {
           document.head.appendChild(link);
         }
       }
-    } catch {}
+    } catch { }
   };
 
   return (
@@ -78,62 +122,73 @@ export default function VideoCardItem({ video }) {
       onMouseEnter={handleMouseEnter}
     >
       <div className="video-card-thumbnail">
-        {video.thumbnail || getVideoThumbnail(rawUrl) ? (
+        {imgStatus !== 'loaded' && (
+          <div
+            className="video-card-fallback-poster"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              background: video.category === 'vam'
+                ? 'linear-gradient(135deg, #2c0b38 0%, #181233 50%, #0d1117 100%)'
+                : 'linear-gradient(135deg, #091f3d 0%, #101c38 50%, #0d1117 100%)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '1rem',
+              textAlign: 'center',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Ambient Glow */}
+            <div style={{
+              position: 'absolute',
+              width: '110px',
+              height: '110px',
+              borderRadius: '50%',
+              background: video.category === 'vam' ? 'rgba(236, 72, 153, 0.18)' : 'rgba(56, 189, 248, 0.18)',
+              filter: 'blur(28px)',
+              pointerEvents: 'none'
+            }} />
+
+            <Film size={34} opacity={0.4} color={video.category === 'vam' ? '#f472b6' : '#38bdf8'} style={{ marginBottom: '0.45rem', zIndex: 1 }} />
+
+            <div style={{
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              color: 'rgba(255, 255, 255, 0.9)',
+              lineHeight: 1.35,
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              textShadow: '0 2px 8px rgba(0,0,0,0.85)',
+              zIndex: 1
+            }}>
+              {video.title}
+            </div>
+          </div>
+        )}
+        {activeThumbnail && imgStatus !== 'error' && (
           <img
-            src={thumbnail}
+            key={activeThumbnail}
+            src={activeThumbnail}
             alt={video.title}
             loading="lazy"
             decoding="async"
             referrerPolicy="no-referrer"
-            onError={e => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'; }}
+            onLoad={handleImageLoad}
+            onError={handleImageError}
+            style={{
+              position: 'relative',
+              opacity: imgStatus === 'loaded' ? 1 : 0,
+              background: imgStatus === 'loaded' ? '#141b2d' : 'transparent',
+              transition: 'opacity 0.25s ease, transform 0.5s ease'
+            }}
           />
-        ) : null}
-        <div 
-          className="video-card-fallback-poster"
-          style={{ 
-            width: '100%', 
-            height: '100%', 
-            background: video.category === 'vam' 
-              ? 'linear-gradient(135deg, #2c0b38 0%, #181233 50%, #0d1117 100%)' 
-              : 'linear-gradient(135deg, #091f3d 0%, #101c38 50%, #0d1117 100%)',
-            display: (video.thumbnail || getVideoThumbnail(rawUrl)) ? 'none' : 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1rem',
-            textAlign: 'center',
-            position: 'relative',
-            overflow: 'hidden'
-          }}
-        >
-          {/* Ambient Glow */}
-          <div style={{
-            position: 'absolute',
-            width: '110px',
-            height: '110px',
-            borderRadius: '50%',
-            background: video.category === 'vam' ? 'rgba(236, 72, 153, 0.18)' : 'rgba(56, 189, 248, 0.18)',
-            filter: 'blur(28px)',
-            pointerEvents: 'none'
-          }} />
-          
-          <Film size={34} opacity={0.4} color={video.category === 'vam' ? '#f472b6' : '#38bdf8'} style={{ marginBottom: '0.45rem', zIndex: 1 }} />
-          
-          <div style={{
-            fontSize: '0.8rem',
-            fontWeight: 700,
-            color: 'rgba(255, 255, 255, 0.9)',
-            lineHeight: 1.35,
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            textShadow: '0 2px 8px rgba(0,0,0,0.85)',
-            zIndex: 1
-          }}>
-            {video.title}
-          </div>
-        </div>
+        )}
         <div className="video-card-overlay">
           <div className="video-card-play-btn">
             <Play size={32} fill="white" />
@@ -143,7 +198,7 @@ export default function VideoCardItem({ video }) {
           {video.category === 'vam' ? 'VAM' : '3D'}
         </span>
         {newBadge && (
-          <span 
+          <span
             className="video-card-update-badge"
             style={{
               position: 'absolute',
@@ -174,14 +229,14 @@ export default function VideoCardItem({ video }) {
           </span>
         )}
         {video.isSeries && (
-          <span 
-            className="video-card-series-badge" 
+          <span
+            className="video-card-series-badge"
             style={{
               position: 'absolute',
               bottom: '8px',
               right: '8px',
-              background: newBadge?.isUpdate 
-                ? 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)' 
+              background: newBadge?.isUpdate
+                ? 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)'
                 : 'linear-gradient(135deg, #9333ea 0%, #c084fc 100%)',
               color: '#fff',
               padding: '2px 7px',
@@ -220,8 +275,8 @@ export default function VideoCardItem({ video }) {
           )}
         </div>
         {(() => {
-          const tagsArray = Array.isArray(video.tags) 
-            ? video.tags 
+          const tagsArray = Array.isArray(video.tags)
+            ? video.tags
             : (typeof video.tags === 'string' ? video.tags.split(',').map(t => t.trim()) : []);
           return tagsArray.length > 0 ? (
             <div className="video-card-tags">
