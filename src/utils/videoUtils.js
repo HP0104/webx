@@ -2,6 +2,35 @@
  * Utility functions for video URLs (VOE, Doodstream/Doobstream, Streamtape, Ok.ru, YouTube, etc.)
  */
 
+export const TRUSTED_EMBED_DOMAINS = [
+  'streamtape.com', 'streamtape.to',
+  'filemoon.sx', 'filemoon.to', 'filemoon.in', 'fmoonembed.com',
+  'streamhg.com', 'hgcloud.to', 'vibuxer.com', 'huntrexus.com',
+  'doodstream.com', 'dood.pm', 'dood.to', 'dood.so', 'dood.watch', 'dood.wf', 'ds2play.com', 'd0000d.com', 'doobstream.com', 'playmogo.com',
+  'upstream.to',
+  'mixdrop.co', 'mixdrop.to', 'mixdrop.sx',
+  'vidoza.net',
+  'voe.sx', 'voecdn.com', 'voe-sx.com', 'launchreed.com', 'caseyimpactstation.com',
+  'vidguard.to', 'vgembed.com', 'vidnest.io',
+  'lulustream.com', 'luluembed.com',
+  'upload18.net', 'ok.ru',
+  'mp4upload.com', 'wishonly.site',
+  'player.vimeo.com', 'youtube.com', 'youtube-nocookie.com',
+  'iframe.mediadelivery.net'
+];
+
+export function isTrustedEmbedUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return false;
+  try {
+    const parsed = new URL(rawUrl.trim());
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+    return TRUSTED_EMBED_DOMAINS.some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Identify provider and get normalized info from a URL string or iframe embed HTML.
  */

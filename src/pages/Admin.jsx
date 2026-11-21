@@ -14,6 +14,7 @@ import VideoList from '../components/Admin/VideoList';
 import ErrorReportManager from '../components/Admin/ErrorReportManager';
 import MangaForm from '../components/Admin/MangaForm';
 import MangaListAdmin from '../components/Admin/MangaListAdmin';
+import { buildEditableVideoData } from '../utils/videoFormUtils';
 
 const GEMINI_API_KEY_STORAGE_KEY = 'web18p_gemini_api_key';
 
@@ -151,45 +152,43 @@ function Admin() {
     setNewGame(INITIAL_FORM_STATE);
   };
 
-  const handleSaveGame = (gameData) => {
-    if (editingGameId) {
-      updateGameInStore(editingGameId, gameData);
-      alert('Cập nhật thành công!');
-      setEditingGameId(null);
-    } else {
-      addGameToStore(gameData);
-      alert('Thêm game thành công!');
+  const handleSaveGame = async (gameData) => {
+    try {
+      if (editingGameId) {
+        await updateGameInStore(editingGameId, gameData);
+        alert('Cập nhật thành công!');
+        setEditingGameId(null);
+      } else {
+        await addGameToStore(gameData);
+        alert('Thêm game thành công!');
+      }
+      setNewGame(INITIAL_FORM_STATE);
+    } catch (error) {
+      alert(`Lỗi lưu game: ${error.message || 'Không thể lưu vào cơ sở dữ liệu.'}`);
     }
-    setNewGame(INITIAL_FORM_STATE);
   };
 
   // Video handlers
-  const handleSaveVideo = (data) => {
-    if (editingVideoId) {
-      updateVideoInStore(editingVideoId, data);
-      alert('Cập nhật phim thành công!');
-      setEditingVideoId(null);
-    } else {
-      addVideoToStore(data);
-      alert('Thêm phim thành công!');
+  const handleSaveVideo = async (data) => {
+    try {
+      if (editingVideoId) {
+        await updateVideoInStore(editingVideoId, data);
+        alert('Cập nhật phim thành công!');
+        setEditingVideoId(null);
+      } else {
+        await addVideoToStore(data);
+        alert('Thêm phim thành công!');
+      }
+      setVideoData(INITIAL_VIDEO_STATE);
+    } catch (error) {
+      alert(`Lỗi lưu phim: ${error.message || 'Không thể lưu vào cơ sở dữ liệu.'}`);
     }
-    setVideoData(INITIAL_VIDEO_STATE);
   };
 
   const handleEditVideo = (video) => {
     setActiveTab('videos');
     setEditingVideoId(video.id);
-    setVideoData({
-      title: video.title || '',
-      videoUrl: video.videoUrl || video.streamtapeUrl || '',
-      thumbnail: video.thumbnail || '',
-      category: video.category || 'vam',
-      description: video.description || '',
-      tags: Array.isArray(video.tags) ? video.tags.join(', ') : (video.tags || ''),
-      views: video.views || 0,
-      uploaderId: video.uploaderId || null,
-      uploaderName: video.uploaderName || null
-    });
+    setVideoData(buildEditableVideoData(video));
     const formEl = document.getElementById('admin-video-form');
     if (formEl) window.scrollTo({ top: formEl.offsetTop - 80, behavior: 'smooth' });
   };
@@ -200,16 +199,20 @@ function Admin() {
   };
 
   // Manga handlers
-  const handleSaveManga = (data) => {
-    if (editingMangaId) {
-      updateMangaInStore(editingMangaId, data);
-      alert('Cập nhật truyện thành công!');
-      setEditingMangaId(null);
-    } else {
-      addMangaToStore(data);
-      alert('Thêm truyện thành công!');
+  const handleSaveManga = async (data) => {
+    try {
+      if (editingMangaId) {
+        await updateMangaInStore(editingMangaId, data);
+        alert('Cập nhật truyện thành công!');
+        setEditingMangaId(null);
+      } else {
+        await addMangaToStore(data);
+        alert('Thêm truyện thành công!');
+      }
+      setMangaData(INITIAL_MANGA_STATE);
+    } catch (error) {
+      alert(`Lỗi lưu truyện: ${error.message || 'Không thể lưu vào cơ sở dữ liệu.'}`);
     }
-    setMangaData(INITIAL_MANGA_STATE);
   };
 
   const handleEditManga = (mangaItem) => {
@@ -223,9 +226,36 @@ function Admin() {
       genres: Array.isArray(mangaItem.genres) ? mangaItem.genres : [],
       description: mangaItem.description || '',
       chapters: mangaItem.chapters || [],
-      views: mangaItem.views || 0
+      views: mangaItem.views || 0,
+      uploaderId: mangaItem.uploaderId || null,
+      uploaderName: mangaItem.uploaderName || null,
+      createdAt: mangaItem.createdAt || null
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDeleteGame = async (gameId) => {
+    try {
+      await deleteGameFromStore(gameId);
+    } catch (error) {
+      alert(`Lỗi xóa game: ${error.message}`);
+    }
+  };
+
+  const handleDeleteVideo = async (videoId) => {
+    try {
+      await deleteVideoFromStore(videoId);
+    } catch (error) {
+      alert(`Lỗi xóa phim: ${error.message}`);
+    }
+  };
+
+  const handleDeleteManga = async (mangaId, mangaObj) => {
+    try {
+      await deleteMangaFromStore(mangaId, mangaObj);
+    } catch (error) {
+      alert(`Lỗi xóa truyện: ${error.message}`);
+    }
   };
 
   const handleCancelMangaEdit = () => {
@@ -342,7 +372,7 @@ function Admin() {
               <GameList
                 games={games}
                 onEditClick={handleEditClick}
-                onDeleteClick={deleteGameFromStore}
+                onDeleteClick={handleDeleteGame}
               />
             </div>
           )}
@@ -359,7 +389,7 @@ function Admin() {
               <VideoList
                 videos={videos || []}
                 onEditClick={handleEditVideo}
-                onDeleteClick={deleteVideoFromStore}
+                onDeleteClick={handleDeleteVideo}
               />
             </div>
           )}
@@ -380,7 +410,7 @@ function Admin() {
               <MangaListAdmin
                 mangaList={manga || []}
                 onEditClick={handleEditManga}
-                onDeleteClick={deleteMangaFromStore}
+                onDeleteClick={handleDeleteManga}
               />
             </div>
           )}

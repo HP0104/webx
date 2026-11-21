@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { db } from '../../firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, increment, runTransaction } from 'firebase/firestore';
 import { 
   ChevronDown, ChevronRight, Gamepad2, XCircle, Search, 
   Film, Users, Shield, Wallet, Copy, Check, Plus, Minus, 
@@ -138,38 +138,42 @@ function UserManager({ users = [], games = [] }) {
     setTimeout(() => setCopiedUid(null), 2000);
   };
 
-  const handleQuickAdd = async (userId, currentBalance, addAmount) => {
+  const handleQuickAdd = async (userId, _currentBalance, addAmount) => {
     try {
       const userRef = doc(db, 'users', userId);
-      const newBal = (currentBalance || 0) + addAmount;
-      await updateDoc(userRef, { balance: newBal });
+      await updateDoc(userRef, { balance: increment(addAmount) });
       alert(`Đã nạp +${addAmount.toLocaleString('vi-VN')} VNĐ vào tài khoản!`);
     } catch (error) {
       alert('Lỗi nạp tiền: ' + error.message);
     }
   };
 
-  const handleUpdateBalance = async (userId, currentBalance, type) => {
+  const handleUpdateBalance = async (userId, _currentBalance, type) => {
     const amount = Number(balanceAmount);
     if (!balanceAmount || isNaN(amount) || amount <= 0) {
       alert('Vui lòng nhập số tiền hợp lệ (> 0)!');
       return;
     }
-    
+
     try {
-      const newBalance = type === 'add' ? (currentBalance || 0) + amount : (currentBalance || 0) - amount;
-      
-      if (newBalance < 0) {
-        alert('Số dư tài khoản không được phép âm!');
-        return;
-      }
-      
       const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, { balance: newBalance });
-      
+      const updatedBalance = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(userRef);
+        if (!snap.exists()) {
+          throw new Error('Không tìm thấy người dùng.');
+        }
+        const serverBalance = Number(snap.data().balance) || 0;
+        const newBalance = type === 'add' ? serverBalance + amount : serverBalance - amount;
+        if (newBalance < 0) {
+          throw new Error('Số dư tài khoản không được phép âm!');
+        }
+        tx.update(userRef, { balance: newBalance });
+        return newBalance;
+      });
+
       setEditingUserId(null);
       setBalanceAmount('');
-      alert(`Cập nhật thành công! Số dư mới: ${newBalance.toLocaleString('vi-VN')} VNĐ`);
+      alert(`Cập nhật thành công! Số dư mới: ${updatedBalance.toLocaleString('vi-VN')} VNĐ`);
     } catch (error) {
       alert('Lỗi cập nhật tiền: ' + error.message);
     }
@@ -309,7 +313,7 @@ function UserManager({ users = [], games = [] }) {
             {searchTerm && <span> cho từ khóa "<em>{searchTerm}</em>"</span>}
           </div>
           <div>
-            Trang {currentPage} / {totalPages}
+            Trang {safeCurrentPage} / {totalPages}
           </div>
         </div>
       </div>
@@ -675,7 +679,7 @@ function UserManager({ users = [], games = [] }) {
             type="button"
             className="btn btn-outline"
             onClick={() => handlePageChange(1)}
-            disabled={currentPage === 1}
+            disabled={safeCurrentPage === 1}
             style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
             title="Trang đầu"
           >
@@ -684,8 +688,8 @@ function UserManager({ users = [], games = [] }) {
           <button
             type="button"
             className="btn btn-outline"
-            onClick={() => handlePageChange(currentPage - 1)}
-            disabled={currentPage === 1}
+            onClick={() => handlePageChange(safeCurrentPage - 1)}
+            disabled={safeCurrentPage === 1}
             style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
             title="Trang trước"
           >
@@ -693,7 +697,7 @@ function UserManager({ users = [], games = [] }) {
           </button>
 
           {Array.from({ length: totalPages }, (_, i) => i + 1)
-            .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+            .filter(p => p === 1 || p === totalPages || Math.abs(p - safeCurrentPage) <= 2)
             .map((pageNum, idx, arr) => {
               const showEllipsisBefore = idx > 0 && pageNum - arr[idx - 1] > 1;
               return (
@@ -701,15 +705,15 @@ function UserManager({ users = [], games = [] }) {
                   {showEllipsisBefore && <span style={{ color: 'var(--color-text-muted)', padding: '0 0.3rem' }}>...</span>}
                   <button
                     type="button"
-                    className={`btn ${currentPage === pageNum ? 'btn-success' : 'btn-outline'}`}
+                    className={`btn ${safeCurrentPage === pageNum ? 'btn-success' : 'btn-outline'}`}
                     onClick={() => handlePageChange(pageNum)}
                     style={{
                       padding: '0.4rem 0.75rem',
                       fontSize: '0.82rem',
-                      fontWeight: currentPage === pageNum ? 700 : 500,
-                      backgroundColor: currentPage === pageNum ? 'var(--color-accent)' : 'transparent',
-                      color: currentPage === pageNum ? '#000' : 'var(--color-text-light)',
-                      borderColor: currentPage === pageNum ? 'var(--color-accent)' : 'var(--color-border)'
+                      fontWeight: safeCurrentPage === pageNum ? 700 : 500,
+                      backgroundColor: safeCurrentPage === pageNum ? 'var(--color-accent)' : 'transparent',
+                      color: safeCurrentPage === pageNum ? '#000' : 'var(--color-text-light)',
+                      borderColor: safeCurrentPage === pageNum ? 'var(--color-accent)' : 'var(--color-border)'
                     }}
                   >
                     {pageNum}
@@ -721,8 +725,8 @@ function UserManager({ users = [], games = [] }) {
           <button
             type="button"
             className="btn btn-outline"
-            onClick={() => handlePageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
+            onClick={() => handlePageChange(safeCurrentPage + 1)}
+            disabled={safeCurrentPage === totalPages}
             style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
             title="Trang sau"
           >
@@ -732,7 +736,7 @@ function UserManager({ users = [], games = [] }) {
             type="button"
             className="btn btn-outline"
             onClick={() => handlePageChange(totalPages)}
-            disabled={currentPage === totalPages}
+            disabled={safeCurrentPage === totalPages}
             style={{ padding: '0.4rem 0.6rem', fontSize: '0.8rem' }}
             title="Trang cuối"
           >

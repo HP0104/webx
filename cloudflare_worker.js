@@ -15,13 +15,31 @@
  *    - PAYOS_API_KEY
  */
 
-const ALLOWED_ORIGIN = "https://web18p.xyz";
+const ALLOWED_ORIGINS = [
+  "https://web18p.xyz",
+  "https://www.web18p.xyz",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173"
+];
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+function getCorsHeaders(request) {
+  const origin = request.headers.get("Origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Upload-Key",
+    "Vary": "Origin"
+  };
+}
+
+function isOriginAllowed(request, env) {
+  const origin = request.headers.get("Origin") || "";
+  const uploadKey = request.headers.get("X-Upload-Key") || "";
+  if (env?.UPLOAD_API_KEY && uploadKey === env.UPLOAD_API_KEY) return true;
+  if (!origin) return true;
+  return ALLOWED_ORIGINS.includes(origin);
+}
 
 // --- Agent & Markdown Content Negotiation Templates ---
 const MARKDOWN_HOME = `# WEB18P - Kho Game Việt Hóa, Phim Bộ & Truyện Tranh Online
@@ -151,6 +169,8 @@ Please check the URL or consult our agent guides and sitemap:
 
 export default {
   async fetch(request, env) {
+    const corsHeaders = getCorsHeaders(request);
+
     // Handle CORS preflight requests
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
@@ -246,21 +266,30 @@ export default {
 
     // Proxy endpoint for FreeImage.host manga uploads (bypasses browser CORS)
     if (url.pathname === "/api/upload-freeimage") {
-      const uploadCorsHeaders = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      };
+      const uploadCorsHeaders = getCorsHeaders(request);
 
       if (request.method === "OPTIONS") {
         return new Response(null, { headers: uploadCorsHeaders });
+      }
+
+      if (!isOriginAllowed(request, env)) {
+        return new Response(JSON.stringify({ status_code: 403, error: { message: "Origin không được phép." } }), {
+          status: 403,
+          headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+        });
       }
 
       if (request.method === "POST") {
         try {
           const formData = await request.formData();
           if (!formData.has("key") || !formData.get("key")) {
-            formData.set("key", "6d207e02198a847aa98d0a2a901485a5");
+            if (!env.FREEIMAGE_API_KEY) {
+              return new Response(JSON.stringify({ status_code: 400, error: { message: "Thiếu FreeImage API key." } }), {
+                status: 400,
+                headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+              });
+            }
+            formData.set("key", env.FREEIMAGE_API_KEY);
           }
           formData.set("action", "upload");
           formData.set("format", "json");
@@ -297,14 +326,17 @@ export default {
     // Proxy endpoint for manga image uploads (bypasses browser CORS)
     // Strategy: Try Catbox.moe first, fallback to Telegra.ph if Catbox fails
     if (url.pathname === "/api/upload-catbox") {
-      const uploadCorsHeaders = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      };
+      const uploadCorsHeaders = getCorsHeaders(request);
 
       if (request.method === "OPTIONS") {
         return new Response(null, { headers: uploadCorsHeaders });
+      }
+
+      if (!isOriginAllowed(request, env)) {
+        return new Response(JSON.stringify({ success: false, error: "Origin không được phép." }), {
+          status: 403,
+          headers: { ...uploadCorsHeaders, "Content-Type": "application/json" }
+        });
       }
 
       if (request.method === "POST") {
@@ -417,19 +449,192 @@ export default {
       }
     }
 
-    if (url.pathname === "/check-payment" && request.method === "POST") {
+    if (url.pathname === "/resolve-login" && request.method === "POST") {
       try {
-        const payload = await request.json();
-        let { txCode, userId, gateway, amount, payosOrderCode } = payload;
+        const body = await request.json().catch(() => ({}));
+        const username = String(body.username || "").trim();
+        if (!username || username.includes("@") || !env.FIREBASE_PROJECT_ID || !env.FIREBASE_CLIENT_EMAIL || !env.FIREBASE_PRIVATE_KEY) {
+          return new Response(JSON.stringify({ success: false }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const token = await getFirebaseAuthToken(env.FIREBASE_CLIENT_EMAIL, env.FIREBASE_PRIVATE_KEY);
+        const queryUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`;
+        const qRes = await fetch(queryUrl, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            structuredQuery: {
+              from: [{ collectionId: "users" }],
+              where: {
+                fieldFilter: {
+                  field: { fieldPath: "username" },
+                  op: "EQUAL",
+                  value: { stringValue: username }
+                }
+              },
+              limit: 1
+            }
+          })
+        });
+        const rows = qRes.ok ? await qRes.json() : [];
+        const matchedEmail = rows?.[0]?.document?.fields?.email?.stringValue || "";
+        if (!matchedEmail) {
+          return new Response(JSON.stringify({ success: false }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        return new Response(JSON.stringify({ success: true, email: matchedEmail }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      } catch {
+        return new Response(JSON.stringify({ success: false }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+    }
 
-        if (!txCode || !userId || !gateway || !amount) {
-          return new Response(JSON.stringify({ success: false, error: "Missing required fields (txCode, userId, gateway, amount)" }), {
+    if (url.pathname === "/create-payos-order" && request.method === "POST") {
+      try {
+        if (!env.FIREBASE_PROJECT_ID) {
+          return new Response(JSON.stringify({ success: false, error: "Firebase project is not configured on Worker." }), {
+            status: 503,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const authUid = await verifyFirebaseIdToken(request, env.FIREBASE_PROJECT_ID);
+        if (!authUid) {
+          return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        if (!env.PAYOS_CLIENT_ID || !env.PAYOS_API_KEY || !env.PAYOS_CHECKSUM_KEY) {
+          return new Response(JSON.stringify({ success: false, code: "PAYOS_CHECKSUM_NOT_CONFIGURED", fallback: true }), {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+        const payload = await request.json();
+        const orderCode = Number(payload.orderCode);
+        const amount = Math.round(Number(payload.amount));
+        const description = String(payload.description || "").slice(0, 25);
+        const cancelUrl = String(payload.cancelUrl || "https://web18p.xyz/wallet");
+        const returnUrl = String(payload.returnUrl || "https://web18p.xyz/wallet");
+
+        if (!Number.isInteger(orderCode) || orderCode <= 0 || !Number.isFinite(amount) || amount <= 0 || !description) {
+          return new Response(JSON.stringify({ success: false, error: "Invalid PayOS order parameters" }), {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
         }
 
-        // 1. Verify payment status with SePay or PayOS APIs
+        const signPayload = { amount, cancelUrl, description, orderCode, returnUrl };
+        const signData = Object.keys(signPayload).sort().map(k => `${k}=${signPayload[k]}`).join("&");
+        const encoder = new TextEncoder();
+        const hmacKey = await crypto.subtle.importKey(
+          "raw",
+          encoder.encode(env.PAYOS_CHECKSUM_KEY),
+          { name: "HMAC", hash: "SHA-256" },
+          false,
+          ["sign"]
+        );
+        const rawSig = await crypto.subtle.sign("HMAC", hmacKey, encoder.encode(signData));
+        const signature = Array.from(new Uint8Array(rawSig)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+        const payosRes = await fetch("https://api-merchant.payos.vn/v2/payment-requests", {
+          method: "POST",
+          headers: {
+            "x-client-id": env.PAYOS_CLIENT_ID,
+            "x-api-key": env.PAYOS_API_KEY,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ ...signPayload, signature })
+        });
+        const payosResult = await payosRes.json();
+        return new Response(JSON.stringify(payosResult), {
+          status: payosRes.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ success: false, error: err.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        });
+      }
+    }
+
+    if (url.pathname === "/check-payment" && request.method === "POST") {
+      try {
+        if (!env.FIREBASE_PROJECT_ID || !env.FIREBASE_CLIENT_EMAIL || !env.FIREBASE_PRIVATE_KEY) {
+          return new Response(JSON.stringify({ success: false, error: "Firebase Service Account is not fully configured on Cloudflare." }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        const authUid = await verifyFirebaseIdToken(request, env.FIREBASE_PROJECT_ID);
+        if (!authUid) {
+          return new Response(JSON.stringify({ success: false, error: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại!" }), {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        const payload = await request.json();
+        const { txCode, userId, gateway, payosOrderCode } = payload;
+
+        if (!txCode || !gateway || (userId && userId !== authUid)) {
+          return new Response(JSON.stringify({ success: false, error: "Thông tin giao dịch hoặc tài khoản không hợp lệ." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        // 1. Exchange credentials & fetch authoritative pending payment record FIRST
+        const token = await getFirebaseAuthToken(env.FIREBASE_CLIENT_EMAIL, env.FIREBASE_PRIVATE_KEY);
+        const checkUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/payments/${encodeURIComponent(txCode)}`;
+        const checkResponse = await fetch(checkUrl, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        if (!checkResponse.ok) {
+          return new Response(JSON.stringify({ success: false, message: "Không tìm thấy hóa đơn thanh toán hợp lệ trên hệ thống. Vui lòng tạo lại mã QR." }), {
+            status: 404,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        const checkData = await checkResponse.json();
+        const invoiceOwner = checkData.fields?.userId?.stringValue || "";
+        if (invoiceOwner !== authUid) {
+          return new Response(JSON.stringify({ success: false, error: "Bạn không có quyền xác nhận hóa đơn của tài khoản khác." }), {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        const currentStatus = checkData.fields?.status?.stringValue;
+        if (currentStatus === "completed" || currentStatus === "success") {
+          return new Response(JSON.stringify({ success: true, message: "Giao dịch này đã được xử lý và cộng tiền từ trước!" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        const authoritativeAmount = Math.round(Number(
+          checkData.fields?.amount?.integerValue || checkData.fields?.amount?.doubleValue || 0
+        ));
+        if (!Number.isFinite(authoritativeAmount) || authoritativeAmount <= 0) {
+          return new Response(JSON.stringify({ success: false, error: "Số tiền hóa đơn không hợp lệ." }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" }
+          });
+        }
+
+        // 2. Verify payment status with SePay or PayOS APIs against authoritativeAmount
         let paymentSuccess = false;
         let transactionDetails = {};
         let actualGateway = gateway;
@@ -443,7 +648,7 @@ export default {
             });
           }
 
-          const checkResult = await checkSePayHelper(apiToken, amount, txCode);
+          const checkResult = await checkSePayHelper(apiToken, authoritativeAmount, txCode);
           if (checkResult.success) {
             paymentSuccess = true;
             transactionDetails = checkResult.details;
@@ -453,10 +658,9 @@ export default {
           const apiKey = env.PAYOS_API_KEY;
           const clientId = env.PAYOS_CLIENT_ID;
 
-          // Try PayOS check first if configured and orderCode exists
           if (payosOrderCode && apiKey && clientId) {
             try {
-              const response = await fetch(`https://api-merchant.payos.vn/v2/payment-requests/${payosOrderCode}`, {
+              const response = await fetch(`https://api-merchant.payos.vn/v2/payment-requests/${encodeURIComponent(payosOrderCode)}`, {
                 headers: {
                   "x-client-id": clientId,
                   "x-api-key": apiKey
@@ -465,7 +669,7 @@ export default {
 
               if (response.ok) {
                 const result = await response.json();
-                if (result.code === "00" && result.data && result.data.status === "PAID") {
+                if (result.code === "00" && result.data && result.data.status === "PAID" && Number(result.data.amountPaid || result.data.amount) >= authoritativeAmount) {
                   paymentSuccess = true;
                   transactionDetails = {
                     payosOrderCode: Number(payosOrderCode),
@@ -478,17 +682,14 @@ export default {
             }
           }
 
-          // FALLBACK: If PayOS check failed or was not configured, attempt checking SePay
-          // This handles cases where the user paid directly to the bank account (shared MB account),
-          // which is monitored by SePay.
           if (!paymentSuccess && env.SEPAY_API_TOKEN) {
             console.log(`Checking SePay fallback for PayOS code ${txCode}...`);
             try {
-              const checkResult = await checkSePayHelper(env.SEPAY_API_TOKEN, amount, txCode);
+              const checkResult = await checkSePayHelper(env.SEPAY_API_TOKEN, authoritativeAmount, txCode);
               if (checkResult.success) {
                 paymentSuccess = true;
                 transactionDetails = checkResult.details;
-                actualGateway = "sepay"; // Override to sepay in DB since it was processed via SePay
+                actualGateway = "sepay";
               }
             } catch (sepayErr) {
               console.warn("SePay fallback verification failed:", sepayErr.message);
@@ -501,126 +702,90 @@ export default {
           });
         }
 
-        // If gateway hasn't received payment, return failure response
         if (!paymentSuccess) {
           return new Response(JSON.stringify({ success: false, message: "Hệ thống chưa nhận được khoản thanh toán." }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
           });
         }
 
-        // 2. Payment verified! Now update Firestore securely using Google REST APIs
-        if (!env.FIREBASE_PROJECT_ID || !env.FIREBASE_CLIENT_EMAIL || !env.FIREBASE_PRIVATE_KEY) {
-          return new Response(JSON.stringify({ success: false, error: "Firebase Service Account is not fully configured on Cloudflare." }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" }
-          });
+        // 3. Atomic commit in Firestore: bank tx replay lock + optimistic payment updateTime + balance increment
+        const dbBase = `projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+        const externalLockId = transactionDetails.sepayTransactionId
+          ? `sepay_${transactionDetails.sepayTransactionId}`
+          : `payos_${transactionDetails.payosOrderCode}`;
+
+        const paymentPatchFields = {
+          status: { stringValue: "completed" },
+          gateway: { stringValue: actualGateway }
+        };
+        const updatePaths = ["status", "gateway"];
+        if (transactionDetails.sepayTransactionId) {
+          paymentPatchFields.sepayTransactionId = { stringValue: transactionDetails.sepayTransactionId };
+          paymentPatchFields.bankBrand = { stringValue: transactionDetails.bankBrand };
+          paymentPatchFields.referenceNumber = { stringValue: transactionDetails.referenceNumber };
+          updatePaths.push("sepayTransactionId", "bankBrand", "referenceNumber");
+        } else if (transactionDetails.payosStatus) {
+          paymentPatchFields.payosOrderCode = { integerValue: String(transactionDetails.payosOrderCode) };
+          paymentPatchFields.payosStatus = { stringValue: transactionDetails.payosStatus };
+          updatePaths.push("payosOrderCode", "payosStatus");
         }
 
-        // a. Exchange credentials for Google OAuth Access Token
-        const token = await getFirebaseAuthToken(env.FIREBASE_CLIENT_EMAIL, env.FIREBASE_PRIVATE_KEY);
-
-        // b. Check if payment record already exists and is completed
-        const checkUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/payments/${txCode}`;
-        const checkResponse = await fetch(checkUrl, {
+        const commitResponse = await fetch(`https://firestore.googleapis.com/v1/${dbBase}:commit`, {
+          method: "POST",
           headers: {
-            "Authorization": `Bearer ${token}`
-          }
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            writes: [
+              {
+                update: {
+                  name: `${dbBase}/used_bank_tx/${externalLockId}`,
+                  fields: {
+                    txCode: { stringValue: txCode },
+                    userId: { stringValue: authUid },
+                    amount: { integerValue: String(authoritativeAmount) },
+                    consumedAt: { stringValue: new Date().toISOString() }
+                  }
+                },
+                currentDocument: { exists: false }
+              },
+              {
+                update: {
+                  name: `${dbBase}/payments/${txCode}`,
+                  fields: {
+                    ...checkData.fields,
+                    ...paymentPatchFields
+                  }
+                },
+                updateMask: { fieldPaths: updatePaths },
+                currentDocument: { updateTime: checkData.updateTime }
+              },
+              {
+                transform: {
+                  document: `${dbBase}/users/${authUid}`,
+                  fieldTransforms: [
+                    {
+                      fieldPath: "balance",
+                      increment: { integerValue: String(authoritativeAmount) }
+                    }
+                  ]
+                },
+                currentDocument: { exists: true }
+              }
+            ]
+          })
         });
 
-        let docExists = false;
-        let checkData = null;
-        if (checkResponse.ok) {
-          docExists = true;
-          checkData = await checkResponse.json();
-          const currentStatus = checkData.fields?.status?.stringValue;
-          if (currentStatus === "completed" || currentStatus === "success") {
-            return new Response(JSON.stringify({ success: true, message: "Giao dịch này đã được xử lý và cộng tiền từ trước!" }), {
+        if (!commitResponse.ok) {
+          const errText = await commitResponse.text();
+          if (commitResponse.status === 409 || errText.includes("ALREADY_EXISTS") || errText.includes("FAILED_PRECONDITION")) {
+            return new Response(JSON.stringify({ success: false, message: "Giao dịch đang được xử lý hoặc mã ngân hàng này đã được sử dụng!" }), {
+              status: 409,
               headers: { ...corsHeaders, "Content-Type": "application/json" }
             });
           }
-        }
-
-        // c. Retrieve user's current profile to get current balance and email
-        const userUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/users/${userId}`;
-        const userResponse = await fetch(userUrl, {
-          headers: {
-            "Authorization": `Bearer ${token}`
-          }
-        });
-
-        if (!userResponse.ok) {
-          const errText = await userResponse.text();
-          throw new Error(`Failed to fetch user profile: ${userResponse.status} - ${errText}`);
-        }
-
-        const userData = await userResponse.json();
-        const currentBalance = Number(userData.fields?.balance?.integerValue || userData.fields?.balance?.doubleValue || 0);
-        const newBalance = currentBalance + Number(amount);
-        const userEmail = userData.fields?.email?.stringValue || "N/A";
-
-        // d. Update the user balance in Firestore (PATCH only balance field)
-        const userUpdateData = {
-          fields: {
-            ...userData.fields,
-            balance: { integerValue: String(newBalance) }
-          }
-        };
-
-        const userUpdateResponse = await fetch(`${userUrl}?updateMask.fieldPaths=balance`, {
-          method: "PATCH",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(userUpdateData)
-        });
-
-        if (!userUpdateResponse.ok) {
-          const errText = await userUpdateResponse.text();
-          throw new Error(`Failed to update user balance: ${userUpdateResponse.status} - ${errText}`);
-        }
-
-        // e. Write payment record to Firestore
-        const paymentData = {
-          fields: {
-            userId: { stringValue: userId },
-            userEmail: { stringValue: userEmail },
-            amount: { doubleValue: Number(amount) },
-            txCode: { stringValue: txCode },
-            gateway: { stringValue: actualGateway },
-            status: { stringValue: "completed" },
-            createdAt: { stringValue: docExists ? (checkData.fields?.createdAt?.stringValue || new Date().toISOString()) : new Date().toISOString() }
-          }
-        };
-
-        if (transactionDetails.sepayTransactionId) {
-          paymentData.fields.sepayTransactionId = { stringValue: transactionDetails.sepayTransactionId };
-          paymentData.fields.bankBrand = { stringValue: transactionDetails.bankBrand };
-          paymentData.fields.referenceNumber = { stringValue: transactionDetails.referenceNumber };
-        } else if (transactionDetails.payosStatus) {
-          paymentData.fields.payosOrderCode = { integerValue: String(transactionDetails.payosOrderCode) };
-          paymentData.fields.payosStatus = { stringValue: transactionDetails.payosStatus };
-        }
-
-        // If document exists, we patch status, gateway, and metadata only. Otherwise write all fields.
-        let patchUrl = checkUrl;
-        if (docExists) {
-          const maskPaths = ["status", "gateway", "sepayTransactionId", "bankBrand", "referenceNumber", "payosOrderCode", "payosStatus"];
-          patchUrl += "?" + maskPaths.map(p => `updateMask.fieldPaths=${p}`).join("&");
-        }
-
-        const paymentUpdateResponse = await fetch(patchUrl, {
-          method: "PATCH",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(paymentData)
-        });
-
-        if (!paymentUpdateResponse.ok) {
-          const errText = await paymentUpdateResponse.text();
-          throw new Error(`Failed to save payment details: ${paymentUpdateResponse.status} - ${errText}`);
+          throw new Error(`Failed atomic payment commit: ${commitResponse.status} - ${errText}`);
         }
 
         return new Response(JSON.stringify({ success: true, message: "Nạp tiền thành công!" }), {
@@ -645,49 +810,28 @@ export default {
         }
         const token = await getFirebaseAuthToken(env.FIREBASE_CLIENT_EMAIL, env.FIREBASE_PRIVATE_KEY);
         
-        // Fetch Games
-        const gamesUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/games?pageSize=500`;
-        const gamesResponse = await fetch(gamesUrl, { headers: { "Authorization": `Bearer ${token}` } });
-        let games = [];
-        if (gamesResponse.ok) {
-          const data = await gamesResponse.json();
-          if (data.documents) {
-            games = data.documents.map(doc => {
-              const parts = doc.name.split('/');
-              const id = parts[parts.length - 1];
-              const title = doc.fields?.title?.stringValue || "";
-              return createGameSlug(title, id);
-            });
-          }
-        }
+        const [gameDocs, videoDocs, mangaDocs] = await Promise.all([
+          fetchFirestoreDocumentsPaginated(env.FIREBASE_PROJECT_ID, "games", token),
+          fetchFirestoreDocumentsPaginated(env.FIREBASE_PROJECT_ID, "videos", token),
+          fetchFirestoreDocumentsPaginated(env.FIREBASE_PROJECT_ID, "manga", token)
+        ]);
 
-        // Fetch Videos
-        const videosUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/videos?pageSize=500`;
-        const videosResponse = await fetch(videosUrl, { headers: { "Authorization": `Bearer ${token}` } });
-        let videos = [];
-        if (videosResponse.ok) {
-          const data = await videosResponse.json();
-          if (data.documents) {
-            videos = data.documents.map(doc => {
-              const parts = doc.name.split('/');
-              return parts[parts.length - 1]; // id
-            });
-          }
-        }
+        const games = gameDocs.map(doc => {
+          const parts = doc.name.split('/');
+          const id = parts[parts.length - 1];
+          const title = doc.fields?.title?.stringValue || "";
+          return createGameSlug(title, id);
+        });
 
-        // Fetch Manga
-        const mangaUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/manga?pageSize=500`;
-        const mangaResponse = await fetch(mangaUrl, { headers: { "Authorization": `Bearer ${token}` } });
-        let mangaList = [];
-        if (mangaResponse.ok) {
-          const data = await mangaResponse.json();
-          if (data.documents) {
-            mangaList = data.documents.map(doc => {
-              const parts = doc.name.split('/');
-              return parts[parts.length - 1]; // id
-            });
-          }
-        }
+        const videos = videoDocs.map(doc => {
+          const parts = doc.name.split('/');
+          return parts[parts.length - 1];
+        });
+
+        const mangaList = mangaDocs.map(doc => {
+          const parts = doc.name.split('/');
+          return parts[parts.length - 1];
+        });
 
         let xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -722,6 +866,11 @@ export default {
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://web18p.xyz/ai-search/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://web18p.xyz/videos/</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
@@ -742,14 +891,24 @@ export default {
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/manga/</loc>
+    <loc>https://web18p.xyz/videos/cosplay/</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://web18p.xyz/blog/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
+    <loc>https://web18p.xyz/videos/vietsub/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/videos/hentai/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://web18p.xyz/manga/</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://web18p.xyz/report/</loc>
@@ -839,7 +998,8 @@ export default {
         return new Response(xml, {
           status: 200,
           headers: {
-            "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+            "Access-Control-Allow-Origin": corsHeaders["Access-Control-Allow-Origin"],
+            "Vary": "Origin",
             "Content-Type": "application/xml; charset=utf-8",
             "Cache-Control": "public, max-age=3600"
           }
@@ -906,6 +1066,18 @@ export default {
 };
 
 // --- SePay transaction checker helper ---
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesSePayTxCode(text, txCode) {
+  const cleanCode = String(txCode || "").trim();
+  const cleanText = String(text || "");
+  if (!cleanCode || !cleanText) return false;
+  const boundaryRegex = new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(cleanCode)}(?:$|[^a-z0-9])`, "i");
+  return boundaryRegex.test(cleanText);
+}
+
 async function checkSePayHelper(apiToken, amount, txCode) {
   const response = await fetch("https://my.sepay.vn/userapi/transactions/list?limit=20", {
     headers: {
@@ -924,10 +1096,10 @@ async function checkSePayHelper(apiToken, amount, txCode) {
     throw new Error("Invalid response format from SePay API");
   }
 
-  // Find a matching transaction
+  // Find a matching transaction using word-boundary txCode comparison
   const matchedTx = data.transactions.find(tx => {
     const matchesAmount = Number(tx.amount_in) === Number(amount);
-    const matchesContent = (tx.transaction_content || "").includes(txCode) || (tx.body || "").includes(txCode);
+    const matchesContent = matchesSePayTxCode(tx.transaction_content || "", txCode) || matchesSePayTxCode(tx.body || "", txCode);
     return matchesAmount && matchesContent;
   });
 
@@ -943,6 +1115,65 @@ async function checkSePayHelper(apiToken, amount, txCode) {
   }
 
   return { success: false };
+}
+
+// --- Firebase ID Token verifier using Google SecureToken JWK keys ---
+function base64UrlToUint8Array(b64url) {
+  const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64url.length + 3) % 4);
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+async function verifyFirebaseIdToken(request, projectId) {
+  try {
+    const authHeader = request.headers.get("Authorization") || "";
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (!match) return null;
+    const token = match[1].trim();
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+
+    const header = JSON.parse(new TextDecoder().decode(base64UrlToUint8Array(parts[0])));
+    const claims = JSON.parse(new TextDecoder().decode(base64UrlToUint8Array(parts[1])));
+    const nowSec = Math.floor(Date.now() / 1000);
+
+    if (
+      header.alg !== "RS256" ||
+      !header.kid ||
+      claims.aud !== projectId ||
+      claims.iss !== `https://securetoken.google.com/${projectId}` ||
+      !claims.sub ||
+      typeof claims.exp !== "number" ||
+      claims.exp <= nowSec
+    ) {
+      return null;
+    }
+
+    const jwksRes = await fetch("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com");
+    if (!jwksRes.ok) return null;
+    const { keys = [] } = await jwksRes.json();
+    const jwk = keys.find(k => k.kid === header.kid);
+    if (!jwk) return null;
+
+    const key = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+    const valid = await crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      base64UrlToUint8Array(parts[2]),
+      new TextEncoder().encode(`${parts[0]}.${parts[1]}`)
+    );
+    return valid ? claims.sub : null;
+  } catch {
+    return null;
+  }
 }
 
 // --- Google Authentication OAuth helper functions using Web Crypto API ---
@@ -1043,6 +1274,27 @@ function str2ab(str) {
   return buf;
 }
 
+// --- Paginated Firestore Collection Fetcher ---
+async function fetchFirestoreDocumentsPaginated(projectId, collectionName, token = null) {
+  const docs = [];
+  let pageToken = "";
+  do {
+    const querySuffix = pageToken
+      ? `?pageSize=300&pageToken=${encodeURIComponent(pageToken)}`
+      : "?pageSize=300";
+    const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${collectionName}${querySuffix}`;
+    const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+    const res = await fetch(url, { headers });
+    if (!res.ok) break;
+    const data = await res.json();
+    if (Array.isArray(data.documents)) {
+      docs.push(...data.documents);
+    }
+    pageToken = data.nextPageToken || "";
+  } while (pageToken);
+  return docs;
+}
+
 // --- Game Slug helper ---
 function createGameSlug(title, id) {
   const source = title || id || 'game';
@@ -1123,7 +1375,33 @@ async function handleCrawlerMetadata(url, env) {
   const canonicalUrl = `https://web18p.xyz${pathname.endsWith("/") ? pathname : pathname + "/"}`;
 
   try {
-    if (pathname.startsWith("/video/")) {
+    if (pathname.startsWith("/game/")) {
+      const parts = pathname.split("/").filter(Boolean);
+      const gameSlug = parts[1];
+      if (gameSlug) {
+        const gameDocs = await fetchFirestoreDocumentsPaginated(projectId, "games", null);
+        const matchedGame = gameDocs.find((docSnap) => {
+          const docParts = docSnap.name.split("/");
+          const gId = docParts[docParts.length - 1];
+          const gTitle = docSnap.fields?.title?.stringValue || "";
+          return gId === gameSlug || createGameSlug(gTitle, gId) === gameSlug;
+        });
+        if (matchedGame) {
+          const f = matchedGame.fields || {};
+          const gTitle = f.title?.stringValue || "Game";
+          title = `${gTitle} - Tải Game Việt Hóa | WEB18P`;
+          const rawDesc = f.description?.stringValue || "";
+          const cleanDesc = rawDesc.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+          description = cleanDesc
+            ? (cleanDesc.length > 160 ? `${cleanDesc.slice(0, 160).trim()}...` : cleanDesc)
+            : `Tải ${gTitle} Việt hóa miễn phí cho PC và Android trên WEB18P.`;
+          const cover = f.image?.stringValue || f.cover?.stringValue;
+          if (cover && !cover.endsWith(".svg")) {
+            image = cover;
+          }
+        }
+      }
+    } else if (pathname.startsWith("/video/")) {
       const parts = pathname.split("/").filter(Boolean);
       const videoId = parts[1];
       if (videoId) {
@@ -1201,8 +1479,6 @@ async function handleCrawlerMetadata(url, env) {
   <meta name="twitter:title" content="${escapedTitle}" />
   <meta name="twitter:description" content="${escapedDesc}" />
   <meta name="twitter:image" content="${escapedImg}" />
-
-  <meta http-equiv="refresh" content="0;url=${escapedUrl}" />
 </head>
 <body style="font-family: sans-serif; background: #0a0a0c; color: #fff; padding: 2rem;">
   <h1>${escapedTitle}</h1>

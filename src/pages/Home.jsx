@@ -16,8 +16,9 @@ function Home() {
 
   const handlePageChange = (page) => {
     setSearchParams(prev => {
-      prev.set('page', page.toString());
-      return prev;
+      const next = new URLSearchParams(prev);
+      next.set('page', page.toString());
+      return next;
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };

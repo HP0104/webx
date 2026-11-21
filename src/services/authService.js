@@ -8,6 +8,20 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, query, where, getDocs, collection } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase';
+import { deriveUsernameFromAuthUser } from '../utils/userUtils';
+
+const WORKER_BASE_URL = 'https://web18p-deloy.takarvn.workers.dev';
+
+async function syncUsernameLookup(username, email) {
+  const cleanUsername = String(username || '').trim().toLowerCase();
+  const cleanEmail = String(email || '').trim();
+  if (!cleanUsername || !cleanEmail) return;
+  try {
+    await setDoc(doc(db, 'auth_lookup', cleanUsername), { email: cleanEmail }, { merge: true });
+  } catch {
+    // Best-effort lookup sync
+  }
+}
 
 export const authService = {
   // Đăng nhập Google
@@ -20,16 +34,18 @@ export const authService = {
     const userSnap = await getDoc(userRef);
     
     if (!userSnap.exists()) {
+      const username = deriveUsernameFromAuthUser(user);
       await setDoc(userRef, {
         uid: user.uid,
-        username: user.displayName || user.email.split('@')[0],
-        email: user.email,
-        photoURL: user.photoURL,
+        username,
+        email: user.email || '',
+        photoURL: user.photoURL || null,
         balance: 0,
         ownedGames: [],
         role: 'user',
         createdAt: new Date().toISOString()
       });
+      await syncUsernameLookup(username, user.email);
     }
     return user;
   },
@@ -41,16 +57,18 @@ export const authService = {
     await sendEmailVerification(userCredential.user);
     
     // Tạo profile mặc định
+    const username = deriveUsernameFromAuthUser({ email: cleanEmail, uid: userCredential.user.uid });
     const userRef = doc(db, 'users', userCredential.user.uid);
     await setDoc(userRef, {
       uid: userCredential.user.uid,
-      username: cleanEmail.split('@')[0],
+      username,
       email: cleanEmail,
       balance: 0,
       ownedGames: [],
       role: 'user',
       createdAt: new Date().toISOString()
     });
+    await syncUsernameLookup(username, cleanEmail);
     
     return userCredential.user;
   },
@@ -62,12 +80,45 @@ export const authService = {
     
     // Nếu là username (không có @)
     if (!cleanId.includes('@')) {
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('username', '==', cleanId));
-      const querySnapshot = await getDocs(q);
-      
-      if (!querySnapshot.empty) {
-        email = querySnapshot.docs[0].data().email;
+      let resolvedEmail = '';
+
+      // 1. Thử đọc bảng auth_lookup trước (không làm lộ bảng users)
+      try {
+        const lookupSnap = await getDoc(doc(db, 'auth_lookup', cleanId.toLowerCase()));
+        if (lookupSnap.exists() && lookupSnap.data()?.email) {
+          resolvedEmail = lookupSnap.data().email;
+        }
+      } catch {}
+
+      // 2. Fallback qua Cloudflare Worker cho tài khoản cũ chưa có auth_lookup
+      if (!resolvedEmail) {
+        try {
+          const res = await fetch(`${WORKER_BASE_URL}/resolve-login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: cleanId })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.email) resolvedEmail = data.email;
+          }
+        } catch {}
+      }
+
+      // 3. Fallback đọc users (chỉ chạy nếu rules cũ còn cho phép)
+      if (!resolvedEmail) {
+        try {
+          const usersRef = collection(db, 'users');
+          const q = query(usersRef, where('username', '==', cleanId));
+          const querySnapshot = await getDocs(q);
+          if (!querySnapshot.empty) {
+            resolvedEmail = querySnapshot.docs[0].data().email || '';
+          }
+        } catch {}
+      }
+
+      if (resolvedEmail) {
+        email = resolvedEmail;
       } else {
         throw { code: 'auth/user-not-found' };
       }

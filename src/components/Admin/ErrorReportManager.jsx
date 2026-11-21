@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, where, onSnapshot, doc, updateDoc, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { Gamepad2, Film, User, CheckCircle, Trash2, Clock, Filter } from 'lucide-react';
+import { groupChatReportsFromDocs } from '../../utils/adminListUtils';
 
 function ErrorReportManager() {
   const [errorReports, setErrorReports] = useState([]);
@@ -32,42 +33,7 @@ function ErrorReportManager() {
   useEffect(() => {
     const q = query(collection(db, 'reports'), orderBy('createdAt', 'asc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // Group chat messages by channelId, take the latest message per channel as summary
-      const messagesMap = {};
-      snapshot.docs.forEach(d => {
-        const data = d.data();
-        const channelId = data.channelId;
-        if (!channelId) return;
-        
-        // Skip admin replies - only show user messages
-        if (data.senderRole === 'admin') return;
-
-        if (!messagesMap[channelId]) {
-          messagesMap[channelId] = {
-            id: d.id,
-            _collection: 'reports',
-            _channelId: channelId,
-            type: 'player',
-            itemId: '',
-            itemTitle: '',
-            message: data.text || '',
-            image: data.image || null,
-            senderName: data.senderName || 'Người dùng',
-            senderId: data.senderId || '',
-            status: 'pending',
-            createdAt: data.createdAt,
-            _messageCount: 1
-          };
-        } else {
-          // Update with latest message
-          messagesMap[channelId].message = data.text || messagesMap[channelId].message;
-          messagesMap[channelId].image = data.image || messagesMap[channelId].image;
-          messagesMap[channelId].createdAt = data.createdAt || messagesMap[channelId].createdAt;
-          messagesMap[channelId]._messageCount += 1;
-        }
-      });
-
-      setChatReports(Object.values(messagesMap));
+      setChatReports(groupChatReportsFromDocs(snapshot.docs));
       setLoadingChat(false);
     }, (err) => {
       console.warn('Chat reports subscription error:', err);
@@ -85,7 +51,15 @@ function ErrorReportManager() {
 
   const handleMarkResolved = async (report) => {
     try {
-      await updateDoc(doc(db, report._collection, report.id), { status: 'resolved' });
+      if (report._collection === 'reports' && report._channelId) {
+        const q = query(collection(db, 'reports'), where('channelId', '==', report._channelId));
+        const snap = await getDocs(q);
+        const batch = writeBatch(db);
+        snap.docs.forEach(d => batch.update(d.ref, { status: 'resolved' }));
+        await batch.commit();
+      } else {
+        await updateDoc(doc(db, report._collection, report.id), { status: 'resolved' });
+      }
     } catch (err) {
       alert('Lỗi cập nhật: ' + err.message);
     }
@@ -95,9 +69,11 @@ function ErrorReportManager() {
     if (!window.confirm('Bạn chắc chắn muốn xóa báo lỗi này?')) return;
     try {
       if (report._collection === 'reports' && report._channelId) {
-        // For chat reports, delete all messages in the channel
-        // Just delete the summary doc for now (individual message)
-        await deleteDoc(doc(db, 'reports', report.id));
+        const q = query(collection(db, 'reports'), where('channelId', '==', report._channelId));
+        const snap = await getDocs(q);
+        const batch = writeBatch(db);
+        snap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
       } else {
         await deleteDoc(doc(db, report._collection, report.id));
       }

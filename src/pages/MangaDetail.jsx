@@ -16,10 +16,11 @@ function MangaDetail() {
   // Increment view count
   useEffect(() => {
     if (!mangaItem) return;
-    const viewedKey = `manga_viewed_${mangaId}`;
-    if (sessionStorage.getItem(viewedKey)) return;
-
-    sessionStorage.setItem(viewedKey, '1');
+    try {
+      const viewedKey = `manga_viewed_${mangaId}`;
+      if (sessionStorage.getItem(viewedKey)) return;
+      sessionStorage.setItem(viewedKey, '1');
+    } catch {}
     try {
       const mangaRef = doc(db, 'manga', mangaId);
       updateDoc(mangaRef, { views: increment(1) }).catch(() => {});

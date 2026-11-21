@@ -81,7 +81,7 @@ function Report() {
   });
 
   // Filter messages for current active channel
-  const activeChannelId = isAdmin ? selectedUserId : user.id;
+  const activeChannelId = isAdmin ? selectedUserId : (user.id || user.uid);
   const activeMessages = messages.filter(msg => msg.channelId === activeChannelId);
 
   const handleSendMessage = async (e) => {

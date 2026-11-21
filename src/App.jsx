@@ -9,9 +9,12 @@ import Home from './pages/Home';
 import ExoClickPopunder from './components/ExoClickPopunder';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, onSnapshot, deleteDoc, runTransaction } from 'firebase/firestore';
 import { findGameByRouteParam, getGamePath } from './utils/gameRoutes';
 import { createOwnershipRecord, getGameOwnership, normalizeOwnedGames } from './utils/ownership';
+import { deriveUsernameFromAuthUser } from './utils/userUtils';
+import { getVideoCategoryPageTitle } from './constants/videoCategories';
+import { getVideoThumbnail } from './utils/videoUtils';
 import { ADS_CONFIG } from './config/ads';
 import MobileBottomNav from './components/MobileBottomNav';
 import Footer from './components/Footer';
@@ -116,27 +119,42 @@ function PageTitle({ games = [], videos = [], manga = [] }) {
     } else if (pathname === '/ai-search') {
       pageTitle = 'Tìm Kiếm Game Bằng AI';
       description = 'Tìm kiếm game từ cơ sở dữ liệu RAWG và tự động viết bài đánh giá bằng AI trên WEB18P.';
+    } else if (pathname === '/uploader') {
+      pageTitle = 'Studio Đăng Phim';
+      description = 'Bảng điều khiển đăng và quản lý phim trên WEB18P.';
     } else if (pathname.startsWith('/video/')) {
       const vidId = pathname.split('/').filter(Boolean)[1];
       const currentVideo = (videos || []).find(v => v.id?.toString() === vidId?.toString());
       if (currentVideo) {
         pageTitle = currentVideo.title || 'Chi Tiết Phim';
         description = currentVideo.description || `Xem video ${currentVideo.title || ''} chất lượng cao trên WEB18P.`;
-        if (currentVideo.thumbnail) ogImage = currentVideo.thumbnail;
+        const thumb = currentVideo.thumbnail || getVideoThumbnail(currentVideo.videoUrl || currentVideo.streamtapeUrl);
+        if (thumb) ogImage = thumb;
       } else {
         pageTitle = 'Chi Tiết Phim';
       }
     } else if (pathname.startsWith('/videos')) {
       const videoCat = pathname.split('/').filter(Boolean)[1] || 'all';
-      const catNames = { all: 'Tất Cả Phim', vam: 'Phim VAM', '3d': 'Phim 3D' };
-      pageTitle = catNames[videoCat] || 'Phim';
+      pageTitle = getVideoCategoryPageTitle(videoCat);
       description = `${pageTitle} trên WEB18P.`;
     } else if (pathname === '/manga') {
       pageTitle = 'Kho Truyện Tranh';
       description = 'Đọc truyện tranh online miễn phí trên WEB18P.';
     } else if (pathname.startsWith('/manga/') && pathname.includes('/chapter/')) {
-      pageTitle = 'Đọc Truyện';
-      description = 'Đọc truyện tranh online miễn phí trên WEB18P.';
+      const parts = pathname.split('/').filter(Boolean);
+      const mId = parts[1];
+      const chParam = parts[3];
+      const currentManga = (manga || []).find(m => m.id?.toString() === mId?.toString());
+      const currentChapter = currentManga?.chapters?.find(
+        c => c.id?.toString() === chParam?.toString() || `chap-${c.number}` === chParam || String(c.number) === chParam
+      );
+      if (currentManga) {
+        pageTitle = `${currentManga.title}${currentChapter ? ` - ${currentChapter.title || `Chương ${currentChapter.number}`}` : ''}`;
+        description = `Đọc ${currentManga.title} trực tuyến trên WEB18P.`;
+        if (currentManga.cover) ogImage = currentManga.cover;
+      } else {
+        pageTitle = 'Đọc Truyện';
+      }
     } else if (pathname.startsWith('/manga/')) {
       const mId = pathname.split('/').filter(Boolean)[1];
       const currentManga = (manga || []).find(m => m.id?.toString() === mId?.toString());
@@ -147,6 +165,8 @@ function PageTitle({ games = [], videos = [], manga = [] }) {
       } else {
         pageTitle = 'Chi Tiết Truyện';
       }
+    } else if (pathname !== '/blog' && pathname !== '/report' && pathname !== '/about' && pathname !== '/contact' && pathname !== '/privacy' && pathname !== '/auth' && pathname !== '/wallet' && pathname !== '/profile' && pathname !== '/admin' && pathname !== '/ai-search' && !pathname.startsWith('/category/') && !pathname.startsWith('/game/') && pathname !== '/games' && pathname !== '/') {
+      pageTitle = 'Không Tìm Thấy Trang (404)';
     }
 
     document.title = `${pageTitle} | WEB18P`;
@@ -366,9 +386,9 @@ function App() {
       if (firebaseUser) {
         let userData = {
           uid: firebaseUser.uid,
-          username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
-          email: firebaseUser.email,
-          photoURL: firebaseUser.photoURL,
+          username: deriveUsernameFromAuthUser(firebaseUser),
+          email: firebaseUser.email || '',
+          photoURL: firebaseUser.photoURL || null,
           balance: 0,
           ownedGames: [],
           role: 'user', // Mặc định là user để bảo mật. Admin phải được set trong Database.
@@ -436,30 +456,70 @@ function App() {
     const currentOwnership = getGameOwnership(ownedGames, gameId);
     if (currentOwnership.isActive) return { ok: true, reason: 'already_owned' };
 
-    const gamePrice = Number(game.price) || 0;
-    if (balance < gamePrice) return { ok: false, reason: 'insufficient_balance' };
-
-    const nextBalance = balance - gamePrice;
-    const ownershipRecord = createOwnershipRecord(gameId);
-    const nextOwnedGames = [
-      ...normalizeOwnedGames(ownedGames).filter(ownership => ownership.id !== gameId),
-      ownershipRecord
-    ];
-
-    // Cập nhật giao diện trước để cảm giác mua game mượt hơn.
-    setBalance(nextBalance);
-    setOwnedGames(nextOwnedGames);
+    const fallbackPrice = Number(game.price) || 0;
+    if (balance < fallbackPrice) return { ok: false, reason: 'insufficient_balance' };
 
     try {
-      await setDoc(doc(db, 'users', user.id), {
-        balance: nextBalance,
-        ownedGames: nextOwnedGames
-      }, { merge: true });
-      return { ok: true, ownership: ownershipRecord };
+      const userRef = doc(db, 'users', user.id);
+      const gameRef = doc(db, 'games', gameId);
+      const txResult = await runTransaction(db, async (transaction) => {
+        const [userSnap, gameSnap] = await Promise.all([
+          transaction.get(userRef),
+          transaction.get(gameRef)
+        ]);
+        if (!userSnap.exists()) {
+          throw new Error('USER_NOT_FOUND');
+        }
+        const serverUser = userSnap.data();
+        const serverOwned = Array.isArray(serverUser.ownedGames) ? serverUser.ownedGames : [];
+        const serverOwnership = getGameOwnership(serverOwned, gameId);
+        if (serverOwnership.isActive) {
+          return {
+            alreadyOwned: true,
+            nextBalance: Number(serverUser.balance) || 0,
+            nextOwnedGames: normalizeOwnedGames(serverOwned)
+          };
+        }
+
+        const authoritativePrice = gameSnap.exists() ? (Number(gameSnap.data().price) || 0) : fallbackPrice;
+        const currentBalance = Number(serverUser.balance) || 0;
+        if (currentBalance < authoritativePrice) {
+          throw new Error('INSUFFICIENT_BALANCE');
+        }
+
+        const nextBalance = currentBalance - authoritativePrice;
+        const ownershipRecord = createOwnershipRecord(gameId);
+        // Append new purchase at the end so Firestore rules can verify the new item & price strictly
+        const existingWithoutExpired = serverOwned.filter(o => {
+          const oid = typeof o === 'object' && o !== null ? (o.id ?? o.gameId)?.toString() : o?.toString();
+          return oid !== gameId;
+        });
+        const nextOwnedGames = [...existingWithoutExpired, ownershipRecord];
+
+        transaction.update(userRef, {
+          balance: nextBalance,
+          ownedGames: nextOwnedGames
+        });
+
+        return {
+          alreadyOwned: false,
+          ownershipRecord,
+          nextBalance,
+          nextOwnedGames: normalizeOwnedGames(nextOwnedGames)
+        };
+      });
+
+      setBalance(txResult.nextBalance);
+      setOwnedGames(txResult.nextOwnedGames);
+      if (txResult.alreadyOwned) {
+        return { ok: true, reason: 'already_owned' };
+      }
+      return { ok: true, ownership: txResult.ownershipRecord };
     } catch (error) {
-      console.warn("Firestore error buying game, reverting local state:", error.message);
-      setBalance(balance);
-      setOwnedGames(ownedGames);
+      if (error.message === 'INSUFFICIENT_BALANCE') {
+        return { ok: false, reason: 'insufficient_balance' };
+      }
+      console.warn("Firestore error buying game:", error.message);
       return { ok: false, reason: 'save_failed' };
     }
   };
@@ -494,32 +554,18 @@ function App() {
       is18Plus: newGame.is18Plus ?? (newGame.is18Vn || newGame.is18Uncensored || newGame.is18Pc || newGame.is18Android || false)
     };
 
-    // Cập nhật State cục bộ lập tức để giao diện hiển thị ngay
+    await setDoc(doc(db, 'games', gameId), gameData);
     setGames(prev => {
       if (prev.some(g => g.id.toString() === gameId)) return prev;
       return [...prev, gameData];
     });
-
-    try {
-      await setDoc(doc(db, 'games', gameId), gameData);
-      return true;
-    } catch (error) {
-      console.warn("Firestore error adding game (using local state fallback):", error);
-      return true;
-    }
+    return true;
   };
 
   const deleteGameFromStore = async (gameId) => {
-    // Xóa trong State cục bộ lập tức
+    await deleteDoc(doc(db, 'games', gameId.toString()));
     setGames(prev => prev.filter(g => g.id.toString() !== gameId.toString()));
-
-    try {
-      await deleteDoc(doc(db, 'games', gameId.toString()));
-      return true;
-    } catch (error) {
-      console.warn("Firestore error deleting game (using local state fallback):", error);
-      return true;
-    }
+    return true;
   };
 
   const updateGameInStore = async (gameId, updatedData) => {
@@ -531,16 +577,9 @@ function App() {
       is18Plus: updatedData.is18Plus ?? (updatedData.is18Vn || updatedData.is18Uncensored || updatedData.is18Pc || updatedData.is18Android || false)
     };
 
-    // Cập nhật State cục bộ lập tức
+    await updateDoc(doc(db, 'games', gameId.toString()), gameData);
     setGames(prev => prev.map(g => g.id.toString() === gameId.toString() ? gameData : g));
-
-    try {
-      await updateDoc(doc(db, 'games', gameId.toString()), gameData);
-      return true;
-    } catch (error) {
-      console.warn("Firestore error updating game (using local state fallback):", error);
-      return true;
-    }
+    return true;
   };
 
   // ---- Video CRUD ----
@@ -553,37 +592,22 @@ function App() {
       uploaderName: newVideo.uploaderName || user?.username || (user?.role === 'admin' ? 'Admin' : 'Uploader'),
       createdAt: newVideo.createdAt || new Date().toISOString()
     };
-    setVideos(prev => [...prev, videoData]);
-    try {
-      await setDoc(doc(db, 'videos', videoId), videoData);
-      return true;
-    } catch (error) {
-      console.warn('Firestore error adding video:', error);
-      return true;
-    }
+    await setDoc(doc(db, 'videos', videoId), videoData);
+    setVideos(prev => (prev.some(v => v.id?.toString() === videoId) ? prev : [...prev, videoData]));
+    return true;
   };
 
   const deleteVideoFromStore = async (videoId) => {
+    await deleteDoc(doc(db, 'videos', videoId.toString()));
     setVideos(prev => prev.filter(v => v.id.toString() !== videoId.toString()));
-    try {
-      await deleteDoc(doc(db, 'videos', videoId.toString()));
-      return true;
-    } catch (error) {
-      console.warn('Firestore error deleting video:', error);
-      return true;
-    }
+    return true;
   };
 
   const updateVideoInStore = async (videoId, updatedData) => {
     const videoData = { ...updatedData, id: videoId };
+    await updateDoc(doc(db, 'videos', videoId.toString()), videoData);
     setVideos(prev => prev.map(v => v.id.toString() === videoId.toString() ? videoData : v));
-    try {
-      await updateDoc(doc(db, 'videos', videoId.toString()), videoData);
-      return true;
-    } catch (error) {
-      console.warn('Firestore error updating video:', error);
-      return true;
-    }
+    return true;
   };
 
   // ---- Manga CRUD ----
@@ -596,18 +620,14 @@ function App() {
       uploaderName: newManga.uploaderName || user?.username || (user?.role === 'admin' ? 'Admin' : 'Uploader'),
       createdAt: newManga.createdAt || new Date().toISOString()
     };
-    setManga(prev => [...prev, mangaData]);
-    try {
-      await setDoc(doc(db, 'manga', mangaId), mangaData);
-      return true;
-    } catch (error) {
-      console.warn('Firestore error adding manga:', error);
-      return true;
-    }
+    await setDoc(doc(db, 'manga', mangaId), mangaData);
+    setManga(prev => (prev.some(m => m.id?.toString() === mangaId) ? prev : [...prev, mangaData]));
+    return true;
   };
 
   const deleteMangaFromStore = async (mangaId, mangaObj = null) => {
     const targetManga = mangaObj || manga.find(m => m.id?.toString() === mangaId?.toString());
+    await deleteDoc(doc(db, 'manga', mangaId.toString()));
     setManga(prev => prev.filter(m => m.id.toString() !== mangaId.toString()));
     if (targetManga) {
       import('./utils/mangaUtils').then(({ deleteMangaFromTelegram }) => {
@@ -618,25 +638,14 @@ function App() {
         console.warn('Cannot load mangaUtils:', err);
       });
     }
-    try {
-      await deleteDoc(doc(db, 'manga', mangaId.toString()));
-      return true;
-    } catch (error) {
-      console.warn('Firestore error deleting manga:', error);
-      return true;
-    }
+    return true;
   };
 
   const updateMangaInStore = async (mangaId, updatedData) => {
     const mangaData = { ...updatedData, id: mangaId };
+    await updateDoc(doc(db, 'manga', mangaId.toString()), mangaData);
     setManga(prev => prev.map(m => m.id.toString() === mangaId.toString() ? mangaData : m));
-    try {
-      await updateDoc(doc(db, 'manga', mangaId.toString()), mangaData);
-      return true;
-    } catch (error) {
-      console.warn('Firestore error updating manga:', error);
-      return true;
-    }
+    return true;
   };
 
   return (

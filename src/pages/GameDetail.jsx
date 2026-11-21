@@ -23,9 +23,11 @@ function GameDetail() {
   // Tự động tăng lượt xem (views) khi người dùng truy cập trang chi tiết game này
   useEffect(() => {
     if (!game?.id) return;
-    const viewedKey = `game_viewed_${game.id}`;
-    if (sessionStorage.getItem(viewedKey)) return;
-    sessionStorage.setItem(viewedKey, '1');
+    try {
+      const viewedKey = `game_viewed_${game.id}`;
+      if (sessionStorage.getItem(viewedKey)) return;
+      sessionStorage.setItem(viewedKey, '1');
+    } catch {}
 
     const incrementViews = async () => {
       try {

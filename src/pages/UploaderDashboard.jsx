@@ -21,6 +21,8 @@ import {
 import { useAppContext } from '../App';
 import VideoForm from '../components/Admin/VideoForm';
 import { getVideoThumbnail } from '../utils/videoUtils';
+import { VIDEO_CATEGORIES, getVideoCategoryBadgeLabel } from '../constants/videoCategories';
+import { buildEditableVideoData } from '../utils/videoFormUtils';
 import { 
   uploadVideoToStreamHG,
   remoteUploadUrlToStreamHG,
@@ -225,17 +227,7 @@ function UploaderDashboard() {
     }
 
     setEditingVideoId(video.id);
-    setVideoData({
-      title: video.title || '',
-      videoUrl: video.videoUrl || video.streamtapeUrl || '',
-      thumbnail: video.thumbnail || '',
-      category: video.category || 'vam',
-      description: video.description || '',
-      tags: Array.isArray(video.tags) ? video.tags.join(', ') : (video.tags || ''),
-      views: video.views || 0,
-      uploaderId: video.uploaderId || user.id,
-      uploaderName: video.uploaderName || user.username
-    });
+    setVideoData(buildEditableVideoData(video, { id: user.id, username: user.username }));
 
     const formEl = document.getElementById('admin-video-form');
     if (formEl) {
@@ -803,11 +795,12 @@ function UploaderDashboard() {
               className="input-field"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              style={{ padding: '0.5rem 0.8rem', fontSize: '0.85rem', minWidth: '120px', flex: '0 1 120px' }}
+              style={{ padding: '0.5rem 0.8rem', fontSize: '0.85rem', minWidth: '140px', flex: '0 1 150px' }}
             >
               <option value="all">Tất cả thể loại</option>
-              <option value="vam">VAM</option>
-              <option value="3d">3D</option>
+              {VIDEO_CATEGORIES.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.label}</option>
+              ))}
             </select>
 
             {/* Sort */}
@@ -934,7 +927,7 @@ function UploaderDashboard() {
                         color: video.category === 'vam' ? '#ff4d6a' : '#66c0f4',
                         textTransform: 'uppercase'
                       }}>
-                        {video.category === 'vam' ? 'VAM' : '3D'}
+                        {getVideoCategoryBadgeLabel(video.category || 'vam')}
                       </span>
                     </td>
 

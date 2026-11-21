@@ -3,15 +3,9 @@ import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Film } from 'lucide-react';
 import Pagination from '../components/Pagination';
+import { VIDEO_CATEGORY_LABELS, getVideoCategoryPageTitle } from '../constants/videoCategories';
 
-const CATEGORY_LABELS = {
-  all: 'Tất Cả Phim',
-  vam: 'Phim VAM',
-  '3d': 'Phim 3D Anime',
-  cosplay: 'Cosplay 18+',
-  vietsub: 'JAV Vietsub',
-  hentai: 'Hentai 2D'
-};
+const CATEGORY_LABELS = VIDEO_CATEGORY_LABELS;
 
 import VideoCardItem from '../components/VideoCardItem';
 import RandomVideosSlider from '../components/RandomVideosSlider';
@@ -21,7 +15,7 @@ function Videos() {
   const { videos = [], loadingVideos } = useAppContext();
 
   const currentCategory = category || 'all';
-  const pageTitle = CATEGORY_LABELS[currentCategory] || 'Tất Cả Phim';
+  const pageTitle = getVideoCategoryPageTitle(currentCategory);
 
   // Filter and sort videos by category and newest first
   const sortedVideos = useMemo(() => {

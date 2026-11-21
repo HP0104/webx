@@ -109,7 +109,11 @@ function cleanDescription(text, maxLen = 160) {
 
 const staticRoutes = [
   '/',
+  '/about',
+  '/contact',
+  '/privacy',
   '/games',
+  '/ai-search',
   '/category/hot',
   '/category/new',
   '/category/popular',
@@ -124,14 +128,20 @@ const staticRoutes = [
   '/videos/all',
   '/videos/vam',
   '/videos/3d',
+  '/videos/cosplay',
+  '/videos/vietsub',
+  '/videos/hentai',
   '/manga',
-  '/blog',
   '/report'
 ];
 
 const titleByRoute = {
   '/': 'WEB18P - Kho Game Việt Hóa và Phim Chất Lượng Cao',
+  '/about': 'Về Chúng Tôi | WEB18P',
+  '/contact': 'Liên Hệ & Hỗ Trợ | WEB18P',
+  '/privacy': 'Chính Sách Quyền Riêng Tư | WEB18P',
   '/games': 'Tất Cả Trò Chơi | WEB18P',
+  '/ai-search': 'Tìm Kiếm Game Bằng AI | WEB18P',
   '/category/hot': 'Game Hot | WEB18P',
   '/category/new': 'Game Mới Nhất | WEB18P',
   '/category/popular': 'Game Nhiều Người Chơi | WEB18P',
@@ -146,20 +156,28 @@ const titleByRoute = {
   '/videos/all': 'Tất Cả Phim | WEB18P',
   '/videos/vam': 'Phim VAM | WEB18P',
   '/videos/3d': 'Phim 3D | WEB18P',
+  '/videos/cosplay': 'Phim Cosplay | WEB18P',
+  '/videos/vietsub': 'Phim Vietsub | WEB18P',
+  '/videos/hentai': 'Phim Hentai | WEB18P',
   '/manga': 'Kho Truyện Tranh Online | WEB18P',
-  '/blog': 'Blog | WEB18P',
   '/report': 'Báo Lỗi | WEB18P'
 };
 
 const descriptionByRoute = {
   '/': 'WEB18P - Kho game Việt hóa, game PC và Android, phim VAM, 3D được cập nhật thường xuyên với link tải tốc độ cao.',
+  '/about': 'Tìm hiểu về WEB18P - Nền tảng game Việt Hóa, phim và truyện tranh online.',
+  '/contact': 'Kênh liên hệ chính thức, giải đáp kỹ thuật và tiếp nhận DMCA tại WEB18P.',
+  '/privacy': 'Cam kết bảo mật dữ liệu cá nhân và quyền riêng tư người dùng tại WEB18P.',
   '/games': 'Danh sách tất cả trò chơi Việt hóa đang có trên WEB18P.',
-  '/videos': 'Kho phim VAM, 3D sắc nét chất lượng cao cập nhật liên tục.',
+  '/ai-search': 'Tìm kiếm thông tin game bằng AI và cơ sở dữ liệu RAWG trên WEB18P.',
+  '/videos': 'Kho phim VAM, 3D, Cosplay, Vietsub, Hentai chất lượng cao cập nhật liên tục.',
   '/videos/all': 'Xem tất cả phim trên WEB18P - cập nhật liên tục với chất lượng cao.',
   '/videos/vam': 'Xem phim VAM trên WEB18P - bộ sưu tập phim VAM chất lượng cao.',
   '/videos/3d': 'Xem phim 3D trên WEB18P - bộ sưu tập phim 3D chất lượng cao.',
+  '/videos/cosplay': 'Xem phim Cosplay trên WEB18P - bộ sưu tập Cosplay chọn lọc.',
+  '/videos/vietsub': 'Xem phim Vietsub trên WEB18P - cập nhật phụ đề tiếng Việt.',
+  '/videos/hentai': 'Xem phim Hentai trên WEB18P - cập nhật liên tục chất lượng cao.',
   '/manga': 'Đọc truyện tranh online miễn phí cập nhật chương mới liên tục.',
-  '/blog': 'Bài viết chia sẻ, hướng dẫn và cập nhật từ WEB18P.',
   '/report': 'Gửi báo lỗi và góp ý cho đội ngũ WEB18P.'
 };
 
@@ -391,8 +409,9 @@ async function run() {
   }
   console.log(`[SEO Generator] Successfully generated ${generatedCount} static HTML pages.`);
 
-  // 5. Create 404 fallback
-  await copyFile(indexPath, path.join(distDir, '404.html'));
+  // 5. Preserve dedicated noindex 404.html from public/ instead of overwriting with canonical root index.html
+  const public404Path = path.join(rootDir, 'public', '404.html');
+  await copyFile(public404Path, path.join(distDir, '404.html'));
 
   // 6. Generate dynamic sitemap.xml with trailing slashes (0 redirects!)
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>

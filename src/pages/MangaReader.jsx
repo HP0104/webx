@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../App';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ChevronLeft, ChevronRight, ChevronUp, Layers, ArrowLeft, Maximize, Minimize, RotateCw } from 'lucide-react';
 import VideoAdBanner from '../components/VideoAdBanner';
@@ -13,9 +13,12 @@ const preloadedUrls = new Set();
 
 function preloadImageUrl(url) {
   if (!url || preloadedUrls.has(url)) return;
-  preloadedUrls.add(url);
   const img = new window.Image();
   img.decoding = 'async';
+  img.referrerPolicy = 'no-referrer';
+  img.onload = () => {
+    preloadedUrls.add(url);
+  };
   img.src = url;
 }
 
@@ -32,7 +35,7 @@ function MangaReader() {
   const hideNavTimer = useRef(null);
 
   const mangaItem = manga.find(m => String(m.id) === String(mangaId));
-  const chapters = mangaItem?.chapters || [];
+  const chapters = useMemo(() => mangaItem?.chapters || [], [mangaItem?.chapters]);
   const sortedChapters = [...chapters].sort((a, b) => {
     const numA = Number(a.number ?? a.chapterNumber) || 0;
     const numB = Number(b.number ?? b.chapterNumber) || 0;
@@ -61,9 +64,17 @@ function MangaReader() {
     setRestoredImages(null);
   }
 
+  const hasExistingImages = Boolean(currentChapter?.images && currentChapter.images.length > 0);
+  const currentChapterId = currentChapter?.id || null;
+  const currentChapterTitle = currentChapter?.title || '';
+  const currentChapterNumber = currentChapter?.number ?? currentChapter?.chapterNumber ?? null;
+  const uploaderId = mangaItem?.uploaderId || null;
+  const userId = user?.id || user?.uid || null;
+  const userRole = user?.role || null;
+
   // Tự động kiểm tra file khôi phục nếu có (chỉ chạy khi chapter hiện tại bị thiếu ảnh)
   useEffect(() => {
-    if (currentChapter?.images && currentChapter.images.length > 0) {
+    if (hasExistingImages) {
       return;
     }
 
@@ -72,24 +83,38 @@ function MangaReader() {
     const rawChap = chapterId || '';
     const cleanChap = rawChap.replace(/[^a-zA-Z0-9_-]/g, '');
     const compactChap = rawChap.replace(/-/g, '');
+    const matchesTargetChapter = (candidateId) => {
+      if (!candidateId) return false;
+      const cid = String(candidateId);
+      return cid === String(chapterId)
+        || (currentChapterId && cid === String(currentChapterId))
+        || (currentChapterNumber !== null && (cid === `chap-${currentChapterNumber}` || cid === `chapter-${currentChapterNumber}` || cid === String(currentChapterNumber)));
+    };
 
     const tryFetch = async () => {
       // 1. Thử file theo Chapter
-      for (const name of [rawChap, cleanChap, compactChap]) {
+      for (const name of [rawChap, cleanChap, compactChap, currentChapterId].filter(Boolean)) {
         try {
           const res = await fetch(`/restored_${name}.json?t=${Date.now()}`);
           if (res.ok) {
             const data = await res.json();
             if (!isMounted) return;
-            if (data && String(data.mangaId) === String(mangaId) && data.chapterId === chapterId && Array.isArray(data.images) && data.images.length > 0) {
+            if (data && String(data.mangaId) === String(mangaId) && matchesTargetChapter(data.chapterId) && Array.isArray(data.images) && data.images.length > 0) {
               setRestoredImages(data.images);
               // Tự động đồng bộ lên Firestore nếu user có quyền (Admin hoặc Uploader của truyện)
-              if (user && (user.role === 'admin' || user.id === mangaItem?.uploaderId)) {
+              if (userRole === 'admin' || (userId && userId === uploaderId)) {
                 const mangaRef = doc(db, 'manga', String(mangaId));
-                const updatedChapters = (mangaItem.chapters || []).map(ch => 
-                  ch.id === chapterId ? { ...ch, images: data.images, message_ids: data.messageIds || ch.message_ids } : ch
-                );
-                updateDoc(mangaRef, { chapters: updatedChapters }).catch(err => {
+                getDoc(mangaRef).then((snap) => {
+                  const latestChapters = snap.exists() ? (snap.data().chapters || []) : [];
+                  const updatedChapters = latestChapters.map(ch =>
+                    (ch.id === currentChapterId || matchesTargetChapter(ch.id))
+                      ? { ...ch, images: data.images, message_ids: data.messageIds || ch.message_ids }
+                      : ch
+                  );
+                  if (updatedChapters.length > 0) {
+                    return updateDoc(mangaRef, { chapters: updatedChapters });
+                  }
+                }).catch(err => {
                   console.warn('Auto-sync restored chapter to Firestore:', err.message);
                 });
               }
@@ -108,23 +133,28 @@ function MangaReader() {
             if (!isMounted) return;
             if (data && data.chapters) {
               let chapImgs = null;
-              if (Array.isArray(data.chapters[chapterId])) {
-                chapImgs = data.chapters[chapterId];
-              } else if (Array.isArray(data.chapters)) {
-                const found = data.chapters.find(c => c.id === chapterId || c.title === currentChapter?.title);
+              if (!Array.isArray(data.chapters)) {
+                chapImgs = data.chapters[chapterId] || (currentChapterId ? data.chapters[currentChapterId] : null);
+              } else {
+                const found = data.chapters.find(c => matchesTargetChapter(c.id) || (currentChapterTitle && c.title === currentChapterTitle));
                 if (found && Array.isArray(found.images)) chapImgs = found.images;
               }
               if (chapImgs && chapImgs.length > 0) {
                 setRestoredImages(chapImgs);
-                if (user && (user.role === 'admin' || user.id === mangaItem?.uploaderId)) {
+                if (userRole === 'admin' || (userId && userId === uploaderId)) {
                   const mangaRef = doc(db, 'manga', String(mangaId));
-                  const updatedChapters = (mangaItem.chapters || []).map(ch => {
-                    const rImgs = Array.isArray(data.chapters[ch.id]) 
-                      ? data.chapters[ch.id] 
-                      : (Array.isArray(data.chapters) ? data.chapters.find(c => c.id === ch.id || c.title === ch.title)?.images : null);
-                    return rImgs ? { ...ch, images: rImgs } : ch;
-                  });
-                  updateDoc(mangaRef, { chapters: updatedChapters }).catch(err => {
+                  getDoc(mangaRef).then((snap) => {
+                    const latestChapters = snap.exists() ? (snap.data().chapters || []) : [];
+                    const updatedChapters = latestChapters.map(ch => {
+                      const rImgs = !Array.isArray(data.chapters)
+                        ? data.chapters[ch.id]
+                        : (data.chapters.find(c => c.id === ch.id || c.title === ch.title)?.images || null);
+                      return rImgs ? { ...ch, images: rImgs } : ch;
+                    });
+                    if (updatedChapters.length > 0) {
+                      return updateDoc(mangaRef, { chapters: updatedChapters });
+                    }
+                  }).catch(err => {
                     console.warn('Auto-sync all restored chapters to Firestore:', err.message);
                   });
                 }
@@ -139,9 +169,8 @@ function MangaReader() {
 
     return () => {
       isMounted = false;
-      setRestoredImages(null);
     };
-  }, [mangaId, chapterId, user, mangaItem, currentChapter]);
+  }, [mangaId, chapterId, hasExistingImages, currentChapterId, currentChapterTitle, currentChapterNumber, uploaderId, userId, userRole]);
 
   const chapterImages = currentChapter?.images;
   const images = useMemo(() => restoredImages || chapterImages || [], [restoredImages, chapterImages]);
@@ -478,6 +507,7 @@ function LazyImage({ src, alt, index, total, onVisible }) {
               src={imageSrc}
               alt={alt}
               decoding="async"
+              referrerPolicy="no-referrer"
               loading={index < 5 ? "eager" : "auto"}
               fetchPriority={index < 3 ? "high" : "auto"}
               className={`manga-reader-page-img ${loaded ? 'loaded' : 'loading'}`}

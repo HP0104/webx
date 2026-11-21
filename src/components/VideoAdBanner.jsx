@@ -12,10 +12,20 @@ export default function VideoAdBanner({ config }) {
   const fluidPlayerInstance = useRef(null);
   const [adCycle, setAdCycle] = useState(0);
   const [hasError, setHasError] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(() => (
+    typeof window !== 'undefined' && window.innerWidth > 1024
+  ));
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth > 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // 1. Kiểm tra điều kiện mạng & thiết bị:
   // Nếu màn hình mobile/tablet (sidebar ẩn) hoặc mạng yếu / 3G / bật tiết kiệm dữ liệu -> KHÔNG tải và KHÔNG phát video
-  const isDesktop = typeof window !== 'undefined' && window.innerWidth > 1024;
   const shouldPlayVideo = networkStatus.canStreamVideo && isDesktop;
 
   useEffect(() => {
@@ -34,8 +44,18 @@ export default function VideoAdBanner({ config }) {
 
     if (!videoPlayerRef.current) return;
 
+    const videoEl = videoPlayerRef.current;
     let timer = null;
     let isCancelled = false;
+
+    const handleEnded = () => {
+      if (isCancelled) return;
+      if (!timer) {
+        timer = setTimeout(() => {
+          setAdCycle((prev) => prev + 1);
+        }, 45000);
+      }
+    };
 
     // Hủy instance cũ trước khi tạo mới
     if (fluidPlayerInstance.current) {
@@ -104,15 +124,6 @@ export default function VideoAdBanner({ config }) {
         });
 
         // Lắng nghe sự kiện ended trên thẻ video làm lớp bảo vệ dự phòng
-        const videoEl = videoPlayerRef.current;
-        const handleEnded = () => {
-          if (isCancelled) return;
-          if (!timer) {
-            timer = setTimeout(() => {
-              setAdCycle((prev) => prev + 1);
-            }, 45000);
-          }
-        };
         videoEl?.addEventListener('ended', handleEnded);
 
         setHasError(prev => prev ? false : prev);
@@ -127,6 +138,7 @@ export default function VideoAdBanner({ config }) {
     return () => {
       isCancelled = true;
       if (timer) clearTimeout(timer);
+      videoEl?.removeEventListener('ended', handleEnded);
       if (fluidPlayerInstance.current) {
         try {
           fluidPlayerInstance.current.destroy();
@@ -138,9 +150,14 @@ export default function VideoAdBanner({ config }) {
     };
   }, [shouldPlayVideo, adCycle, config?.vastUrl, config?.zoneId]);
 
+  // Nếu màn hình nhỏ -> ẩn hoàn toàn mà không báo nhầm về kết nối mạng
+  if (!isDesktop) {
+    return null;
+  }
+
   // Nếu mạng yếu hoặc đang bật tiết kiệm dữ liệu -> Ẩn khung video ad
   // để nhường toàn bộ băng thông cho phim/truyện và để banner ảnh phía dưới hoạt động
-  if (!shouldPlayVideo) {
+  if (!networkStatus.canStreamVideo) {
     return (
       <div
         style={{

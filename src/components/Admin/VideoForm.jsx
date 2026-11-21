@@ -22,16 +22,11 @@ import {
   parseVideoUrl, 
   getVideoProviderName 
 } from '../../utils/videoUtils';
+import { VIDEO_CATEGORIES } from '../../constants/videoCategories';
+import { parseSeriesBatchText, shouldAutoFetchThumbnailOnBlur } from '../../utils/videoFormUtils';
 
 const POPULAR_TAGS = ['18+', 'Không Che', 'Vietsub', 'Full HD', 'VAM', 'Cosplay', '3D Anime', '60FPS', 'AI Remaster'];
-const CATEGORIES = [
-  { id: 'vam', label: 'VAM' },
-  { id: '3d', label: '3D Anime' },
-  { id: 'cosplay', label: 'Cosplay 18+' },
-  { id: 'vietsub', label: 'JAV Vietsub' },
-  { id: 'hentai', label: 'Hentai 2D' },
-  { id: 'other', label: 'Khác' }
-];
+const CATEGORIES = VIDEO_CATEGORIES;
 
 function VideoForm({
   videoData,
@@ -48,6 +43,15 @@ function VideoForm({
   // Batch paste modal state
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchText, setBatchText] = useState('');
+  const [prevEditingVideoId, setPrevEditingVideoId] = useState(editingVideoId);
+
+  if (prevEditingVideoId !== editingVideoId) {
+    setPrevEditingVideoId(editingVideoId);
+    setShowPreview(false);
+    setPreviewEpUrl('');
+    setThumbError(false);
+    setShowBatchModal(false);
+  }
 
   const isSeries = Boolean(videoData.isSeries);
   const episodesList = Array.isArray(videoData.episodes) ? videoData.episodes : [];
@@ -55,8 +59,11 @@ function VideoForm({
   // Detected provider info for single video
   const providerInfo = useMemo(() => {
     if (!videoData.videoUrl?.trim()) return null;
-    const isEmbed = videoData.videoUrl.trim().toLowerCase().startsWith('<iframe') || videoData.videoUrl.trim().toLowerCase().startsWith('<script');
-    if (isEmbed) {
+    const lowerUrl = videoData.videoUrl.trim().toLowerCase();
+    if (lowerUrl.startsWith('<script')) {
+      return { name: 'Thẻ <script> không hỗ trợ', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)', isEmbed: false };
+    }
+    if (lowerUrl.startsWith('<iframe')) {
       return { name: 'Mã Iframe Nhúng', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.15)', isEmbed: true };
     }
     const parsed = parseVideoUrl(videoData.videoUrl);
@@ -76,12 +83,11 @@ function VideoForm({
 
   const handleUrlInput = (rawVal, preventDefaultEvent = null) => {
     const { videoUrl: extractedUrl, thumbnail, title } = extractVideoInfoFromPaste(rawVal);
-    const isScriptEmbed = rawVal && rawVal.trim().toLowerCase().startsWith('<script');
-    
+
     let cleanUrl = rawVal;
     if (extractedUrl && rawVal.trim().toLowerCase().startsWith('<iframe')) {
       cleanUrl = extractedUrl;
-    } else if (isScriptEmbed) {
+    } else if (rawVal && rawVal.trim().toLowerCase().startsWith('<script')) {
       cleanUrl = rawVal;
     } else {
       cleanUrl = extractedUrl || rawVal;
@@ -249,43 +255,24 @@ function VideoForm({
   };
 
   const handleBatchPasteSubmit = () => {
-    if (!batchText.trim()) return;
-    const lines = batchText.split('\n').map(l => l.trim()).filter(Boolean);
-    const newEps = [];
-    const baseCount = episodesList.length;
-
-    lines.forEach((line, idx) => {
-      const epNum = baseCount + idx + 1;
-      let epTitle = `Tập ${epNum}`;
-      let epUrl = line;
-
-      if (line.includes('|')) {
-        const parts = line.split('|');
-        epTitle = parts[0].trim();
-        epUrl = parts.slice(1).join('|').trim();
-      } else {
-        const m = line.match(/^(?:Tập|Tap|Ep|Episode|Chương|Part)\s*(\d+)[\s:.-]*(.*)$/i);
-        if (m) {
-          epTitle = `Tập ${m[1]}${m[2] ? ': ' + m[2].trim() : ''}`;
-        }
-      }
-
-      const { videoUrl: extractedUrl } = extractVideoInfoFromPaste(epUrl);
-      newEps.push({
-        id: `ep_${Date.now()}_${epNum}`,
-        episodeNumber: epNum,
-        title: epTitle,
-        videoUrl: extractedUrl || epUrl
-      });
-    });
+    const { episodes: newEps, invalidLines } = parseSeriesBatchText(batchText, episodesList.length);
+    if (invalidLines.length > 0 && newEps.length === 0) {
+      alert(`Không tìm thấy link video hợp lệ ở các dòng sau:\n${invalidLines.slice(0, 5).join('\n')}`);
+      return;
+    }
 
     if (newEps.length > 0) {
       setVideoData(prev => ({
         ...prev,
         episodes: [...(prev.episodes || []), ...newEps]
       }));
-      setBatchText('');
-      setShowBatchModal(false);
+      if (invalidLines.length > 0) {
+        alert(`Đã thêm ${newEps.length} tập hợp lệ. Bỏ qua ${invalidLines.length} dòng thiếu link:\n${invalidLines.slice(0, 5).join('\n')}`);
+        setBatchText(invalidLines.join('\n'));
+      } else {
+        setBatchText('');
+        setShowBatchModal(false);
+      }
     }
   };
 
@@ -321,11 +308,13 @@ function VideoForm({
       finalVideoUrl = finalEpisodes[0].videoUrl;
     } else {
       const { videoUrl: extractedUrl } = extractVideoInfoFromPaste(videoData.videoUrl);
-      const isScriptEmbed = videoData.videoUrl && videoData.videoUrl.trim().toLowerCase().startsWith('<script');
       finalVideoUrl = videoData.videoUrl ? videoData.videoUrl.trim() : '';
+      if (finalVideoUrl.toLowerCase().startsWith('<script')) {
+        return alert('Trình phát không hỗ trợ mã <script>. Vui lòng dán URL trực tiếp hoặc thẻ <iframe> hợp lệ!');
+      }
       if (extractedUrl && finalVideoUrl.toLowerCase().startsWith('<iframe')) {
         finalVideoUrl = extractedUrl;
-      } else if (!isScriptEmbed) {
+      } else {
         finalVideoUrl = (extractedUrl || finalVideoUrl).trim();
       }
       if (!finalVideoUrl) return alert('Vui lòng nhập link video!');
@@ -687,7 +676,11 @@ function VideoForm({
                 value={videoData.videoUrl || ''}
                 onChange={e => handleUrlInput(e.target.value)}
                 onPaste={handlePaste}
-                onBlur={(e) => handleFetchThumbnail(e.target.value, true)}
+                onBlur={(e) => {
+                  if (shouldAutoFetchThumbnailOnBlur(videoData.thumbnail)) {
+                    handleFetchThumbnail(e.target.value, true);
+                  }
+                }}
                 style={{ flex: '1 1 280px', minWidth: '220px', margin: 0 }}
                 required={!isSeries}
               />
@@ -800,11 +793,7 @@ function VideoForm({
             placeholder="Dán link ảnh bìa trực tiếp (https://...)"
             value={videoData.thumbnail || ''}
             onChange={e => {
-              let val = e.target.value;
-              if (val.match(/_t\.(jpg|jpeg|png|webp)$/i)) {
-                val = val.replace(/_t\.(jpg|jpeg|png|webp)$/i, '.$1');
-              }
-              setVideoData({ ...videoData, thumbnail: val });
+              setVideoData({ ...videoData, thumbnail: e.target.value });
               setThumbError(false);
             }}
             style={{ margin: 0, width: '100%' }}

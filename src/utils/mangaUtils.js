@@ -24,16 +24,16 @@ export const IMGBB_API_KEY_STORAGE = 'web18p_imgbb_api_key';
 export const FREEIMAGE_API_KEY_STORAGE = 'web18p_freeimage_api_key';
 export const MANGA_STORAGE_PROVIDER_KEY = 'web18p_manga_storage_provider';
 
-export const FREEIMAGE_API_KEY = '6d207e02198a847aa98d0a2a901485a5';
+export const FREEIMAGE_API_KEY =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FREEIMAGE_API_KEY) || '';
 
-// Built-in ImgBB API keys for automatic rotation (bypasses rate limits)
-export const IMGBB_DEFAULT_KEYS = [
-  '25212dbe2483e698d28894d12bd4d166',
-  'be9cdc33d246da2bd729274a6e23e67b',
-  '9e60abf5cfb402639db6f621c1ec006a',
-  'b6e2d2c5bea4ac5fc20063de50e5f370',
-  '1808feec63ae10b325c569773e9b60b6'
-];
+// ImgBB default keys come only from optional build env (no secrets hardcoded in source)
+export const IMGBB_DEFAULT_KEYS = (
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_IMGBB_API_KEYS) || ''
+)
+  .split(',')
+  .map(k => k.trim())
+  .filter(Boolean);
 
 export const TELEGRAM_CDN_DOMAIN = 'https://img-cdn.takarvn.workers.dev';
 export const TELEGRAM_UPLOAD_KEY_STORAGE = 'web18p_telegram_upload_key';
@@ -166,8 +166,11 @@ export async function uploadToImgBB(file, apiKey, customName = '', shouldOptimiz
     }
   }
 
-  // Use default key if none provided
-  const effectiveKey = apiKey?.trim() || IMGBB_DEFAULT_KEYS[Math.floor(Math.random() * IMGBB_DEFAULT_KEYS.length)];
+  const keyList = resolveImgBBKeys(apiKey);
+  const effectiveKey = keyList[Math.floor(Math.random() * keyList.length)] || '';
+  if (!effectiveKey) {
+    throw new Error('Chưa có API Key ImgBB. Vui lòng nhập API Key ImgBB cá nhân trong phần cấu hình!');
+  }
 
   const formData = new FormData();
   if (customName) {
@@ -805,23 +808,29 @@ export async function uploadToCatbox(file, customName = '', shouldOptimize = tru
 
       const responseText = await response.text();
 
-      // Try parsing as JSON first (Worker proxy response)
+      // Try parsing as JSON first (Worker proxy response), keeping error throws outside JSON.parse try
+      let parsedWorkerResult = null;
+      let parsedAsJson = false;
       try {
-        const result = JSON.parse(responseText);
-        if (result?.success && result?.url) {
-          return {
-            url: result.url,
-            thumb: result.thumb || result.url
-          };
-        }
-        if (result?.error) {
-          throw new Error(result.error);
-        }
+        parsedWorkerResult = JSON.parse(responseText);
+        parsedAsJson = true;
       } catch {
         // Not JSON - check if it's a direct Catbox URL (Vite proxy response)
         if (responseText.trim().startsWith('https://files.catbox.moe/')) {
           const url = responseText.trim();
           return { url, thumb: url };
+        }
+      }
+
+      if (parsedAsJson && parsedWorkerResult) {
+        if (parsedWorkerResult.success && parsedWorkerResult.url) {
+          return {
+            url: parsedWorkerResult.url,
+            thumb: parsedWorkerResult.thumb || parsedWorkerResult.url
+          };
+        }
+        if (parsedWorkerResult.error) {
+          throw new Error(parsedWorkerResult.error);
         }
       }
 
@@ -1929,13 +1938,18 @@ export function parseTelegramExportJson(rawJson, cdnDomain = TELEGRAM_CDN_DOMAIN
       };
     } else if (msg.media_group_id && currentGroupContext && currentGroupContext.mediaGroupId === msg.media_group_id) {
       currentGroupContext.counter += 1;
-    } else if (!currentGroupContext) {
+    } else if (currentGroupContext) {
+      // Standalone captionless follow-up photo (different or missing media_group_id): advance page sequentially
+      currentGroupContext.counter += 1;
+      currentGroupContext.mediaGroupId = msg.media_group_id || null;
+    } else {
       currentGroupContext = {
         mangaTitle: 'Truyện Telegram',
         chapterTitle: 'Chapter 1',
         startPage: 1,
         endPage: 1,
         totalPages: 0,
+        mediaGroupId: msg.media_group_id || null,
         counter: 0
       };
     }
@@ -1981,6 +1995,7 @@ export function parseTelegramExportJson(rawJson, cdnDomain = TELEGRAM_CDN_DOMAIN
 
   // Format sang danh sách chuẩn webx
   const formattedMangas = [];
+  let chapUidSeq = 0;
   mangasMap.forEach((chaptersMap, mangaTitle) => {
     const chaptersList = [];
     chaptersMap.forEach((chData, chapTitle) => {
@@ -2003,7 +2018,7 @@ export function parseTelegramExportJson(rawJson, cdnDomain = TELEGRAM_CDN_DOMAIN
       const missingCount = Math.max(0, expected - totalImages);
 
       chaptersList.push({
-        id: `ch-restored-${slugify(chapTitle)}-${Date.now()}`,
+        id: `ch-restored-${slugify(chapTitle)}-${Date.now()}-${chapUidSeq++}`,
         number: extractChapterNumericValue({ title: chapTitle, name: chapTitle }),
         title: chapTitle,
         images: uniquePages.map(p => p.url),
@@ -2034,7 +2049,37 @@ export function parseTelegramExportJson(rawJson, cdnDomain = TELEGRAM_CDN_DOMAIN
   return { mangas: formattedMangas };
 }
 
-// ============ TELEGRAM MESSAGE DELETION HELPERS ============
+/**
+ * Return the highest-numbered chapter from an array (without assuming pre-sorted order).
+ */
+export function getLatestMangaChapter(chapters = []) {
+  if (!Array.isArray(chapters) || chapters.length === 0) return null;
+  let best = chapters[0];
+  let bestNum = extractChapterNumericValue(best) ?? -1;
+  for (let i = 1; i < chapters.length; i++) {
+    const ch = chapters[i];
+    const num = extractChapterNumericValue(ch) ?? i;
+    if (num >= bestNum) {
+      bestNum = num;
+      best = ch;
+    }
+  }
+  return best;
+}
+
+/**
+ * Compute next collision-free chapter number (max existing + 1).
+ */
+export function getNextChapterNumber(chapters = []) {
+  if (!Array.isArray(chapters) || chapters.length === 0) return 1;
+  let maxNum = 0;
+  chapters.forEach((ch, idx) => {
+    const val = extractChapterNumericValue(ch);
+    const num = Number.isFinite(val) ? val : (idx + 1);
+    if (num > maxNum) maxNum = num;
+  });
+  return Math.floor(maxNum) + 1;
+}
 
 /**
  * Trích xuất Telegram file_id từ một URL ảnh CDN
@@ -2100,42 +2145,25 @@ export async function deleteTelegramMessages(messageIds = [], options = {}) {
     }
     throw new Error(data.error || `HTTP ${res.status}`);
   } catch (err) {
-    console.warn('[deleteTelegramMessages] Worker API không phản hồi, thử xóa trực tiếp qua Bot API Telegram:', err.message);
-    const botToken = options.botToken || '8762474365:AAE8cgyYGC8GoV6tQ5mZi7Ye8tj5Du-FQpo';
-    const chatId = options.chat_id || '-1004320007781';
-    let deletedCount = 0;
-    const BATCH_SIZE = 100;
-
-    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-      const chunk = ids.slice(i, i + BATCH_SIZE);
-      try {
-        const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/deleteMessages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, message_ids: chunk })
-        });
-        const tgData = await tgRes.json();
-        if (tgData.ok) {
-          deletedCount += chunk.length;
-        } else {
-          // Thử xóa đơn lẻ nếu có tin nhắn không tồn tại
-          for (const mid of chunk) {
-            try {
-              const sRes = await fetch(`https://api.telegram.org/bot${botToken}/deleteMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: chatId, message_id: mid })
-              });
-              const sData = await sRes.json();
-              if (sData.ok) deletedCount++;
-            } catch {}
-          }
-        }
-      } catch (e) {
-        console.warn('Telegram direct delete error:', e);
+    console.warn('[deleteTelegramMessages] Worker API lỗi:', err.message);
+    if (options.botToken && options.chat_id) {
+      let deletedCount = 0;
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        const chunk = ids.slice(i, i + BATCH_SIZE);
+        try {
+          const tgRes = await fetch(`https://api.telegram.org/bot${options.botToken}/deleteMessages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: options.chat_id, message_ids: chunk })
+          });
+          const tgData = await tgRes.json();
+          if (tgData.ok) deletedCount += chunk.length;
+        } catch {}
       }
+      return { success: true, deleted_count: deletedCount, fallback: true };
     }
-    return { success: true, deleted_count: deletedCount, fallback: true };
+    throw err;
   }
 }
 
@@ -2184,22 +2212,6 @@ export async function deleteMangaFromTelegram(manga, options = {}) {
   if (manga.cover_message_id) {
     const n = Number(manga.cover_message_id);
     if (Number.isInteger(n) && n > 0) messageIds.add(n);
-  }
-
-  // 4. Nếu là các bộ truyện đặc biệt đã có sẵn phạm vi message IDs
-  const titleLower = (manga.title || '').toLowerCase().trim();
-  if (messageIds.size === 0) {
-    if (titleLower.includes('nhiễm nhiễm') || titleLower.includes('nhiem nhiem')) {
-      for (let id = 3474; id <= 5967; id++) messageIds.add(id);
-    } else if (titleLower.includes('chuyện tình của vợ') || titleLower.includes('chuyen tinh cua vo')) {
-      for (let id = 1; id <= 550; id++) messageIds.add(id);
-    } else if (titleLower.includes('tiết tiết hỏa') || titleLower.includes('tiet tiet hoa')) {
-      for (let id = 2200; id <= 3450; id++) messageIds.add(id);
-    } else if (titleLower.includes('hoa hồng trầm luân') || titleLower.includes('hoa hong tram luan')) {
-      for (let id = 1500; id <= 2200; id++) messageIds.add(id);
-    } else if (titleLower.includes('nhân thê dụ hoặc') || titleLower.includes('nhan the du hoac')) {
-      for (let id = 900; id <= 1500; id++) messageIds.add(id);
-    }
   }
 
   const idsArray = Array.from(messageIds);

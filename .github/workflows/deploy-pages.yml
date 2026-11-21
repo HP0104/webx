@@ -45,6 +45,8 @@ jobs:
           VITE_STREAMHG_FOLDER_ID: ${{ secrets.VITE_STREAMHG_FOLDER_ID }}
           VITE_RAWG_API_KEY: ${{ secrets.VITE_RAWG_API_KEY }}
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
+          VITE_FREEIMAGE_API_KEY: ${{ secrets.VITE_FREEIMAGE_API_KEY }}
+          VITE_IMGBB_API_KEYS: ${{ secrets.VITE_IMGBB_API_KEYS }}
 
       - name: Generate SEO files
         run: node scripts/generate-seo-pages.mjs

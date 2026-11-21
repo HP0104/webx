@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Eye, Calendar, Tag, Film, Layers, Flame, Sparkles } from 'lucide-react';
 import { getVideoThumbnail, toEmbedUrl } from '../utils/videoUtils';
+import { getVideoCategoryBadgeLabel } from '../constants/videoCategories';
 
 export default function VideoCardItem({ video }) {
   const [mountedTime] = useState(() => Date.now());
@@ -195,7 +196,7 @@ export default function VideoCardItem({ video }) {
           </div>
         </div>
         <span className="video-card-badge">
-          {video.category === 'vam' ? 'VAM' : '3D'}
+          {getVideoCategoryBadgeLabel(video.category || 'vam')}
         </span>
         {newBadge && (
           <span

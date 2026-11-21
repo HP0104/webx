@@ -2,7 +2,8 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { Play, Eye, Calendar, Tag, Film, ArrowLeft, ChevronRight, Download, Loader2, Maximize, Minimize, RotateCcw, Server, Smartphone, Layers } from 'lucide-react';
-import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getDownloadUrl, isDirectVideo, getAlternateEmbedUrl } from '../utils/videoUtils';
+import { toEmbedUrl, getVideoThumbnail as getVideoThumbnailFromUtils, getDownloadUrl, isDirectVideo, getAlternateEmbedUrl, isTrustedEmbedUrl } from '../utils/videoUtils';
+import { getVideoCategoryBadgeLabel } from '../constants/videoCategories';
 import ErrorReportButton from '../components/ErrorReportButton';
 import { doc, updateDoc, increment, collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -19,7 +20,7 @@ function getVideoThumbnail(url) {
   return getVideoThumbnailFromUtils(url);
 }
 
-function VideoDetail() {
+function VideoDetailContent() {
   const { videoId } = useParams();
   const { videos = [], loadingVideos, user } = useAppContext();
   const navigate = useNavigate();
@@ -288,9 +289,11 @@ function VideoDetail() {
 
   useEffect(() => {
     if (video?.id) {
-      const viewedKey = `video_viewed_${video.id}`;
-      if (sessionStorage.getItem(viewedKey)) return;
-      sessionStorage.setItem(viewedKey, '1');
+      try {
+        const viewedKey = `video_viewed_${video.id}`;
+        if (sessionStorage.getItem(viewedKey)) return;
+        sessionStorage.setItem(viewedKey, '1');
+      } catch {}
 
       const videoRef = doc(db, 'videos', video.id.toString());
       updateDoc(videoRef, {
@@ -311,14 +314,6 @@ function VideoDetail() {
     }
     return () => clearTimeout(timer);
   }, [iframeLoading]);
-
-  // Vô hiệu hóa popup quảng cáo (popunder) khi đang ở trang xem video
-  useEffect(() => {
-    window.disablePopunder = true;
-    return () => {
-      window.disablePopunder = false;
-    };
-  }, []);
 
   // Tự động Preconnect & DNS-Prefetch tới máy chủ video để tối ưu tốc độ kết nối luồng
   useEffect(() => {
@@ -422,7 +417,7 @@ function VideoDetail() {
         <Link to="/videos/all">Phim</Link>
         <ChevronRight size={14} />
         <Link to={`/videos/${video.category || 'all'}`}>
-          {video.category === 'vam' ? 'VAM' : video.category === '3d' ? '3D' : 'Tất cả'}
+          {getVideoCategoryBadgeLabel(video.category || 'all')}
         </Link>
         <ChevronRight size={14} />
         <span>{video.title}</span>
@@ -431,6 +426,7 @@ function VideoDetail() {
       {/* Video Player: Phim Bộ (SeamlessSeriesPlayer với Double-Buffering) hoặc Phim Lẻ */}
       {isSeries ? (
         <SeamlessSeriesPlayer
+          key={video.id}
           episodes={episodes}
           currentEpisodeIndex={currentEpisodeIndex}
           onEpisodeChange={handleEpisodeChange}
@@ -526,82 +522,7 @@ function VideoDetail() {
                   autoPlay={true}
                   onEnded={() => {}}
                 />
-              ) : rawUrl && rawUrl.trim().toLowerCase().startsWith('<iframe') ? (
-                /* SECURITY: Parse iframe src and validate against trusted domains instead of using dangerouslySetInnerHTML */
-                (() => {
-                  const TRUSTED_DOMAINS = [
-                    'streamtape.com', 'streamtape.to',
-                    'filemoon.sx', 'filemoon.to', 'filemoon.in', 'fmoonembed.com',
-                    'streamhg.com', 'hgcloud.to', 'vibuxer.com', 'huntrexus.com',
-                    'doodstream.com', 'dood.pm', 'dood.to', 'dood.so', 'dood.watch', 'dood.wf', 'ds2play.com', 'd0000d.com',
-                    'upstream.to',
-                    'mixdrop.co', 'mixdrop.to', 'mixdrop.sx',
-                    'vidoza.net',
-                    'voe.sx',
-                    'mp4upload.com',
-                    'wishonly.site',
-                    'player.vimeo.com',
-                    'youtube.com', 'youtube-nocookie.com',
-                    'iframe.mediadelivery.net'
-                  ];
-                  try {
-                    if (effectiveIframeSrc) {
-                      const hostname = new URL(effectiveIframeSrc).hostname.toLowerCase();
-                      const isTrusted = TRUSTED_DOMAINS.some(domain => hostname === domain || hostname.endsWith('.' + domain));
-                      if (isTrusted) {
-                        return (
-                          <>
-                            {iframeLoading && (
-                              <div style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '100%',
-                                height: '100%',
-                                backgroundColor: 'rgba(13, 17, 23, 0.6)',
-                                pointerEvents: 'none',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                zIndex: 1,
-                                gap: '0.8rem',
-                                color: 'var(--color-text-light)'
-                              }}>
-                                <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-accent)' }} />
-                                <span style={{ fontSize: '0.9rem', color: 'var(--color-text-light)', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>Đang tải luồng phát video...</span>
-                              </div>
-                            )}
-                            <iframe
-                              key={`${effectiveIframeSrc}-${reloadKey}`}
-                              src={effectiveIframeSrc.includes('?') ? `${effectiveIframeSrc}&autoplay=1` : `${effectiveIframeSrc}?autoplay=1`}
-                              width="100%"
-                              height="100%"
-                              allowFullScreen
-                              webkitallowfullscreen="true"
-                              mozallowfullscreen="true"
-                              frameBorder="0"
-                              scrolling="no"
-                              loading="eager"
-                              referrerPolicy="no-referrer-when-downgrade"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *"
-                              onLoad={() => setIframeLoading(false)}
-                              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
-                            />
-                          </>
-                        );
-                      }
-                    }
-                  } catch (e) {
-                    console.warn('Failed to parse embed code:', e.message);
-                  }
-                  return (
-                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d1117', color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem' }}>
-                      ⚠️ Embed code không hợp lệ hoặc domain không được tin cậy. Vui lòng liên hệ Admin.
-                    </div>
-                  );
-                })()
-              ) : (
+              ) : isTrustedEmbedUrl(effectiveIframeSrc) ? (
                 <>
                   {iframeLoading && (
                     <div style={{
@@ -626,7 +547,7 @@ function VideoDetail() {
                   )}
                   <iframe
                     key={`${effectiveIframeSrc}-${reloadKey}`}
-                    src={effectiveIframeSrc ? (effectiveIframeSrc.includes('?') ? `${effectiveIframeSrc}&autoplay=1` : `${effectiveIframeSrc}?autoplay=1`) : ''}
+                    src={effectiveIframeSrc.includes('?') ? `${effectiveIframeSrc}&autoplay=1` : `${effectiveIframeSrc}?autoplay=1`}
                     width="100%"
                     height="100%"
                     allowFullScreen
@@ -638,9 +559,13 @@ function VideoDetail() {
                     referrerPolicy="no-referrer-when-downgrade"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen *"
                     onLoad={() => setIframeLoading(false)}
-                    style={{ border: 'none' }}
+                    style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
                   />
                 </>
+              ) : (
+                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d1117', color: 'var(--color-text-muted)', fontSize: '0.9rem', textAlign: 'center', padding: '2rem' }}>
+                  ⚠️ Link hoặc mã nhúng không hợp lệ / thuộc domain không được tin cậy. Vui lòng liên hệ Admin.
+                </div>
               )}
             </div>
           </div>
@@ -980,4 +905,7 @@ function VideoDetail() {
   );
 }
 
-export default VideoDetail;
+export default function VideoDetail() {
+  const { videoId } = useParams();
+  return <VideoDetailContent key={videoId} />;
+}

@@ -165,6 +165,7 @@ async function runTestSuite() {
   console.log("[3/4] Bắt đầu duyệt kiểm thử từng tính năng & luồng người dùng...\n");
 
   const results = [];
+  const discoveredRoutes = {};
 
   const testCases = [
     {
@@ -173,7 +174,7 @@ async function runTestSuite() {
       check: async () => {
         const title = await cdp.evaluate('document.title');
         const heroExists = await cdp.evaluate('Boolean(document.querySelector(".navbar, .nav-container"))');
-        const cardsCount = await cdp.evaluate('document.querySelectorAll(".game-card, .video-card-item, a[href*=\'/game/\']").length');
+        const cardsCount = await cdp.evaluate('document.querySelectorAll(".game-card, .video-card, a[href*=\'/game/\']").length');
         return {
           pass: title.includes("WEB18P") && heroExists,
           details: `Title: "${title}", tìm thấy ${cardsCount} thẻ nội dung`
@@ -215,6 +216,8 @@ async function runTestSuite() {
       check: async () => {
         const title = await cdp.evaluate('document.title');
         const gameItems = await cdp.evaluate('document.querySelectorAll(".game-card, .card").length');
+        const firstGameHref = await cdp.evaluate('document.querySelector("a[href*=\'/game/\']")?.getAttribute("href") || ""');
+        if (firstGameHref) discoveredRoutes.game = firstGameHref;
         return {
           pass: title.includes("Trò Chơi") || title.includes("Kho Game") || title.includes("WEB18P"),
           details: `Title: "${title}", ${gameItems} cards`
@@ -223,14 +226,16 @@ async function runTestSuite() {
     },
     {
       name: "Chi Tiết Game & Nút Mua/Tải (/game/...)",
-      path: "/game/freshman-project-sex",
+      getPath: () => discoveredRoutes.game || "/games",
       check: async () => {
-        const title = await cdp.evaluate('document.title');
+        if (!discoveredRoutes.game) {
+          return { pass: false, details: "Không tìm thấy link game hợp lệ từ /games" };
+        }
         const buyButton = await cdp.evaluate('Boolean(document.querySelector(".detail-buy-panel button, .detail-buy-panel a"))');
         const notFound = await cdp.evaluate('document.body.innerText.includes("Không tìm thấy game!")');
         return {
           pass: buyButton && !notFound,
-          details: buyButton ? "Panel mua/tải game hiển thị đầy đủ" : "Thiếu panel mua/tải"
+          details: buyButton ? `Panel mua/tải game hiển thị đầy đủ (${discoveredRoutes.game})` : "Thiếu panel mua/tải"
         };
       }
     },
@@ -239,7 +244,9 @@ async function runTestSuite() {
       path: "/videos/all",
       check: async () => {
         const title = await cdp.evaluate('document.title');
-        const videoCards = await cdp.evaluate('document.querySelectorAll(".video-card-item, a[href*=\'/video/\']").length');
+        const videoCards = await cdp.evaluate('document.querySelectorAll(".video-card, a[href*=\'/video/\']").length');
+        const firstVideoHref = await cdp.evaluate('document.querySelector("a[href*=\'/video/\']")?.getAttribute("href") || ""');
+        if (firstVideoHref) discoveredRoutes.video = firstVideoHref;
         return {
           pass: title.includes("Phim") || title.includes("WEB18P"),
           details: `Tìm thấy ${videoCards} video trong danh mục`
@@ -247,16 +254,18 @@ async function runTestSuite() {
       }
     },
     {
-      name: "Trang Xem Phim (/video/1783264708316)",
-      path: "/video/1783264708316",
+      name: "Trang Xem Phim (/video/...)",
+      getPath: () => discoveredRoutes.video || "/videos/all",
       check: async () => {
-        const title = await cdp.evaluate('document.title');
+        if (!discoveredRoutes.video) {
+          return { pass: false, details: "Không tìm thấy link video hợp lệ từ /videos/all" };
+        }
         const playerExists = await cdp.evaluate('Boolean(document.querySelector(".video-detail-player, iframe, video, .video-player-overlay"))');
         const notFoundGlitch = await cdp.evaluate('document.body.innerText.includes("Không tìm thấy video")');
         const serverButtons = await cdp.evaluate('document.querySelectorAll(".video-server-btn").length');
         return {
           pass: playerExists && !notFoundGlitch,
-          details: `Khung phát video sẵn sàng, ${serverButtons} nút máy chủ phát`
+          details: `Khung phát video sẵn sàng (${discoveredRoutes.video}), ${serverButtons} nút máy chủ phát`
         };
       }
     },
@@ -266,6 +275,8 @@ async function runTestSuite() {
       check: async () => {
         const title = await cdp.evaluate('document.title');
         const mangaCards = await cdp.evaluate('document.querySelectorAll("a[href*=\'/manga/\']").length');
+        const firstMangaHref = await cdp.evaluate('document.querySelector("a[href*=\'/manga/\']")?.getAttribute("href") || ""');
+        if (firstMangaHref) discoveredRoutes.manga = firstMangaHref;
         return {
           pass: title.includes("Truyện") || title.includes("WEB18P"),
           details: `Title: "${title}", tìm thấy ${mangaCards} link truyện`
@@ -273,25 +284,32 @@ async function runTestSuite() {
       }
     },
     {
-      name: "Chi Tiết Truyện (/manga/1788253638453)",
-      path: "/manga/1788253638453",
+      name: "Chi Tiết Truyện (/manga/...)",
+      getPath: () => discoveredRoutes.manga || "/manga",
       check: async () => {
-        const chapterList = await cdp.evaluate('Boolean(document.querySelector("a[href*=\'/chapter/\']"))');
+        if (!discoveredRoutes.manga) {
+          return { pass: false, details: "Không tìm thấy link truyện hợp lệ từ /manga" };
+        }
+        const firstChapterHref = await cdp.evaluate('document.querySelector("a[href*=\'/chapter/\']")?.getAttribute("href") || ""');
+        if (firstChapterHref) discoveredRoutes.chapter = firstChapterHref;
         return {
-          pass: chapterList,
-          details: chapterList ? "Danh sách chương truyện tải đầy đủ" : "Chưa tìm thấy danh sách chương"
+          pass: Boolean(firstChapterHref),
+          details: firstChapterHref ? `Danh sách chương truyện tải đầy đủ (${discoveredRoutes.manga})` : "Chưa tìm thấy danh sách chương"
         };
       }
     },
     {
       name: "Đọc Truyện Tranh (/manga/.../chapter/...)",
-      path: "/manga/1791559799510/chapter/chap-1",
+      getPath: () => discoveredRoutes.chapter || discoveredRoutes.manga || "/manga",
       check: async () => {
+        if (!discoveredRoutes.chapter) {
+          return { pass: false, details: "Không tìm thấy link chapter hợp lệ từ chi tiết truyện" };
+        }
         const readerExists = await cdp.evaluate('Boolean(document.querySelector(".manga-reader, .manga-reader-images"))');
         const notFoundGlitch = await cdp.evaluate('document.body.innerText.includes("Không tìm thấy chương")');
         return {
           pass: readerExists && !notFoundGlitch,
-          details: readerExists ? "Trình đọc truyện dọc mượt mà" : "Lỗi không tìm thấy chương"
+          details: readerExists ? `Trình đọc truyện dọc mượt mà (${discoveredRoutes.chapter})` : "Lỗi không tìm thấy chương"
         };
       }
     },
@@ -378,7 +396,8 @@ async function runTestSuite() {
 
   for (const tc of testCases) {
     cdp.clearLogs();
-    const url = `${BASE_URL}${tc.path}`;
+    const targetPath = typeof tc.getPath === 'function' ? tc.getPath() : tc.path;
+    const url = `${BASE_URL}${targetPath}`;
     await cdp.send('Page.navigate', { url });
 
     // Đợi page nạp và render React

@@ -4,6 +4,7 @@ import { Wallet, User, LogOut, ShieldAlert, Menu, X, ChevronDown, Search, Film }
 import { useAppContext } from '../App';
 import { getGamePath } from '../utils/gameRoutes';
 import { matchSearch } from '../utils/searchUtils';
+import { getVideoThumbnail } from '../utils/videoUtils';
 
 function Navbar() {
   const { user, logout, balance, games, videos = [], manga = [] } = useAppContext();
@@ -96,14 +97,26 @@ function Navbar() {
       name: 'Phim', 
       path: '/videos/all',
       dropdown: [
+        { name: 'Tất Cả Phim', path: '/videos/all' },
         { name: 'VAM', path: '/videos/vam' },
-        { name: '3D', path: '/videos/3d' }
+        { name: '3D Anime', path: '/videos/3d' },
+        { name: 'Cosplay 18+', path: '/videos/cosplay' },
+        { name: 'JAV Vietsub', path: '/videos/vietsub' },
+        { name: 'Hentai 2D', path: '/videos/hentai' }
       ]
     },
     { name: 'Truyện', path: '/manga' },
     { name: 'Blog', path: '/blog' },
     { name: 'Báo Lỗi', path: '/report' }
   ];
+
+  const isNavItemActive = (link) => {
+    if (location.pathname === link.path) return true;
+    if (link.dropdown?.some(item => location.pathname === item.path)) return true;
+    if (link.path === '/videos/all' && location.pathname.startsWith('/video')) return true;
+    if (link.path === '/manga' && location.pathname.startsWith('/manga')) return true;
+    return false;
+  };
 
   return (
     <nav className="navbar">
@@ -118,7 +131,7 @@ function Navbar() {
 
       <ul className={`nav-menu ${isMenuOpen ? 'open' : ''}`}>
         {navLinks.map((link, index) => (
-          <li key={index} className={`nav-item ${location.pathname === link.path ? 'active' : ''}`}>
+          <li key={index} className={`nav-item ${isNavItemActive(link) ? 'active' : ''}`}>
             {link.isUnderDevelopment ? (
               <a 
                 href="#" 
@@ -258,15 +271,27 @@ function Navbar() {
                   onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
                   {/* Thumbnail Cover */}
-                  <div style={{ width: '80px', height: '45px', overflow: 'hidden', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-                    <img 
-                      src={item.cover || item.thumbnail || item.image || item.videoUrl} 
-                      alt={item.title} 
-                      referrerPolicy="no-referrer"
-                      loading="lazy"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                    />
-                  </div>
+                  {(() => {
+                    const thumbSrc = item.itemType === 'video'
+                      ? (item.thumbnail || getVideoThumbnail(item.videoUrl || item.streamtapeUrl))
+                      : (item.cover || item.thumbnail || item.image);
+                    return (
+                      <div style={{ width: '80px', height: '45px', overflow: 'hidden', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.08)', flexShrink: 0, backgroundColor: '#0e1621', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {thumbSrc ? (
+                          <img
+                            src={thumbSrc}
+                            alt={item.title}
+                            referrerPolicy="no-referrer"
+                            loading="lazy"
+                            onError={e => { e.currentTarget.style.display = 'none'; }}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <Film size={16} opacity={0.45} color="var(--color-text-muted)" />
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Title & Price Column */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0 }}>

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Film, Trash2, Edit, ExternalLink, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { getVideoThumbnail } from '../../utils/videoUtils';
+import { VIDEO_CATEGORIES, getVideoCategoryBadgeLabel } from '../../constants/videoCategories';
 
 const VIDEOS_PER_PAGE = 15;
 
@@ -124,10 +125,9 @@ function VideoList({ videos = [], onEditClick, onDeleteClick }) {
             style={{ padding: '0.5rem 0.8rem', fontSize: '0.84rem', minWidth: '120px', margin: 0 }}
           >
             <option value="all">Tất cả thể loại</option>
-            <option value="vam">VAM</option>
-            <option value="3d">3D Anime</option>
-            <option value="cosplay">Cosplay</option>
-            <option value="vietsub">Vietsub</option>
+            {VIDEO_CATEGORIES.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.label}</option>
+            ))}
           </select>
 
           {/* Sort */}
@@ -240,7 +240,7 @@ function VideoList({ videos = [], onEditClick, onDeleteClick }) {
                       color: video.category === 'vam' ? '#ff4d6a' : '#66c0f4',
                       textTransform: 'uppercase'
                     }}>
-                      {video.category || 'VAM'}
+                      {getVideoCategoryBadgeLabel(video.category || 'vam')}
                     </span>
                   </td>
 

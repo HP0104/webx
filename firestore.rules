@@ -1,15 +1,104 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // Hàm kiểm tra quyền Admin
     function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
     // Hàm kiểm tra quyền Uploader
     function isUploader() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'uploader';
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'uploader';
+    }
+
+    // Kiểm tra giá tiền game hợp lệ khi user tự trừ số dư mua/gia hạn game
+    function matchesNumericGamePrice(priceNum, oldOwned, newOwned) {
+      return request.resource.data.balance == resource.data.balance - priceNum
+        && (
+          (newOwned.size() == oldOwned.size() + 1 && newOwned.hasAll(oldOwned))
+          || (newOwned.size() == oldOwned.size() && priceNum > 0)
+        );
+    }
+
+    function matchesGamePrice(rawPrice, oldOwned, newOwned) {
+      return ((rawPrice is int || rawPrice is float) && matchesNumericGamePrice(rawPrice, oldOwned, newOwned))
+        || (rawPrice is string && matchesNumericGamePrice(int(rawPrice), oldOwned, newOwned));
+    }
+
+    function isValidGamePurchaseById(addedId, oldOwned, newOwned) {
+      return exists(/databases/$(database)/documents/games/$(addedId))
+        && matchesGamePrice(
+          get(/databases/$(database)/documents/games/$(addedId)).data.get('price', 0),
+          oldOwned,
+          newOwned
+        );
+    }
+
+    function isValidOwnedRecordPurchase(lastRecord, oldOwned, newOwned) {
+      return (lastRecord is map
+          && 'id' in lastRecord
+          && lastRecord.id is string
+          && isValidGamePurchaseById(lastRecord.id, oldOwned, newOwned))
+        || (lastRecord is string
+          && isValidGamePurchaseById(lastRecord, oldOwned, newOwned));
+    }
+
+    function isValidGamePurchase() {
+      let oldOwned = resource.data.get('ownedGames', []);
+      let newOwned = request.resource.data.get('ownedGames', []);
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance', 'ownedGames'])
+        && newOwned.size() > 0
+        && request.resource.data.balance >= 0
+        && isValidOwnedRecordPurchase(newOwned[newOwned.size() - 1], oldOwned, newOwned);
+    }
+
+    // Kiểm tra chặt chẽ giờ vàng Ad-Free (Chống hack F12)
+    function isValidAdFreeUpdate() {
+      return request.resource.data.get('adFreeUntil', 0) == resource.data.get('adFreeUntil', 0)
+        || (
+          request.resource.data.get('lastAdClaimed', 0) == request.time.toMillis()
+          && request.time.toMillis() >= resource.data.get('lastAdClaimed', 0) + 15000
+          && (
+            (resource.data.get('adFreeUntil', 0) > request.time.toMillis()
+              && request.resource.data.get('adFreeUntil', 0) <= resource.data.get('adFreeUntil', 0) + 420000)
+            || (resource.data.get('adFreeUntil', 0) <= request.time.toMillis()
+              && request.resource.data.get('adFreeUntil', 0) <= request.time.toMillis() + 420000)
+          )
+        );
+    }
+
+    function isValidUserSelfUpdate(userId) {
+      return request.auth.uid == userId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.get('uid', userId) == resource.data.get('uid', userId)
+        && request.resource.data.balance >= 0
+        && request.resource.data.balance <= resource.data.balance
+        && (
+          request.resource.data.get('ownedGames', []) == resource.data.get('ownedGames', [])
+          || isValidGamePurchase()
+        )
+        && isValidAdFreeUpdate();
+    }
+
+    function isValidContactCreate() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['name', 'email', 'subject', 'message', 'createdAt', 'status'])
+        && d.name is string
+        && d.name.size() > 0
+        && d.name.size() <= 120
+        && d.email is string
+        && d.email.size() > 3
+        && d.email.size() <= 160
+        && d.subject in ['general', 'bug', 'dmca', 'partnership']
+        && d.message is string
+        && d.message.size() > 0
+        && d.message.size() <= 5000
+        && d.status == 'pending';
     }
 
     // 1. Quy tắc cho Phòng Chat cộng đồng (Ai cũng đọc được, đăng nhập mới được chat)
@@ -18,56 +107,49 @@ service cloud.firestore {
       allow create: if request.auth != null;
       allow update, delete: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
     }
-    
-    // 2. Quy tắc cho Người dùng (Bảo mật tối đa, chặn hack tiền/role/hack giờ vàng)
+
+    // 2. Quy tắc cho Người dùng (Bảo mật tối đa, chặn đọc trộm thông tin/ví, chặn hack tiền/role/game)
     match /users/{userId} {
-      allow read: if true;
-      allow create: if request.auth != null && request.auth.uid == userId
-                    && request.resource.data.balance == 0
-                    && request.resource.data.role == 'user';
-      
-      allow update: if request.auth != null && (
-        (request.auth.uid == userId 
-         && request.resource.data.role == resource.data.role // Không được tự đổi role
-         && request.resource.data.balance <= resource.data.balance // Không được tự tăng tiền
-         // Kiểm tra chặt chẽ giờ vàng Ad-Free (Chống hack F12)
-         && (
-           request.resource.data.get('adFreeUntil', 0) == resource.data.get('adFreeUntil', 0) || (
-             request.resource.data.get('lastAdClaimed', 0) == request.time.toMillis() &&
-             request.time.toMillis() >= resource.data.get('lastAdClaimed', 0) + 15000 &&
-             (
-               (resource.data.get('adFreeUntil', 0) > request.time.toMillis() && request.resource.data.get('adFreeUntil', 0) <= resource.data.get('adFreeUntil', 0) + 420000) ||
-               (resource.data.get('adFreeUntil', 0) <= request.time.toMillis() && request.resource.data.get('adFreeUntil', 0) <= request.time.toMillis() + 420000)
-             )
-           )
-         )
-        )
-        || isAdmin() // Trừ khi là admin
-      );
-      
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.balance == 0
+        && request.resource.data.role == 'user'
+        && request.resource.data.get('ownedGames', []).size() == 0;
+      allow update: if request.auth != null && (isValidUserSelfUpdate(userId) || isAdmin());
       allow delete: if request.auth != null && isAdmin();
 
       // Cho phép ghi lại lịch sử nhận thưởng (subcollection)
       match /ad_claims/{claimId} {
         allow read: if request.auth != null && request.auth.uid == userId;
-        allow create: if request.auth != null && request.auth.uid == userId
-                      && request.resource.data.minutes >= 3 
-                      && request.resource.data.minutes <= 7;
+        allow create: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.minutes >= 3
+          && request.resource.data.minutes <= 7;
       }
+    }
+
+    // 2b. Bảng ánh xạ username -> email chỉ phục vụ đăng nhập (không chứa số dư/game)
+    match /auth_lookup/{usernameKey} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if request.auth != null
+        && request.resource.data.keys().hasOnly(['email'])
+        && request.resource.data.email is string;
+      allow delete: if request.auth != null && isAdmin();
     }
 
     // 3. Quy tắc cho Blog & Bình luận Blog
     match /blogs/{blogId} {
       allow read: if true;
-      // Chỉ Admin được tạo/xóa bài viết
       allow create, delete: if request.auth != null && isAdmin();
       allow update: if request.auth != null && (
-        isAdmin() 
-        // User bình thường chỉ được phép tăng view (không được sửa nội dung)
+        isAdmin()
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
-            && request.resource.data.views == resource.data.views + 1)
+          && request.resource.data.views == resource.data.views + 1)
       );
     }
+
     match /comments/{commentId} {
       allow read: if true;
       allow create: if request.auth != null;
@@ -77,44 +159,43 @@ service cloud.firestore {
     // 4. Quy tắc cho Game trong store
     match /games/{gameId} {
       allow read: if true;
-      // Chỉ Admin được thêm, sửa, xóa Game
       allow create, delete: if request.auth != null && isAdmin();
       allow update: if request.auth != null && (
         isAdmin()
-        // User bình thường chỉ được phép tải game (tăng view/lượt tải nếu có)
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
-            && request.resource.data.views == resource.data.views + 1)
+          && request.resource.data.views == resource.data.views + 1)
       );
     }
 
     // 4b. Quy tắc cho Sticker
     match /stickers/{stickerId} {
       allow read: if true;
-      allow create: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.url is string
+        && request.resource.data.url.size() <= 200000;
       allow update, delete: if request.auth != null && isAdmin();
     }
 
     // 5. Quy tắc cho Video & Bình luận Video
     match /videos/{videoId} {
       allow read: if true;
-      // Admin tạo mọi video; Uploader tạo video của chính họ
       allow create: if request.auth != null && (
-        isAdmin() || 
-        (isUploader() && request.resource.data.uploaderId == request.auth.uid)
+        isAdmin()
+        || (isUploader() && request.resource.data.uploaderId == request.auth.uid)
       );
-      // Admin xóa mọi video; Uploader xóa video do chính họ đăng
       allow delete: if request.auth != null && (
-        isAdmin() || 
-        (isUploader() && resource.data.uploaderId == request.auth.uid)
+        isAdmin()
+        || (isUploader() && resource.data.uploaderId == request.auth.uid)
       );
-      // Admin sửa mọi video; Uploader sửa video do chính họ đăng; User chỉ tăng views
       allow update: if request.auth != null && (
         isAdmin()
         || (isUploader() && resource.data.uploaderId == request.auth.uid)
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
-            && request.resource.data.views == resource.data.views + 1)
+          && request.resource.data.views == resource.data.views + 1)
       );
     }
+
     match /video_comments/{commentId} {
       allow read: if true;
       allow create: if request.auth != null;
@@ -124,55 +205,53 @@ service cloud.firestore {
     // 5b. Quy tắc cho Truyện tranh (Manga)
     match /manga/{mangaId} {
       allow read: if true;
-      // Admin tạo mọi truyện; Uploader tạo truyện của chính họ
       allow create: if request.auth != null && (
-        isAdmin() || 
-        (isUploader() && request.resource.data.uploaderId == request.auth.uid)
+        isAdmin()
+        || (isUploader() && request.resource.data.uploaderId == request.auth.uid)
       );
-      // Admin xóa mọi truyện; Uploader xóa truyện do chính họ đăng
       allow delete: if request.auth != null && (
-        isAdmin() || 
-        (isUploader() && resource.data.uploaderId == request.auth.uid)
+        isAdmin()
+        || (isUploader() && resource.data.uploaderId == request.auth.uid)
       );
-      // Admin sửa mọi truyện; Uploader sửa truyện do chính họ đăng; User chỉ tăng views
       allow update: if request.auth != null && (
         isAdmin()
         || (isUploader() && resource.data.uploaderId == request.auth.uid)
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
-            && request.resource.data.views == resource.data.views + 1)
+          && request.resource.data.views == resource.data.views + 1)
       );
     }
 
-    // 6. Quy tắc cho bảng Báo lỗi & Hỗ trợ (User chỉ xem/tạo của mình)
+    // 6. Quy tắc cho bảng Báo lỗi & Hỗ trợ (User chỉ xem/tạo đúng kênh của mình)
     match /reports/{document} {
-      allow create: if request.auth != null;
+      allow create: if request.auth != null && (
+        (request.resource.data.senderId == request.auth.uid && request.resource.data.channelId == request.auth.uid)
+        || isAdmin()
+      );
       allow read: if request.auth != null && (resource.data.channelId == request.auth.uid || resource.data.senderId == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && isAdmin();
     }
 
     match /error_reports/{document} {
-      allow create: if request.auth != null;
-      allow read: if request.auth != null; // Ai cũng xem được báo lỗi chung
+      allow create: if request.auth != null && request.resource.data.get('senderId', request.auth.uid) == request.auth.uid;
+      allow read: if request.auth != null && (resource.data.get('senderId', '') == request.auth.uid || isAdmin());
       allow update, delete: if request.auth != null && isAdmin();
     }
-    
-    // 7. Quy tắc cho bảng Ví nạp tiền (Cực kỳ quan trọng: chặn user tự đổi status thành công)
+
+    // 7. Quy tắc cho bảng Ví nạp tiền (Chỉ chủ hóa đơn hoặc Admin được xem; chỉ Admin/Backend cập nhật)
     match /payments/{document} {
-      allow read: if request.auth != null;
-      
-      // User chỉ được tạo hóa đơn ở trạng thái "pending"
-      allow create: if request.auth != null 
-                    && request.resource.data.userId == request.auth.uid
-                    && request.resource.data.status == 'pending';
-      
-      // User không được tự sửa đổi nội dung hóa đơn (đặc biệt là status)
-      allow update: if request.auth != null 
-                    && (isAdmin()
-                        || (request.resource.data.userId == request.auth.uid 
-                            && request.resource.data.status == resource.data.status));
-      
-      // Chặn xóa
-      allow delete: if request.auth != null && isAdmin();
+      allow read: if request.auth != null && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0;
+      allow update, delete: if request.auth != null && isAdmin();
+    }
+
+    // 8. Quy tắc cho Tin nhắn Liên hệ / DMCA (Khách gửi được; chỉ Admin xem & xử lý)
+    match /contact_messages/{docId} {
+      allow create: if isValidContactCreate();
+      allow read, update, delete: if request.auth != null && isAdmin();
     }
   }
 }

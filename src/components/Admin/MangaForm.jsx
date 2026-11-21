@@ -7,6 +7,7 @@ import {
   FREEIMAGE_API_KEY_STORAGE,
   MANGA_STORAGE_PROVIDER_KEY,
   TELEGRAM_CDN_DOMAIN,
+  TELEGRAM_UPLOAD_KEY_STORAGE,
   getImgBBUsageSummary,
   resetImgBBKeyUsage,
   formatCountdownTime,
@@ -21,6 +22,7 @@ import {
   isImageFile,
   parseMangaTitleAndChapter,
   extractChapterNumericValue,
+  getNextChapterNumber,
   isSameChapter,
   findDuplicateChapters,
   parseTelegramExportJson,
@@ -37,6 +39,7 @@ function MangaForm({
 }) {
   const [storageProvider, setStorageProvider] = useState(() => localStorage.getItem(MANGA_STORAGE_PROVIDER_KEY) || 'telegram');
   const [telegramThreadId, setTelegramThreadId] = useState(() => localStorage.getItem('web18p_telegram_thread_id') || '');
+  const [telegramUploadKey, setTelegramUploadKey] = useState(() => localStorage.getItem(TELEGRAM_UPLOAD_KEY_STORAGE) || '');
   const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem(IMGBB_API_KEY_STORAGE) || '');
   const [freeimageKey, setFreeimageKey] = useState(() => localStorage.getItem(FREEIMAGE_API_KEY_STORAGE) || '');
   const [uploadMode, setUploadMode] = useState('epub'); // 'epub', 'folder', 'single' or 'url'
@@ -83,52 +86,8 @@ function MangaForm({
     isLoading: false,
     checkResult: null,
     importResult: null,
-    restoredAvailable: false,
-    restoredData: null,
-    extractedChaptersCount: 0,
-    extractedImagesCount: 0,
-    isExtractionComplete: false,
-    progressPercent: 0,
-    lastScannedMsgId: 0,
     error: null
   });
-
-  // Tự động đồng bộ tiến độ trích xuất từ Telegram khi modal đang mở
-  useEffect(() => {
-    if (!telegramModal.isOpen) return;
-
-    const fetchRestored = async () => {
-      try {
-        const res = await fetch(`/restored_vo_toi_nhiem_nhiem.json?t=${Date.now()}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.chapters) {
-            const chaps = Array.isArray(data.chapters) ? data.chapters : Object.values(data.chapters);
-            const extractedChaptersCount = chaps.length;
-            const extractedImagesCount = chaps.reduce((s, c) => s + (c.images?.length || c.pages?.length || c.totalImages || 0), 0);
-            const targetTotalImages = 2494;
-            const progressPercent = Math.min(100, Math.round((extractedImagesCount / targetTotalImages) * 100));
-            const isExtractionComplete = (data.lastScannedMsgId >= 5967) || (extractedChaptersCount >= 9 && extractedImagesCount >= 2494) || (data.totalChapters >= 8);
-
-            setTelegramModal(prev => ({
-              ...prev,
-              restoredAvailable: true,
-              restoredData: data,
-              extractedChaptersCount,
-              extractedImagesCount,
-              isExtractionComplete,
-              progressPercent,
-              lastScannedMsgId: data.lastScannedMsgId || 0
-            }));
-          }
-        }
-      } catch {}
-    };
-
-    fetchRestored();
-    const timer = setInterval(fetchRestored, 2000);
-    return () => clearInterval(timer);
-  }, [telegramModal.isOpen]);
 
   // Ticking every 1s for live countdown of quotas & cooldowns
   useEffect(() => {
@@ -221,14 +180,17 @@ function MangaForm({
     const currentApiKey = storageProvider === 'catbox' ? '' : (storageProvider === 'freeimage' ? freeimageKey : imgbbKey);
 
     let currentChapterUrls = [];
+    let currentChapterMessageIds = [];
     let currentChapterIdx = 0;
 
     try {
+      const baseChapterNumber = getNextChapterNumber(mangaData.chapters);
       for (let ci = 0; ci < chaptersToUpload.length; ci++) {
         currentChapterIdx = ci;
         currentChapterUrls = [];
+        currentChapterMessageIds = [];
         const ch = chaptersToUpload[ci];
-        const chapterNumber = (mangaData.chapters?.length || 0) + addedChapters.length + 1;
+        const chapterNumber = baseChapterNumber + addedChapters.length;
 
         setUploadProgress({
           current: 0,
@@ -258,14 +220,18 @@ function MangaForm({
           {
             provider: storageProvider,
             apiKey: currentApiKey,
+            uploadKey: telegramUploadKey,
             isNsfw: true,
             namePrefix: prefix,
             mangaTitle: currentMangaTitle,
             chapterTitle: ch.name || chapterLabel,
             threadId: telegramThreadId,
             delayBetweenAlbums: 1500,
-            onChunkSuccess: ({ allUrls }) => {
+            onChunkSuccess: ({ allUrls, messageIds }) => {
               currentChapterUrls = [...allUrls];
+              if (Array.isArray(messageIds)) {
+                currentChapterMessageIds = [...messageIds];
+              }
             },
             nameGenerator: (file, idx) => {
               const padLen = ch.files.length >= 100 ? 3 : 2;
@@ -280,7 +246,7 @@ function MangaForm({
           number: chapterNumber,
           title: ch.name,
           images: urls,
-          message_ids: urls.message_ids || [],
+          message_ids: urls.message_ids || currentChapterMessageIds || [],
           createdAt: new Date().toISOString()
         });
       }
@@ -307,12 +273,13 @@ function MangaForm({
       let partialChNumber = null;
 
       if (currentCh && partialUrls.length > 0) {
-        partialChNumber = (mangaData.chapters?.length || 0) + addedChapters.length + 1;
+        partialChNumber = getNextChapterNumber(mangaData.chapters) + addedChapters.length;
         const partialChapter = {
           id: `ch-${Date.now()}-${currentChapterIdx}`,
           number: partialChNumber,
           title: currentCh.name || `Chapter ${partialChNumber}`,
           images: partialUrls,
+          message_ids: currentChapterMessageIds,
           createdAt: new Date().toISOString()
         };
         addedChapters.push(partialChapter);
@@ -653,7 +620,7 @@ function MangaForm({
     });
 
     setDuplicateModal(prev => {
-      const remainingGroups = findDuplicateChapters((mangaData.chapters || []).filter(c => !removeIds.has(c.id)));
+      const remainingGroups = prev.duplicateGroups.filter(g => g.key !== group.key);
       return {
         ...prev,
         duplicateGroups: remainingGroups,
@@ -750,7 +717,7 @@ function MangaForm({
     alert('Đã đánh số lại toàn bộ chapters theo thứ tự 1 -> N thành công!');
   };
 
-  // Mở modal kiểm tra Telegram và nạp dữ liệu khôi phục nếu có
+  // Mở modal kiểm tra Telegram
   const handleOpenTelegramModal = async (initialTab = 'check') => {
     setTelegramModal(prev => ({
       ...prev,
@@ -758,21 +725,6 @@ function MangaForm({
       tab: initialTab,
       error: null
     }));
-
-    // Thử đọc file restored_vo_toi_nhiem_nhiem.json nếu có
-    try {
-      const res = await fetch('/restored_vo_toi_nhiem_nhiem.json');
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.chapters) {
-          setTelegramModal(prev => ({
-            ...prev,
-            restoredAvailable: true,
-            restoredData: data
-          }));
-        }
-      }
-    } catch {}
 
     if (initialTab === 'check') {
       handleCheckTelegramChannel();
@@ -783,38 +735,31 @@ function MangaForm({
   const handleCheckTelegramChannel = async () => {
     setTelegramModal(prev => ({ ...prev, isLoading: true, error: null }));
     try {
-      const res = await fetch(`${TELEGRAM_CDN_DOMAIN}/check`).catch(() => null);
-      const checkData = res && res.ok ? await res.json() : null;
+      const headers = {};
+      if (telegramUploadKey.trim()) {
+        headers['X-Upload-Key'] = telegramUploadKey.trim();
+      }
+      const res = await fetch(`${TELEGRAM_CDN_DOMAIN}/check`, { headers }).catch(() => null);
+      const checkData = res ? await res.json().catch(() => null) : null;
+
+      if (!res || !res.ok) {
+        throw new Error(checkData?.error || `Worker /check trả về mã ${res?.status || 'mất kết nối'}. Vui lòng kiểm tra Upload API Key (X-Upload-Key) hoặc Worker Secrets.`);
+      }
 
       const isOk = checkData?.status === 'CONNECTED_OK' || (checkData?.bot?.ok && checkData?.channel?.ok);
-      const channelTitle = checkData?.channel?.result?.title || 'my_storage_tool';
-      const channelId = checkData?.chat_id || '-1004320007781';
-      const botName = checkData?.bot?.result?.first_name || 'my_storage_tool_bot';
-
-      const report = {
-        connected: isOk,
-        channelTitle,
-        channelId,
-        botName,
-        detectedManga: 'VỢ TÔI NHIỄM NHIỄM',
-        totalImagesOnTelegram: 2494,
-        chapters: [
-          { name: 'Chương 1', uploaded: 276, total: 276, status: 'complete' },
-          { name: 'Chương 2', uploaded: 258, total: 258, status: 'complete' },
-          { name: 'Chương 3', uploaded: 256, total: 256, status: 'complete' },
-          { name: 'Chương 4', uploaded: 304, total: 304, status: 'complete' },
-          { name: 'Chương 5', uploaded: 272, total: 272, status: 'complete' },
-          { name: 'Chương 6', uploaded: 245, total: 245, status: 'complete' },
-          { name: 'Chương 7', uploaded: 275, total: 275, status: 'complete' },
-          { name: 'Chương 8', uploaded: 358, total: 358, status: 'complete' },
-          { name: 'Chương 9', uploaded: 250, total: 290, status: 'incomplete', missingCount: 40, missingRange: 'Trang 251 - 290' }
-        ]
-      };
+      const channelTitle = checkData?.channel?.result?.title || 'Kênh Telegram';
+      const channelId = checkData?.chat_id || 'Chưa xác định';
+      const botName = checkData?.bot?.result?.username || checkData?.bot?.result?.first_name || 'Bot Telegram';
 
       setTelegramModal(prev => ({
         ...prev,
         isLoading: false,
-        checkResult: report
+        checkResult: {
+          connected: isOk,
+          channelTitle,
+          channelId,
+          botName
+        }
       }));
     } catch (err) {
       setTelegramModal(prev => ({
@@ -861,7 +806,7 @@ function MangaForm({
         const numB = parseInt(b.replace(/\D+/g, '') || '0', 10);
         return numA - numB;
       });
-      chaptersToApply = keys.map(k => {
+      chaptersToApply = keys.map((k, kIdx) => {
         const ch = chaptersToApply[k];
         const num = parseInt(k.replace(/\D+/g, '') || '1', 10);
         const pages = ch.pages || [];
@@ -869,7 +814,7 @@ function MangaForm({
         const total = pages.length;
         const expected = ch.expectedTotal || total;
         return {
-          id: `ch-tg-${num}-${Date.now()}`,
+          id: `ch-tg-${num}-${Date.now()}-${kIdx}`,
           number: num,
           title: k,
           images: pages.map(p => p.url),
@@ -889,7 +834,7 @@ function MangaForm({
     const firstCover = manga.cover || chaptersToApply[0]?.images?.[0] || '';
     setMangaData(prev => ({
       ...prev,
-      title: prev.title || manga.title || 'VỢ TÔI NHIỄM NHIỄM',
+      title: prev.title || manga.title || '',
       cover: prev.cover || firstCover,
       chapters: chaptersToApply
     }));
@@ -932,7 +877,7 @@ function MangaForm({
     if (imageFiles.length === 0) return alert('Không tìm thấy ảnh trong folder!');
 
     setIsUploading(true);
-    const chapterNumber = (mangaData.chapters?.length || 0) + 1;
+    const chapterNumber = getNextChapterNumber(mangaData.chapters);
     let currentMangaTitle = (mangaData.title || '').trim();
 
     // Auto-detect chapter name and manga title from folder structure if not manually set
@@ -958,9 +903,10 @@ function MangaForm({
     const currentApiKey = storageProvider === 'catbox' ? '' : (storageProvider === 'freeimage' ? freeimageKey : imgbbKey);
 
     let newlyUploaded = [];
+    let newlyUploadedMsgIds = [];
 
     try {
-      setUploadProgress({ current: 0, total: imageFiles.length, file: '', chapterIdx: 1, chapterTotal: 1, chapterName: `Chapter ${chapterNumber}` });
+      setUploadProgress({ current: 0, total: imageFiles.length, file: '', chapterIdx: 1, chapterTotal: 1, chapterName: chTitle });
 
       const urls = await uploadMultipleMangaImages(
         imageFiles,
@@ -976,14 +922,18 @@ function MangaForm({
         {
           provider: storageProvider,
           apiKey: currentApiKey,
+          uploadKey: telegramUploadKey,
           isNsfw: true,
           namePrefix: prefix,
           mangaTitle: currentMangaTitle,
           chapterTitle: chTitle,
           threadId: telegramThreadId,
           delayBetweenAlbums: 1500,
-          onChunkSuccess: ({ allUrls }) => {
+          onChunkSuccess: ({ allUrls, messageIds }) => {
             newlyUploaded = [...allUrls];
+            if (Array.isArray(messageIds)) {
+              newlyUploadedMsgIds = [...messageIds];
+            }
           },
           nameGenerator: (file, idx) => {
             const padLen = imageFiles.length >= 100 ? 3 : 2;
@@ -996,9 +946,9 @@ function MangaForm({
       const newChapter = {
         id: `ch-${Date.now()}`,
         number: chapterNumber,
-        title: manualChapterTitle || `Chapter ${chapterNumber}`,
+        title: chTitle,
         images: urls,
-        message_ids: urls.message_ids || [],
+        message_ids: urls.message_ids || newlyUploadedMsgIds || [],
         createdAt: new Date().toISOString()
       };
 
@@ -1019,14 +969,16 @@ function MangaForm({
         const partialChapter = {
           id: `ch-${Date.now()}`,
           number: chapterNumber,
-          title: manualChapterTitle || chTitle,
+          title: chTitle,
           images: partialUrls,
+          message_ids: newlyUploadedMsgIds,
           createdAt: new Date().toISOString()
         };
         setMangaData(prev => {
           const chapters = [...(prev.chapters || []), partialChapter];
+          const allMsgIds = chapters.flatMap(c => c.message_ids || []);
           const firstImg = !prev.cover && partialUrls[0] ? partialUrls[0] : prev.cover;
-          return { ...prev, chapters, cover: firstImg };
+          return { ...prev, chapters, cover: firstImg, message_ids: allMsgIds };
         });
         setResumeInfo({
           chapterId: partialChapter.id,
@@ -1060,7 +1012,7 @@ function MangaForm({
 
     if (urls.length === 0) return alert('Vui lòng nhập ít nhất 1 URL ảnh!');
 
-    const chapterNumber = (mangaData.chapters?.length || 0) + 1;
+    const chapterNumber = getNextChapterNumber(mangaData.chapters);
     const newChapter = {
       id: `ch-${Date.now()}`,
       number: chapterNumber,
@@ -1082,7 +1034,7 @@ function MangaForm({
   // Delete chapter
   const handleDeleteChapter = async (chId) => {
     const targetChapter = (mangaData.chapters || []).find(c => c.id === chId);
-    if (!targetChapter) return;
+    if (!targetChapter) return false;
 
     const hasTg = (targetChapter.message_ids && targetChapter.message_ids.length > 0) ||
       (targetChapter.images && targetChapter.images.some(u => typeof u === 'string' && u.includes('takarvn.workers.dev')));
@@ -1093,10 +1045,10 @@ function MangaForm({
       if (confirm(`${confirmMsg}\n\n📡 Chapter này có ảnh lưu trên Telegram.\n\nBấm [OK] để xóa chapter VÀ XÓA LUÔN toàn bộ ảnh trên Telegram.\nBấm [Cancel] nếu muốn hủy bỏ.`)) {
         deleteOnTg = true;
       } else {
-        return;
+        return false;
       }
     } else {
-      if (!confirm(confirmMsg)) return;
+      if (!confirm(confirmMsg)) return false;
     }
 
     if (deleteOnTg) {
@@ -1115,6 +1067,7 @@ function MangaForm({
         message_ids: allMsgIds
       };
     });
+    return true;
   };
 
   // Toggle chapter expand
@@ -1255,6 +1208,7 @@ function MangaForm({
     const currentApiKey = storageProvider === 'catbox' ? '' : (storageProvider === 'freeimage' ? freeimageKey : imgbbKey);
 
     let newlyUploadedUrls = [];
+    let newlyUploadedMsgIds = [];
 
     try {
       await uploadMultipleMangaImages(
@@ -1272,6 +1226,7 @@ function MangaForm({
         {
           provider: storageProvider,
           apiKey: currentApiKey,
+          uploadKey: telegramUploadKey,
           isNsfw: true,
           mangaTitle: currentMangaTitle,
           chapterTitle: chTitle,
@@ -1279,29 +1234,35 @@ function MangaForm({
           pageOffset: existingCount,
           totalOriginalPages: finalTotal,
           delayBetweenAlbums: 1500,
-          onChunkSuccess: ({ newUrls, allUrls }) => {
+          onChunkSuccess: ({ newUrls, allUrls, messageIds }) => {
             newlyUploadedUrls = [...allUrls];
+            if (Array.isArray(messageIds)) {
+              newlyUploadedMsgIds = [...messageIds];
+            }
             // Lưu giữ trực tiếp ngay khi từng album (10 trang) thành công
             setMangaData(prev => {
               const chapters = (prev.chapters || []).map(c => {
                 if (c.id === chapter.id || c.number === chapter.number) {
                   const existingSet = new Set(c.images || []);
                   const toAppend = newUrls.filter(u => !existingSet.has(u));
+                  const mergedMsgIds = Array.from(new Set([...(c.message_ids || []), ...(messageIds || [])]));
                   return {
                     ...c,
-                    images: [...(c.images || []), ...toAppend]
+                    images: [...(c.images || []), ...toAppend],
+                    message_ids: mergedMsgIds
                   };
                 }
                 return c;
               });
-              return { ...prev, chapters };
+              const allMsgIds = chapters.flatMap(c => c.message_ids || []);
+              return { ...prev, chapters, message_ids: allMsgIds };
             });
           }
         }
       );
 
       // Cập nhật state lần cuối cùng
-      let finalCount = 0;
+      let finalCount = existingCount + newlyUploadedUrls.length;
       setMangaData(prev => {
         const chapters = (prev.chapters || []).map(c => {
           if (c.id === chapter.id || c.number === chapter.number) {
@@ -1309,25 +1270,27 @@ function MangaForm({
             for (const u of newlyUploadedUrls) {
               if (!existingUrls.includes(u)) existingUrls.push(u);
             }
+            const mergedMsgIds = Array.from(new Set([...(c.message_ids || []), ...newlyUploadedMsgIds]));
             finalCount = existingUrls.length;
             return {
               ...c,
-              images: existingUrls
+              images: existingUrls,
+              message_ids: mergedMsgIds
             };
           }
           return c;
         });
-        return { ...prev, chapters };
+        const allMsgIds = chapters.flatMap(c => c.message_ids || []);
+        return { ...prev, chapters, message_ids: allMsgIds };
       });
 
       setResumeInfo(null);
-      alert(`🎉 Đã bổ sung thành công ${missingFiles.length} ảnh vào ${chTitle}! Hiện có đủ ${finalCount || (existingCount + missingFiles.length)} trang.`);
+      alert(`🎉 Đã bổ sung thành công ${missingFiles.length} ảnh vào ${chTitle}! Hiện có đủ ${finalCount} trang.`);
       setSupplementModal(prev => ({ ...prev, isOpen: false, isUploading: false, uploadProgress: null }));
     } catch (err) {
       console.error('Lỗi bổ sung ảnh:', err);
 
-      const targetChapter = (mangaData.chapters || []).find(c => c.id === chapter.id || c.number === chapter.number);
-      const currentImagesCount = targetChapter?.images?.length || (existingCount + newlyUploadedUrls.length);
+      const currentImagesCount = existingCount + newlyUploadedUrls.length;
 
       if (newlyUploadedUrls.length > 0) {
         setMangaData(prev => {
@@ -1337,11 +1300,13 @@ function MangaForm({
               for (const u of newlyUploadedUrls) {
                 if (!existingUrls.includes(u)) existingUrls.push(u);
               }
-              return { ...c, images: existingUrls };
+              const mergedMsgIds = Array.from(new Set([...(c.message_ids || []), ...newlyUploadedMsgIds]));
+              return { ...c, images: existingUrls, message_ids: mergedMsgIds };
             }
             return c;
           });
-          return { ...prev, chapters };
+          const allMsgIds = chapters.flatMap(c => c.message_ids || []);
+          return { ...prev, chapters, message_ids: allMsgIds };
         });
       }
 
@@ -1424,7 +1389,7 @@ function MangaForm({
       data.createdAt = new Date().toISOString();
     }
 
-    onSaveManga(data);
+    await onSaveManga(data);
   };
 
   const totalUploadedImages = (mangaData.chapters || []).reduce((sum, ch) => sum + (ch.images?.length || 0), 0);
@@ -1621,7 +1586,7 @@ function MangaForm({
               • <strong>Lưu trữ vĩnh viễn:</strong> Cache 30 ngày tại Cloudflare Edge VN, không bao giờ lo mất ảnh hay bị chặn.
             </p>
 
-            {/* Telegram Topic ID (Thread ID) optional */}
+            {/* Telegram Topic ID & Upload Key */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.75rem', color: '#93c5fd', fontWeight: 600 }}>
                 💬 Telegram Topic ID (Tùy chọn):
@@ -1636,7 +1601,35 @@ function MangaForm({
                 placeholder="Ví dụ: 1234 (Để trống nếu dùng kênh thông thường)"
                 style={{
                   flex: '1',
-                  minWidth: '220px',
+                  minWidth: '200px',
+                  padding: '0.35rem 0.6rem',
+                  fontSize: '0.75rem',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(59, 130, 246, 0.4)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                  color: '#fff',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', color: '#93c5fd', fontWeight: 600 }}>
+                🔑 Worker Upload Key (X-Upload-Key):
+              </span>
+              <input
+                type="password"
+                value={telegramUploadKey}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setTelegramUploadKey(val);
+                  if (val.trim()) localStorage.setItem(TELEGRAM_UPLOAD_KEY_STORAGE, val.trim());
+                  else localStorage.removeItem(TELEGRAM_UPLOAD_KEY_STORAGE);
+                }}
+                placeholder="Nhập UPLOAD_API_KEY của Cloudflare Worker img-cdn"
+                style={{
+                  flex: '1',
+                  minWidth: '200px',
                   padding: '0.35rem 0.6rem',
                   fontSize: '0.75rem',
                   borderRadius: '6px',
@@ -2159,7 +2152,7 @@ function MangaForm({
                   <Sparkles size={16} color="#c084fc" /> Tải lên trực tiếp từ file .EPUB, .CBZ hoặc .ZIP
                 </p>
                 <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: 0 }}>
-                  Hệ thống tự động giải nén client-side, sắp xếp trang ảnh, trích xuất tên truyện / chapter và nén WebP trước khi upload lên FreeImage.host.
+                  Hệ thống tự động giải nén client-side, sắp xếp trang ảnh, trích xuất tên truyện / chapter và nén WebP trước khi upload lên {storageProvider === 'telegram' ? 'Telegram CDN' : storageProvider === 'catbox' ? 'Catbox.moe' : storageProvider === 'freeimage' ? 'FreeImage.host' : 'ImgBB'}.
                 </p>
               </div>
 
@@ -2260,7 +2253,7 @@ function MangaForm({
                       cursor: isUploading ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    <Upload size={16} /> {isUploading ? 'Đang upload...' : `Bắt đầu Upload lên ${storageProvider === 'freeimage' ? 'FreeImage.host' : 'ImgBB'} (${countTotalImages(parsedChapters)} ảnh)`}
+                    <Upload size={16} /> {isUploading ? 'Đang upload...' : `Bắt đầu Upload lên ${storageProvider === 'telegram' ? 'Telegram CDN' : storageProvider === 'catbox' ? 'Catbox.moe' : storageProvider === 'freeimage' ? 'FreeImage.host' : 'ImgBB'} (${countTotalImages(parsedChapters)} ảnh)`}
                   </button>
                 </div>
               )}
@@ -2337,7 +2330,7 @@ function MangaForm({
                   {parsedChapters.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => setParsedChapters([])}
+                      onClick={() => { setParsedChapters([]); setUploadProgress(null); }}
                       disabled={isUploading}
                       className="btn"
                       style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.55rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, fontSize: '0.84rem', cursor: 'pointer', borderRadius: '8px' }}
@@ -3416,6 +3409,7 @@ function MangaForm({
                     directory=""
                     multiple
                     style={{ display: 'none' }}
+                    onClick={(e) => { e.target.value = ''; }}
                     onChange={handleSupplementFolderSelected}
                   />
                 </div>
@@ -3450,6 +3444,7 @@ function MangaForm({
                     multiple
                     accept="image/*"
                     style={{ display: 'none' }}
+                    onClick={(e) => { e.target.value = ''; }}
                     onChange={handleSupplementFilesSelected}
                   />
                 </div>
@@ -3744,11 +3739,13 @@ function MangaForm({
                             </div>
                             <button
                               type="button"
-                              onClick={() => {
-                                handleDeleteChapter(ch.id);
+                              onClick={async () => {
+                                const deleted = await handleDeleteChapter(ch.id);
+                                if (!deleted) return;
                                 setDuplicateModal(prev => {
-                                  const updatedMangaChapters = (mangaData.chapters || []).filter(c => c.id !== ch.id);
-                                  const newGroups = findDuplicateChapters(updatedMangaChapters);
+                                  const newGroups = prev.duplicateGroups
+                                    .map(g => ({ ...g, chapters: g.chapters.filter(c => c.id !== ch.id) }))
+                                    .filter(g => g.chapters.length > 1);
                                   return { ...prev, duplicateGroups: newGroups, isOpen: newGroups.length > 0 };
                                 });
                               }}
@@ -3970,10 +3967,10 @@ function MangaForm({
                       <Radio size={18} color="#60a5fa" />
                       <div style={{ fontSize: '0.82rem' }}>
                         <div>
-                          Kênh Telegram: <strong style={{ color: '#fff' }}>{telegramModal.checkResult?.channelTitle || 'my_storage_tool'}</strong> (ID: <code>{telegramModal.checkResult?.channelId || '-1004320007781'}</code>)
+                          Kênh Telegram: <strong style={{ color: '#fff' }}>{telegramModal.checkResult?.channelTitle || 'Chưa kết nối'}</strong> (ID: <code>{telegramModal.checkResult?.channelId || 'N/A'}</code>)
                         </div>
                         <div style={{ color: 'var(--color-text-muted)', marginTop: '2px', fontSize: '0.75rem' }}>
-                          Bot: @{telegramModal.checkResult?.botName || 'my_storage_tool_bot'} • Proxy: <code>img-cdn.takarvn.workers.dev</code>
+                          Bot: @{telegramModal.checkResult?.botName || 'chưa rõ'} • Proxy: <code>img-cdn.takarvn.workers.dev</code>
                         </div>
                       </div>
                     </div>
@@ -3986,7 +3983,7 @@ function MangaForm({
                         fontSize: '0.75rem',
                         fontWeight: 700
                       }}>
-                        {telegramModal.checkResult?.connected ? '✅ Kết Nối Tốt' : 'Đang kiểm tra...'}
+                        {telegramModal.checkResult?.connected ? '✅ Kết Nối Tốt' : (telegramModal.isLoading ? 'Đang kiểm tra...' : '⚠️ Chưa kết nối')}
                       </span>
                       <button
                         type="button"
@@ -4000,195 +3997,18 @@ function MangaForm({
                     </div>
                   </div>
 
-                  {/* Audit Details */}
-                  {telegramModal.checkResult && (
+                  {/* Connection guidance for restore */}
+                  {telegramModal.checkResult?.connected && (
                     <div style={{
                       borderRadius: '10px',
                       border: '1px solid rgba(59, 130, 246, 0.3)',
                       backgroundColor: 'rgba(255, 255, 255, 0.02)',
                       padding: '1rem',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.8rem'
+                      fontSize: '0.82rem',
+                      color: 'var(--color-text-muted)',
+                      lineHeight: 1.5
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <div>
-                          <strong style={{ fontSize: '1rem', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            📚 {telegramModal.checkResult.detectedManga}
-                          </strong>
-                          <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                            Tìm thấy <strong>{telegramModal.checkResult.chapters.length} chapter</strong> với hơn <strong>{telegramModal.checkResult.totalImagesOnTelegram.toLocaleString('vi-VN')} ảnh</strong> trên Telegram
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Chapter rows */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                        {telegramModal.checkResult.chapters.map((ch, idx) => {
-                          const allChaps = telegramModal.restoredData?.chapters;
-                          const restoredChap = Array.isArray(allChaps)
-                            ? allChaps.find(c => c.title === ch.name || c.number === idx + 1)
-                            : (allChaps?.[ch.name] || allChaps?.[idx]);
-                          const actualExtracted = restoredChap?.images?.length || restoredChap?.pages?.length || restoredChap?.totalImages || 0;
-                          const targetCount = ch.status === 'complete' ? ch.total : ch.uploaded;
-                          const isDoneThisChapter = actualExtracted >= targetCount && actualExtracted > 0;
-                          const isScanningThisChapter = actualExtracted > 0 && actualExtracted < targetCount;
-
-                          return (
-                            <div
-                              key={idx}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '0.55rem 0.8rem',
-                                borderRadius: '6px',
-                                backgroundColor: isDoneThisChapter
-                                  ? 'rgba(34, 197, 94, 0.07)'
-                                  : isScanningThisChapter
-                                    ? 'rgba(59, 130, 246, 0.08)'
-                                    : 'rgba(255, 255, 255, 0.02)',
-                                border: `1px solid ${
-                                  isDoneThisChapter
-                                    ? 'rgba(34, 197, 94, 0.25)'
-                                    : isScanningThisChapter
-                                      ? 'rgba(59, 130, 246, 0.4)'
-                                      : 'rgba(255, 255, 255, 0.07)'
-                                }`
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.84rem' }}>
-                                <strong style={{ color: isDoneThisChapter ? '#4ade80' : isScanningThisChapter ? '#60a5fa' : 'var(--color-text-muted)' }}>
-                                  {ch.name}
-                                </strong>
-                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
-                                  Đã tải lên Telegram: <strong>{ch.uploaded}/{ch.total}</strong> ảnh
-                                </span>
-                              </div>
-                              <div>
-                                {isDoneThisChapter ? (
-                                  <span style={{
-                                    padding: '0.15rem 0.55rem',
-                                    borderRadius: '10px',
-                                    backgroundColor: 'rgba(34, 197, 94, 0.2)',
-                                    color: '#4ade80',
-                                    fontSize: '0.74rem',
-                                    fontWeight: 700
-                                  }}>
-                                    ✅ Đầy đủ {actualExtracted}/{ch.total} ảnh
-                                  </span>
-                                ) : isScanningThisChapter ? (
-                                  <span style={{
-                                    padding: '0.15rem 0.55rem',
-                                    borderRadius: '10px',
-                                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                                    color: '#60a5fa',
-                                    fontSize: '0.74rem',
-                                    fontWeight: 700,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '0.3rem'
-                                  }}>
-                                    <RefreshCw size={11} className="spin-anim" /> Đang trích xuất {actualExtracted}/{targetCount} ảnh
-                                  </span>
-                                ) : (
-                                  <span style={{
-                                    padding: '0.15rem 0.55rem',
-                                    borderRadius: '10px',
-                                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                    color: 'var(--color-text-muted)',
-                                    fontSize: '0.74rem'
-                                  }}>
-                                    ⏳ Chờ lượt quét ({ch.uploaded} ảnh)
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* 1-Click Action to load restored data into Form */}
-                      {telegramModal.restoredAvailable && telegramModal.restoredData && (
-                        <div style={{
-                          marginTop: '0.6rem',
-                          padding: '1rem',
-                          borderRadius: '8px',
-                          backgroundColor: telegramModal.isExtractionComplete ? 'rgba(16, 185, 129, 0.12)' : 'rgba(59, 130, 246, 0.09)',
-                          border: `1px solid ${telegramModal.isExtractionComplete ? 'rgba(16, 185, 129, 0.4)' : 'rgba(59, 130, 246, 0.3)'}`,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '0.8rem'
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.6rem' }}>
-                            <div>
-                              <div style={{
-                                fontSize: '0.92rem',
-                                fontWeight: 700,
-                                color: telegramModal.isExtractionComplete ? '#34d399' : '#60a5fa',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.45rem'
-                              }}>
-                                {telegramModal.isExtractionComplete ? (
-                                  <>🎉 ĐÃ KHÔI PHỤC HOÀN TẤT 100% TOÀN BỘ 9 CHAPTER (2,494 ẢNH)!</>
-                                ) : (
-                                  <>
-                                    <RefreshCw size={15} className="spin-anim" />
-                                    ĐANG TRÍCH XUẤT ẢNH TỪ TELEGRAM: {telegramModal.extractedChaptersCount || 0}/9 Chapter ({telegramModal.extractedImagesCount || 0}/2,494 ảnh — {telegramModal.progressPercent || 0}%)
-                                  </>
-                                )}
-                              </div>
-                              <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', marginTop: '3px' }}>
-                                {telegramModal.isExtractionComplete ? (
-                                  'Tất cả các chapter đã được đồng bộ đầy đủ link CDN Telegram tốc độ cao. Bấm nút bên cạnh để nạp toàn bộ vào Form!'
-                                ) : (
-                                  'Hệ thống đang tự động trích xuất các link ảnh CDN từ Kênh Telegram trong chế độ ngầm. Tiến độ đang tự động cập nhật trực tiếp mỗi 2 giây...'
-                                )}
-                              </div>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => handleApplyTelegramMangaToForm(telegramModal.restoredData)}
-                              className="btn"
-                              style={{
-                                backgroundColor: telegramModal.isExtractionComplete ? '#10b981' : '#3b82f6',
-                                color: '#fff',
-                                fontWeight: 700,
-                                fontSize: '0.86rem',
-                                padding: '0.6rem 1.2rem',
-                                borderRadius: '6px',
-                                border: 'none',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.45rem',
-                                boxShadow: telegramModal.isExtractionComplete ? '0 4px 15px rgba(16, 185, 129, 0.35)' : '0 4px 15px rgba(59, 130, 246, 0.3)'
-                              }}
-                            >
-                              {telegramModal.isExtractionComplete ? (
-                                <><Sparkles size={16} /> 🚀 NẠP ĐẦY ĐỦ 9 CHAPTER VÀO FORM NGAY</>
-                              ) : (
-                                <><Sparkles size={15} /> ⚡ Nạp tạm {telegramModal.extractedChaptersCount || 0} Chapter đã có</>
-                              )}
-                            </button>
-                          </div>
-
-                          {/* Progress bar if not complete */}
-                          {!telegramModal.isExtractionComplete && (
-                            <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(255, 255, 255, 0.08)', borderRadius: '3px', overflow: 'hidden' }}>
-                              <div style={{
-                                width: `${telegramModal.progressPercent || 0}%`,
-                                height: '100%',
-                                backgroundColor: '#3b82f6',
-                                borderRadius: '3px',
-                                transition: 'width 0.4s ease'
-                              }} />
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      ✅ Worker Telegram CDN hoạt động bình thường. Để khôi phục danh sách chapter và link CDN từ kênh lưu trữ về Form, vui lòng chuyển sang tab <strong style={{ color: '#34d399' }}>"📥 Nhập File JSON Khôi Phục (result.json)"</strong> và tải tệp export của Telegram Desktop lên.
                     </div>
                   )}
                 </div>
@@ -4211,7 +4031,7 @@ function MangaForm({
                       💡 Cách xuất file sao lưu result.json từ Telegram Desktop (Siêu tốc 5 giây):
                     </strong>
                     1. Mở ứng dụng <strong>Telegram Desktop</strong> trên máy tính.<br/>
-                    2. Mở Kênh lưu trữ ảnh (<code>my_storage_tool</code>) -&gt; Bấm dấu 3 chấm <code>...</code> ở góc trên cùng bên phải -&gt; Chọn <strong>Export channel history</strong>.<br/>
+                    2. Mở Kênh lưu trữ ảnh của bạn -&gt; Bấm dấu 3 chấm <code>...</code> ở góc trên cùng bên phải -&gt; Chọn <strong>Export channel history</strong>.<br/>
                     3. Bỏ tích tất cả mục Video/Tệp, chỉ cần chọn định dạng <strong>Machine-readable JSON</strong> -&gt; Bấm <strong>Export</strong>.<br/>
                     4. Kéo thả file <code>result.json</code> vừa tải vào ô bên dưới hoặc chọn file!
                   </div>
@@ -4230,6 +4050,7 @@ function MangaForm({
                       type="file"
                       accept=".json"
                       style={{ display: 'none' }}
+                      onClick={(e) => { e.target.value = ''; }}
                       onChange={e => {
                         const file = e.target.files?.[0];
                         if (file) handleImportTelegramJsonFile(file);

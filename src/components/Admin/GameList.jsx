@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Search, Edit, Trash2, ExternalLink, Gamepad2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { getGamePath } from '../../utils/gameRoutes';
+import { sortGamesList } from '../../utils/adminListUtils';
 
 const GAMES_PER_PAGE = 15;
 
@@ -11,23 +12,13 @@ function GameList({ games = [], onEditClick, onDeleteClick }) {
   const [currentPage, setCurrentPage] = useState(1);
 
   const filteredGames = useMemo(() => {
-    let list = games.filter(g => 
+    const list = games.filter(g => 
       (g.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
       (g.developer || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (Array.isArray(g.tags) ? g.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())) : (g.tags || '').toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
-    if (sortBy === 'newest') {
-      list = [...list].reverse();
-    } else if (sortBy === 'price_high') {
-      list.sort((a, b) => (b.price || 0) - (a.price || 0));
-    } else if (sortBy === 'downloads') {
-      list.sort((a, b) => (b.downloads || 0) - (a.downloads || 0));
-    } else if (sortBy === 'name') {
-      list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-    }
-
-    return list;
+    return sortGamesList(list, sortBy);
   }, [games, searchTerm, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(filteredGames.length / GAMES_PER_PAGE));
@@ -66,7 +57,7 @@ function GameList({ games = [], onEditClick, onDeleteClick }) {
           <select 
             className="input-field" 
             value={sortBy} 
-            onChange={(e) => setSortBy(e.target.value)}
+            onChange={(e) => { setSortBy(e.target.value); setCurrentPage(1); }}
             style={{ padding: '0.5rem 0.8rem', fontSize: '0.84rem', minWidth: '140px', margin: 0 }}
           >
             <option value="newest">⏱️ Mới cập nhật</option>

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { isAdBlockExemptPath } from '../utils/adUtils';
 
 const EXOCLICK_PROVIDER_SRC = 'https://a.magsrv.com/ad-provider.js';
 const EXOCLICK_SCRIPT_ID = 'exoclick-ad-provider';
@@ -265,6 +267,8 @@ function getExoClickZones(config) {
 // Đặt component này ở App.jsx, bên ngoài mọi nội dung.
 
 export function AdBlockWall({ user } = {}) {
+  const location = useLocation();
+  const isExemptRoute = isAdBlockExemptPath(location.pathname);
   const [blocked, setBlocked] = useState(false);
   const [checking, setChecking] = useState(true);
   const wallRef = useRef(null);
@@ -272,6 +276,8 @@ export function AdBlockWall({ user } = {}) {
   const adFreeUntil = user?.adFreeUntil || 0;
 
   useEffect(() => {
+    if (isExemptRoute) return undefined;
+
     let cancelled = false;
     const timer = setTimeout(async () => {
       if (adFreeUntil > Date.now()) {
@@ -294,12 +300,12 @@ export function AdBlockWall({ user } = {}) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [adFreeUntil]);
+  }, [adFreeUntil, isExemptRoute]);
 
   // Popup bị chặn bởi trình duyệt KHÔNG phải ad blocker → không cần listener
 
   useEffect(() => {
-    if (blocked && !checking) {
+    if (!isExemptRoute && blocked && !checking) {
       // Block body scrolling
       document.body.style.setProperty('overflow', 'hidden', 'important');
       
@@ -320,10 +326,10 @@ export function AdBlockWall({ user } = {}) {
         document.body.style.removeProperty('overflow');
       };
     }
-  }, [blocked, checking]);
+  }, [blocked, checking, isExemptRoute]);
 
-  // Không bị chặn hoặc đang kiểm tra lần đầu → không hiện gì
-  if (!blocked || checking) return null;
+  // Không bị chặn, trang miễn trừ hoặc đang kiểm tra lần đầu → không hiện gì
+  if (isExemptRoute || !blocked || checking) return null;
 
   return (
     <div 
@@ -506,7 +512,7 @@ function ExoClickAdBanner({ config }) {
 
     let cancelled = false;
 
-    ensureExoClickProvider({ forceReload: typeof window.AdProvider !== 'undefined' })
+    ensureExoClickProvider()
       .then(() => {
         if (cancelled) return;
         serveExoClickAd();

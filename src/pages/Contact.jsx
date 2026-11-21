@@ -1,6 +1,9 @@
 import { useState } from 'react';
-import { Mail, Send, MessageSquare, Clock, MapPin, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Mail, Send, MessageSquare, Clock, MapPin, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebase';
+import { buildContactMessagePayload } from '../utils/adminListUtils';
 
 export default function Contact() {
   const [formData, setFormData] = useState({
@@ -11,14 +14,31 @@ export default function Contact() {
   });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError(null);
+
+    const check = buildContactMessagePayload(formData);
+    if (!check.valid) {
+      setError(check.error);
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await addDoc(collection(db, 'contact_messages'), {
+        ...check.payload,
+        createdAt: serverTimestamp()
+      });
       setSubmitted(true);
-    }, 600);
+      setFormData({ name: '', email: '', subject: 'general', message: '' });
+    } catch (err) {
+      setError('Không thể gửi yêu cầu lúc này: ' + (err.message || 'Lỗi kết nối'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -99,17 +119,33 @@ export default function Contact() {
           </h2>
 
           {submitted ? (
-            <div style={{ padding: '1.5rem', backgroundColor: 'rgba(46, 204, 113, 0.12)', border: '1px solid rgba(46, 204, 113, 0.3)', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '0.8rem', color: '#2ecc71' }}>
-              <CheckCircle2 size={24} />
-              <div>
-                <strong>Gửi thông tin thành công!</strong>
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.85)' }}>
-                  Cảm ơn bạn đã liên hệ. Đội ngũ quản trị WEB18P sẽ phản hồi qua email của bạn trong thời gian sớm nhất.
-                </p>
+            <div style={{ padding: '1.5rem', backgroundColor: 'rgba(46, 204, 113, 0.12)', border: '1px solid rgba(46, 204, 113, 0.3)', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '0.8rem', color: '#2ecc71' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                <CheckCircle2 size={24} />
+                <div>
+                  <strong>Gửi thông tin thành công!</strong>
+                  <p style={{ margin: '0.2rem 0 0', fontSize: '0.9rem', color: 'rgba(255, 255, 255, 0.85)' }}>
+                    Cảm ơn bạn đã liên hệ. Đội ngũ quản trị WEB18P sẽ phản hồi qua email của bạn trong thời gian sớm nhất.
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setSubmitted(false)}
+                className="btn btn-outline"
+                style={{ alignSelf: 'flex-start', fontSize: '0.85rem' }}
+              >
+                Gửi yêu cầu khác
+              </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+              {error && (
+                <div style={{ padding: '0.9rem 1rem', backgroundColor: 'rgba(255, 77, 79, 0.12)', border: '1px solid rgba(255, 77, 79, 0.35)', borderRadius: '8px', color: '#ff7875', display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.9rem' }}>
+                  <AlertCircle size={18} />
+                  <span>{error}</span>
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.4rem' }}>

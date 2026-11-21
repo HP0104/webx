@@ -14,24 +14,11 @@ import {
 } from 'lucide-react';
 import { 
   isDirectVideo, 
-  getAlternateEmbedUrl 
+  getAlternateEmbedUrl,
+  isTrustedEmbedUrl
 } from '../utils/videoUtils';
 import PreRollVideoAd from './PreRollVideoAd';
 import { ADS_CONFIG } from '../config/ads';
-
-/**
- * Trusted domains list for secure iframe parsing
- */
-const TRUSTED_DOMAINS = [
-  'streamtape.com', 'streamtape.to',
-  'filemoon.sx', 'filemoon.to', 'filemoon.in', 'fmoonembed.com',
-  'streamhg.com', 'hgcloud.to', 'vibuxer.com', 'huntrexus.com',
-  'doodstream.com', 'dood.pm', 'dood.to', 'dood.so', 'dood.watch', 'dood.wf', 'ds2play.com', 'd0000d.com',
-  'upstream.to', 'mixdrop.co', 'mixdrop.to', 'mixdrop.sx',
-  'vidoza.net', 'voe.sx', 'mp4upload.com', 'wishonly.site',
-  'player.vimeo.com', 'youtube.com', 'youtube-nocookie.com',
-  'iframe.mediadelivery.net'
-];
 
 /**
  * Extract clean iframe src from raw embed code or link
@@ -60,16 +47,7 @@ function resolveIframeSrc(rawUrl, currentServer) {
     effectiveSrc = getAlternateEmbedUrl(rawUrl, currentServer);
   }
 
-  if (effectiveSrc) {
-    try {
-      const hostname = new URL(effectiveSrc).hostname.toLowerCase();
-      const isTrusted = TRUSTED_DOMAINS.some(d => hostname === d || hostname.endsWith('.' + d));
-      if (!isTrusted) return '';
-    } catch {
-      return '';
-    }
-  }
-  return effectiveSrc;
+  return isTrustedEmbedUrl(effectiveSrc) ? effectiveSrc : '';
 }
 
 /**
@@ -114,6 +92,8 @@ export default function SeamlessSeriesPlayer({
   const videoRefB = useRef(null);
   const hlsRefA = useRef(null);
   const hlsRefB = useRef(null);
+  const loadedSlotSourceRef = useRef({ A: null, B: null });
+  const transitionTimerRef = useRef(null);
 
   // Loading & Error States
   const [isLoadingA, setIsLoadingA] = useState(false);
@@ -192,9 +172,19 @@ export default function SeamlessSeriesPlayer({
   // -------------------------------------------------------------
   // HLS / Video Stream Initializer for a Slot
   // -------------------------------------------------------------
-  const initStream = useCallback((videoEl, hlsRefObj, src, autoPlay = false, setIsLoading, setHasError) => {
+  const initStream = useCallback((slotName, videoEl, hlsRefObj, src, autoPlay = false, setIsLoading, setHasError, forceReload = false) => {
     if (!videoEl || !src) return;
 
+    // Preserve already-preloaded HLS buffer when handing over slots
+    if (!forceReload && loadedSlotSourceRef.current[slotName] === src && (hlsRefObj.current || videoEl.src === src)) {
+      setIsLoading(false);
+      if (autoPlay) {
+        videoEl.play().catch(() => {});
+      }
+      return;
+    }
+
+    loadedSlotSourceRef.current[slotName] = src;
     const isHls = /\.m3u8(?:\?.*)?$/i.test(src);
     setIsLoading(true);
     setHasError(false);
@@ -256,6 +246,8 @@ export default function SeamlessSeriesPlayer({
   }, []);
 
   // -------------------------------------------------------------
+  const preloadedEpRef = useRef(null);
+
   // Switch to an Episode index manually or programmatically
   // -------------------------------------------------------------
   const goToEpisode = useCallback((targetIndex, isAutoTransition = false) => {
@@ -263,7 +255,10 @@ export default function SeamlessSeriesPlayer({
 
     if (isAutoTransition) {
       setTransitionNotification(`Chuyển liền mạch sang: ${episodes[targetIndex]?.title || `Tập ${targetIndex + 1}`}`);
-      setTimeout(() => setTransitionNotification(null), 3500);
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = setTimeout(() => setTransitionNotification(null), 3500);
+    } else {
+      preloadedEpRef.current = null;
     }
 
     if (onEpisodeChange) {
@@ -277,22 +272,20 @@ export default function SeamlessSeriesPlayer({
     if (activeSlot === 'A') {
       const epA = episodes[currentEpisodeIndex];
       if (epA && isDirect(epA)) {
-        initStream(videoRefA.current, hlsRefA, epA.videoUrl, true, setIsLoadingA, setHasErrorA);
+        initStream('A', videoRefA.current, hlsRefA, epA.videoUrl, true, setIsLoadingA, setHasErrorA, reloadKey > 0);
       }
     } else {
       const epB = episodes[currentEpisodeIndex];
       if (epB && isDirect(epB)) {
-        initStream(videoRefB.current, hlsRefB, epB.videoUrl, true, setIsLoadingB, setHasErrorB);
+        initStream('B', videoRefB.current, hlsRefB, epB.videoUrl, true, setIsLoadingB, setHasErrorB, reloadKey > 0);
       }
     }
-  }, [currentEpisodeIndex, activeSlot, episodes, initStream, hasStarted]);
+  }, [currentEpisodeIndex, activeSlot, episodes, initStream, hasStarted, reloadKey]);
 
   // -------------------------------------------------------------
   // Double-Buffering Preloading Logic (Cách 2)
   // When active slot is near end (e.g. 35s left), preload next slot in background
   // -------------------------------------------------------------
-  const preloadedEpRef = useRef(null);
-
   const handleTimeUpdate = (activeSlotName) => {
     const activeVideo = activeSlotName === 'A' ? videoRefA.current : videoRefB.current;
     if (!activeVideo || !autoContinuousPlay) return;
@@ -312,13 +305,13 @@ export default function SeamlessSeriesPlayer({
         // Standby slot is B
         setSlotBEpisodeIndex(nextIdx);
         if (nextEp && isDirect(nextEp)) {
-          initStream(videoRefB.current, hlsRefB, nextEp.videoUrl, false, setIsLoadingB, setHasErrorB);
+          initStream('B', videoRefB.current, hlsRefB, nextEp.videoUrl, false, setIsLoadingB, setHasErrorB);
         }
       } else {
         // Standby slot is A
         setSlotAEpisodeIndex(nextIdx);
         if (nextEp && isDirect(nextEp)) {
-          initStream(videoRefA.current, hlsRefA, nextEp.videoUrl, false, setIsLoadingA, setHasErrorA);
+          initStream('A', videoRefA.current, hlsRefA, nextEp.videoUrl, false, setIsLoadingA, setHasErrorA);
         }
       }
     }
@@ -351,13 +344,18 @@ export default function SeamlessSeriesPlayer({
     preloadedEpRef.current = null;
   };
 
-  // Cleanup on unmount
+  // Cleanup active HLS instances and timers on unmount
   useEffect(() => {
-    const currentHlsA = hlsRefA.current;
-    const currentHlsB = hlsRefB.current;
     return () => {
-      if (currentHlsA) currentHlsA.destroy();
-      if (currentHlsB) currentHlsB.destroy();
+      if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
+      if (hlsRefA.current) {
+        hlsRefA.current.destroy();
+        hlsRefA.current = null;
+      }
+      if (hlsRefB.current) {
+        hlsRefB.current.destroy();
+        hlsRefB.current = null;
+      }
     };
   }, []);
 

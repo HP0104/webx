@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Smile, X, Plus } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, where, getDocs, onSnapshot, addDoc, serverTimestamp, doc, runTransaction } from 'firebase/firestore';
 import { useAppContext } from '../App';
 
 const STICKERS = [
@@ -164,8 +164,14 @@ function ChatBox() {
       return;
     }
 
-    const myCustomStickers = dynamicStickers.filter(s => s.userId === (user.id || user.uid));
-    const count = myCustomStickers.length;
+    const currentUid = user.id || user.uid;
+    let count;
+    try {
+      const userStickersSnap = await getDocs(query(collection(db, 'stickers'), where('userId', '==', currentUid)));
+      count = userStickersSnap.size;
+    } catch {
+      count = dynamicStickers.filter(s => s.userId === currentUid).length;
+    }
 
     // Check if they need to pay (charged from the 6th custom sticker onwards)
     const isCharged = count >= 5;
@@ -184,11 +190,17 @@ function ChatBox() {
       const compressedDataUrl = await compressStickerImage(file, 128, 128, 0.82);
       setError(null);
 
-      // Deduct 1,000đ if charged
+      // Deduct 1,000đ atomically in a Firestore transaction if charged
       if (isCharged) {
-        const userRef = doc(db, 'users', user.id || user.uid);
-        await updateDoc(userRef, {
-          balance: (Number(balance) || 0) - 1000
+        const userRef = doc(db, 'users', currentUid);
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(userRef);
+          if (!snap.exists()) throw new Error('Không tìm thấy tài khoản người dùng.');
+          const serverBal = Number(snap.data().balance) || 0;
+          if (serverBal < 1000) {
+            throw new Error(`Số dư hiện tại (${serverBal.toLocaleString('vi-VN')}đ) không đủ 1.000đ!`);
+          }
+          tx.update(userRef, { balance: serverBal - 1000 });
         });
       }
 
@@ -197,7 +209,7 @@ function ChatBox() {
         url: compressedDataUrl,
         createdAt: serverTimestamp(),
         addedBy: user.username,
-        userId: user.id || user.uid
+        userId: currentUid
       });
 
       if (isCharged) {

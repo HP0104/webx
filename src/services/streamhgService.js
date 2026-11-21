@@ -8,8 +8,8 @@
 
 const STREAMHG_API_URL = 'https://streamhgapi.com/api';
 
-// Hệ thống sử dụng API Key tập trung từ cấu hình máy chủ/hệ thống, có thể ghi đè qua localStorage nếu đổi key mới.
-export const SYSTEM_STREAMHG_API_KEY = import.meta.env.VITE_STREAMHG_API_KEY || '32607ejmodn55xwhvcvro';
+// Cấu hình key hệ thống từ biến môi trường hoặc nhập thủ công qua localStorage ở giao diện Studio/Uploader.
+export const SYSTEM_STREAMHG_API_KEY = import.meta.env.VITE_STREAMHG_API_KEY || '';
 export const TARGET_FOLDER_NAME = import.meta.env.VITE_STREAMHG_FOLDER || 'web18p.xyz';
 export const STREAMHG_STORAGE_KEY = 'web18p_streamhg_api_key';
 

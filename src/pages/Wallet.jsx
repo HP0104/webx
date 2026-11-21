@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { Wallet as WalletIcon, QrCode, CheckCircle2, RefreshCw, AlertTriangle, Landmark, Info, History } from 'lucide-react';
 import { useAppContext } from '../App';
 import { PAYMENT_CONFIG } from '../config/payment';
-import { db } from '../firebase';
-import { doc, getDoc, setDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { auth, db } from '../firebase';
+import { doc, getDoc, setDoc, collection, query, where, onSnapshot, increment } from 'firebase/firestore';
+
+const WORKER_BASE_URL = 'https://web18p-deloy.takarvn.workers.dev';
 
 // Helper to format ISO dates beautifully
 const formatDate = (isoString) => {
@@ -22,68 +24,10 @@ const formatDate = (isoString) => {
   }
 };
 
-// Multi-proxy fallback for CORS-restricted APIs
-const fetchWithCorsProxy = async (url, options = {}) => {
-  const { headers = {}, ...restOptions } = options;
-
-  // 1. Thử gọi trực tiếp trước
-  try {
-    const directResponse = await fetch(url, { ...options, signal: AbortSignal.timeout(8000) });
-    if (directResponse.ok) return directResponse;
-  } catch {
-    // Direct fetch failed, try proxies
-  }
-
-  // 2. Dùng các CORS proxy hỗ trợ truyền headers
-  const proxies = [
-    { getUrl: (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`, forwardHeaders: true },
-    { getUrl: (u) => `https://proxy.corsfix.com/?${u}`, forwardHeaders: true },
-    { getUrl: (u) => `https://api.cors.lol/?url=${encodeURIComponent(u)}`, forwardHeaders: true },
-    { getUrl: (u) => `https://thingproxy.freeboard.io/fetch/${u}`, forwardHeaders: true },
-    { getUrl: (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, forwardHeaders: false },
-    { getUrl: (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`, forwardHeaders: false }
-  ];
-
-  const hasCustomHeaders = Object.keys(headers).some(h => h !== 'Content-Type');
-
-  for (const proxy of proxies) {
-    if (hasCustomHeaders && !proxy.forwardHeaders) continue;
-    try {
-      const fetchOptions = {
-        ...restOptions,
-        signal: AbortSignal.timeout(10000),
-        headers: proxy.forwardHeaders ? headers : {}
-      };
-      const response = await fetch(proxy.getUrl(url), fetchOptions);
-      if (response.ok) return response;
-    } catch {
-      continue;
-    }
-  }
-  throw new Error('Không thể kết nối đến cổng thanh toán. Vui lòng thử lại sau hoặc liên hệ Admin.');
-};
-
-// Tạo HMAC-SHA256 cho PayOS signature
-const generatePayOSSignature = async (data, checksumKey) => {
-  const sortedKeys = Object.keys(data).sort();
-  const signData = sortedKeys.map(key => `${key}=${data[key]}`).join('&');
-
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(checksumKey),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(signData));
-  return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
-};
-
 function Wallet() {
   const { balance, updateUserInfo, user } = useAppContext();
   const [amount, setAmount] = useState('50000');
+  const [lockedAmount, setLockedAmount] = useState(50000);
   const [selectedGateway, setSelectedGateway] = useState('sepay');
   const [showQR, setShowQR] = useState(false);
   const [txCode, setTxCode] = useState('');
@@ -129,23 +73,22 @@ function Wallet() {
     return () => { if (unsubscribe) unsubscribe(); };
   }, [user]);
 
-  // Kiểm tra token hợp lệ
-  const isSePayTokenValid = (() => {
-    const token = PAYMENT_CONFIG.sepay.apiToken;
-    return token && token.length > 10 && !token.includes('nhap_api_token');
-  })();
-
-  const isPayOSConfigured = (() => {
-    const { apiKey, clientId, checksumKey } = PAYMENT_CONFIG.payos;
-    return apiKey && clientId && checksumKey && !apiKey.includes('nhap_');
+  const isBankAccountConfigured = (() => {
+    const cfg = selectedGateway === 'sepay' ? PAYMENT_CONFIG.sepay : PAYMENT_CONFIG.payos;
+    return Boolean(cfg.accountNumber && !cfg.accountNumber.includes('NHAP_'));
   })();
 
   // 1. Tạo mã QR động dựa trên cổng thanh toán
   const handleGenerateQR = async () => {
     if (!user) return alert('Vui lòng đăng nhập để thực hiện nạp tiền!');
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      return alert('Vui lòng chọn mệnh giá hợp lệ!');
+    }
 
     const code = `WEBX${Math.floor(100000 + Math.random() * 900000)}`;
     setTxCode(code);
+    setLockedAmount(numericAmount);
     setPayosOrderCode(null);
     setPayosCheckoutUrl('');
 
@@ -154,75 +97,65 @@ function Wallet() {
       await setDoc(doc(db, 'payments', code), {
         userId: user.id || user.uid || '',
         userEmail: user.email || 'N/A',
-        amount: Number(amount),
+        amount: numericAmount,
         txCode: code,
         gateway: selectedGateway,
         status: 'pending',
         createdAt: new Date().toISOString()
       });
     } catch (err) {
-      console.warn('Không thể khởi tạo giao dịch trên Firestore:', err.message);
+      return alert('Không thể khởi tạo giao dịch trên hệ thống: ' + err.message);
     }
 
     if (selectedGateway === 'sepay') {
       const { bankId, accountNumber } = PAYMENT_CONFIG.sepay;
+      if (!accountNumber || accountNumber.includes('NHAP_')) {
+        return alert('Hệ thống chưa cấu hình số tài khoản nhận tiền SePay!');
+      }
       const bankName = bankId === 'MB' ? 'MBBank' : bankId;
-      const generatedQrUrl = `https://qr.sepay.vn/img?bank=${bankName}&acc=${accountNumber}&template=compact&amount=${amount}&des=${code}`;
+      const generatedQrUrl = `https://qr.sepay.vn/img?bank=${bankName}&acc=${accountNumber}&template=compact&amount=${numericAmount}&des=${code}`;
       setQrUrl(generatedQrUrl);
       setShowQR(true);
     } else {
-      // PayOS: Tạo đơn hàng qua PayOS API để có orderCode kiểm tra sau
-      if (isPayOSConfigured) {
-        try {
-          const { apiKey, clientId, checksumKey } = PAYMENT_CONFIG.payos;
-          const orderCode = Math.floor(100000 + Math.random() * 900000);
-
-          const orderData = {
+      // PayOS: Ủy quyền tạo đơn qua Cloudflare Worker (không giữ secret ở client)
+      try {
+        const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+        const orderCode = Math.floor(100000 + Math.random() * 900000);
+        const response = await fetch(`${WORKER_BASE_URL}/create-payos-order`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
+          },
+          body: JSON.stringify({
             orderCode,
-            amount: Number(amount),
+            amount: numericAmount,
             description: code,
             cancelUrl: window.location.href,
             returnUrl: window.location.href
-          };
+          })
+        });
 
-          const signature = await generatePayOSSignature(orderData, checksumKey);
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && result.code === '00' && result.data) {
+          const qrCodeUrl = result.data.qrCode
+            ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(result.data.qrCode)}`
+            : `https://qr.sepay.vn/img?bank=${PAYMENT_CONFIG.payos.bankId === 'MB' ? 'MBBank' : PAYMENT_CONFIG.payos.bankId}&acc=${PAYMENT_CONFIG.payos.accountNumber}&template=compact&amount=${numericAmount}&des=${code}`;
 
-          const response = await fetchWithCorsProxy('https://api-merchant.payos.vn/v2/payment-requests', {
-            method: 'POST',
-            headers: {
-              'x-client-id': clientId,
-              'x-api-key': apiKey,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ ...orderData, signature })
-          });
-
-          const result = await response.json().catch(() => ({
-        success: false,
-        message: 'Không nhận được phản hồi hợp lệ từ máy chủ thanh toán. Vui lòng thử lại sau.'
-      }));
-
-          if (result.code === '00' && result.data) {
-            // Chuyển đổi mã QR raw dạng text của PayOS thành ảnh QR qua qrserver.com
-            const qrCodeUrl = result.data.qrCode 
-              ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(result.data.qrCode)}`
-              : `https://qr.sepay.vn/img?bank=${PAYMENT_CONFIG.payos.bankId === 'MB' ? 'MBBank' : PAYMENT_CONFIG.payos.bankId}&acc=${PAYMENT_CONFIG.payos.accountNumber}&template=compact&amount=${amount}&des=${code}`;
-            
-            setQrUrl(qrCodeUrl);
-            setPayosCheckoutUrl(result.data.checkoutUrl || '');
-            setPayosOrderCode(orderCode);
-            setShowQR(true);
-            return;
-          }
-        } catch (err) {
-          console.warn('PayOS order creation failed, fallback to VietQR:', err.message);
+          setQrUrl(qrCodeUrl);
+          setPayosCheckoutUrl(result.data.checkoutUrl || '');
+          setPayosOrderCode(orderCode);
+          setShowQR(true);
+          return;
         }
+      } catch (err) {
+        console.warn('PayOS order creation via Worker failed, fallback to VietQR:', err.message);
       }
 
-      // Fallback: dùng SePay QR cho tài khoản PayOS nếu PayOS API fail
+      // Fallback: dùng VietQR cho tài khoản ngân hàng khi PayOS API chưa sẵn sàng
       const { bankId, accountNumber } = PAYMENT_CONFIG.payos;
       const bankName = bankId === 'MB' ? 'MBBank' : bankId;
-      const generatedQrUrl = `https://qr.sepay.vn/img?bank=${bankName}&acc=${accountNumber}&template=compact&amount=${amount}&des=${code}`;
+      const generatedQrUrl = `https://qr.sepay.vn/img?bank=${bankName}&acc=${accountNumber}&template=compact&amount=${numericAmount}&des=${code}`;
       setQrUrl(generatedQrUrl);
       setShowQR(true);
     }
@@ -230,28 +163,28 @@ function Wallet() {
 
   // 2. Kiểm tra giao dịch — CHỈ khi bấm nút "Tôi đã chuyển khoản"
   const handleManualCheckPayment = async () => {
-    if (!txCode || !amount || !user) return;
+    const checkAmount = lockedAmount || Number(amount);
+    if (!txCode || !checkAmount || !user) return;
     setIsProcessing(true);
 
     try {
-      // Gọi Cloudflare Worker để kiểm tra và cộng tiền ở Backend Worker
-      const workerUrl = 'https://web18p-deloy.takarvn.workers.dev/check-payment';
+      const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : '';
       const requestBody = {
         txCode,
         userId: user.id || user.uid || '',
         gateway: selectedGateway,
-        amount: Number(amount)
+        amount: checkAmount
       };
 
-      // Nếu là PayOS, gửi kèm theo payosOrderCode
       if (selectedGateway === 'payos' && payosOrderCode) {
         requestBody.payosOrderCode = Number(payosOrderCode);
       }
 
-      const response = await fetch(workerUrl, {
+      const response = await fetch(`${WORKER_BASE_URL}/check-payment`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
         },
         body: JSON.stringify(requestBody)
       });
@@ -262,15 +195,14 @@ function Wallet() {
       }));
 
       if (response.ok && result.success) {
-        // Cập nhật state số dư mới ở Frontend từ database Firestore
         const userSnap = await getDoc(doc(db, 'users', user.id || user.uid || ''));
         if (userSnap.exists()) {
           await updateUserInfo({ balance: userSnap.data().balance });
         }
         setShowQR(false);
-        alert(`Nạp tiền thành công! Đã cộng ${Number(amount).toLocaleString('vi-VN')} VNĐ vào ví của bạn.`);
+        alert(`Nạp tiền thành công! Đã cộng ${checkAmount.toLocaleString('vi-VN')} VNĐ vào ví của bạn.`);
       } else {
-        alert(result.message || `Hệ thống chưa nhận được khoản thanh toán cho mã "${txCode}".\n\nVui lòng đợi 10-30 giây để ngân hàng xử lý và gửi thông báo, sau đó bấm lại nút kiểm tra!`);
+        alert(result.message || result.error || `Hệ thống chưa nhận được khoản thanh toán cho mã "${txCode}".\n\nVui lòng đợi 10-30 giây để ngân hàng xử lý và gửi thông báo, sau đó bấm lại nút kiểm tra!`);
       }
     } catch (err) {
       console.warn('Lỗi kiểm tra giao dịch:', err.message);
@@ -280,8 +212,10 @@ function Wallet() {
     }
   };
 
-  // 3. Giả lập thanh toán dành cho môi trường phát triển (Test local)
+  // 3. Giả lập thanh toán dành cho Admin / dev
   const handleSimulatePayment = async () => {
+    if (user?.role !== 'admin') return;
+    const simAmount = lockedAmount || Number(amount);
     setIsProcessing(true);
     const mockTxId = `SIM-${Math.floor(100000 + Math.random() * 900000)}`;
 
@@ -289,25 +223,25 @@ function Wallet() {
       await setDoc(doc(db, 'payments', mockTxId), {
         userId: user.id || user.uid || '',
         userEmail: user.email || 'N/A',
-        amount: Number(amount),
-        txCode: txCode,
+        amount: simAmount,
+        txCode: txCode || mockTxId,
         isSimulation: true,
         gateway: selectedGateway,
+        status: 'completed',
         createdAt: new Date().toISOString()
       });
 
-      const newBalance = (balance || 0) + parseInt(amount);
-      await updateUserInfo({ balance: newBalance });
+      await updateUserInfo({ balance: increment(simAmount) });
       setIsProcessing(false);
       setShowQR(false);
-      alert(`[THỬ NGHIỆM] Mô phỏng thành công! Đã nạp ${parseInt(amount).toLocaleString('vi-VN')} VNĐ vào tài khoản.`);
+      alert(`[THỬ NGHIỆM] Mô phỏng thành công! Đã nạp ${simAmount.toLocaleString('vi-VN')} VNĐ vào tài khoản.`);
     } catch (err) {
       console.warn("Lỗi lưu giả lập thanh toán:", err);
       setIsProcessing(false);
     }
   };
 
-  const isGatewayConfigured = selectedGateway === 'sepay' ? isSePayTokenValid : isPayOSConfigured;
+  const isGatewayConfigured = isBankAccountConfigured;
 
   return (
     <div className="wallet-page" style={{ maxWidth: '850px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '2rem', paddingBottom: '3rem' }}>

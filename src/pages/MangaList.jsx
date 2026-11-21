@@ -2,7 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useAppContext } from '../App';
 import { BookOpen, Search, Filter, Eye, Layers, Clock, ArrowUpDown, ChevronRight } from 'lucide-react';
-import { MANGA_GENRES, MANGA_STATUS } from '../utils/mangaUtils';
+import { MANGA_GENRES, MANGA_STATUS, getLatestMangaChapter } from '../utils/mangaUtils';
+
+const FALLBACK_MANGA_COVER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzFhMWExZiIvPjx0ZXh0IHg9IjEwMCIgeT0iMTUwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjE0Ij5ObyBDb3ZlcjwvdGV4dD48L3N2Zz4=';
 import Pagination from '../components/Pagination';
 
 const ITEMS_PER_PAGE = 12;
@@ -152,7 +154,7 @@ function MangaList() {
           {/* Status Filter */}
           <div className="manga-filter-select">
             <Filter size={14} />
-            <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)}>
+            <select value={selectedStatus} onChange={e => { setSelectedStatus(e.target.value); setSearchParams({ page: '1' }); }}>
               <option value="all">Tất cả trạng thái</option>
               {Object.entries(MANGA_STATUS).map(([key, label]) => (
                 <option key={key} value={key}>{label}</option>
@@ -217,17 +219,19 @@ function MangaList() {
 
 function MangaCard({ manga }) {
   const chapterCount = manga.chapters?.length || 0;
-  const latestChapter = manga.chapters?.[chapterCount - 1];
+  const latestChapter = getLatestMangaChapter(manga.chapters || []);
 
   return (
     <Link to={`/manga/${manga.id}`} className="manga-card" id={`manga-card-${manga.id}`}>
       <div className="manga-card-cover">
         <img
-          src={manga.cover || '/placeholder-manga.jpg'}
+          src={manga.cover || FALLBACK_MANGA_COVER}
           alt={manga.title}
           loading="lazy"
           onError={e => {
-            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjMwMCIgZmlsbD0iIzFhMWExZiIvPjx0ZXh0IHg9IjEwMCIgeT0iMTUwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjNjY2IiBmb250LXNpemU9IjE0Ij5ObyBDb3ZlcjwvdGV4dD48L3N2Zz4=';
+            if (e.currentTarget.src !== FALLBACK_MANGA_COVER) {
+              e.currentTarget.src = FALLBACK_MANGA_COVER;
+            }
           }}
         />
         {/* Status Badge */}

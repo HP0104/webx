@@ -29,28 +29,39 @@ function getCorsHeaders(request) {
   };
 }
 
-// Làm sạch và chuẩn hóa Bot Token (chống lỗi nhập thừa "bot" hoặc nhập nhầm Chat ID)
+// Làm sạch và chuẩn hóa Bot Token từ Worker Secrets (không hardcode secret trong repo)
 function cleanToken(token) {
-  // Token Telegram BẮT BUỘC phải có dấu ':' (ví dụ: 8957921406:AAFPi...)
-  // Nếu bị nhập nhầm Chat ID (như -1004320007781) hoặc rỗng, tự động sửa về token chuẩn
-  if (!token || !String(token).includes(":")) {
-    return "8762474365:AAE8cgyYGC8GoV6tQ5mZi7Ye8tj5Du-FQpo";
-  }
+  if (!token || !String(token).includes(":")) return "";
   let t = String(token).trim();
   t = t.replace(/^["']|["']$/g, "").trim();
   if (t.includes("api.telegram.org/bot")) {
     t = t.split("api.telegram.org/bot").pop().split("/")[0];
   }
   t = t.replace(/^bot/i, "").trim();
-  return t.includes(":") ? t : "8762474365:AAE8cgyYGC8GoV6tQ5mZi7Ye8tj5Du-FQpo";
+  return t.includes(":") ? t : "";
 }
 
-// Làm sạch Chat ID
+// Làm sạch Chat ID từ Worker Secrets
 function cleanChatId(chatId) {
-  if (!chatId) return "-1004320007781";
-  let c = String(chatId).trim();
-  c = c.replace(/^["']|["']$/g, "").trim();
-  return c || "-1004320007781";
+  if (!chatId) return "";
+  return String(chatId).trim().replace(/^["']|["']$/g, "").trim();
+}
+
+function authorizeUploadRequest(request, UPLOAD_API_KEY, corsHeaders) {
+  if (!UPLOAD_API_KEY) {
+    return new Response(JSON.stringify({ error: "Server chưa cấu hình UPLOAD_API_KEY Secret." }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...corsHeaders }
+    });
+  }
+  const clientKey = request.headers.get("X-Upload-Key") || "";
+  if (clientKey !== UPLOAD_API_KEY) {
+    return new Response(JSON.stringify({ error: "Unauthorized: X-Upload-Key không hợp lệ" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json", ...corsHeaders }
+    });
+  }
+  return null;
 }
 
 // Chuyển chuỗi tiếng Việt thành Hashtag Telegram an toàn (#Vo_Luyen_Dinh_Phong)
@@ -88,7 +99,7 @@ export default {
       return new Response(null, { headers: getCorsHeaders(request) });
     }
 
-    // Lấy Token & Chat ID (được làm sạch và fallback tự động)
+    // Lấy Token & Chat ID từ Cloudflare Worker Secrets
     const BOT_TOKEN = cleanToken(env.BOT_TOKEN);
     const CHAT_ID = cleanChatId(env.CHAT_ID);
     const UPLOAD_API_KEY = env.UPLOAD_API_KEY;
@@ -97,6 +108,15 @@ export default {
     // 0. ENDPOINT KIỂM TRA TRẠNG THÁI: GET /check
     // =========================================================================
     if (url.pathname === "/check" || url.pathname === "/api/check") {
+      const corsHeaders = getCorsHeaders(request);
+      const authError = authorizeUploadRequest(request, UPLOAD_API_KEY, corsHeaders);
+      if (authError) return authError;
+      if (!BOT_TOKEN || !CHAT_ID) {
+        return new Response(JSON.stringify({ error: "BOT_TOKEN hoặc CHAT_ID chưa được cấu hình trong Worker Secrets." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json; charset=utf-8", ...corsHeaders }
+        });
+      }
       try {
         const [meRes, chatRes] = await Promise.all([
           fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getMe`).then(r => r.json()),
@@ -124,15 +144,13 @@ export default {
     // =========================================================================
     if (request.method === "POST" && (url.pathname === "/upload-album" || url.pathname === "/api/upload-album")) {
       const corsHeaders = getCorsHeaders(request);
-
-      if (UPLOAD_API_KEY) {
-        const clientKey = request.headers.get("X-Upload-Key") || "";
-        if (clientKey !== UPLOAD_API_KEY) {
-          return new Response(JSON.stringify({ error: "Unauthorized: API Key không hợp lệ" }), {
-            status: 401,
-            headers: { "Content-Type": "application/json", ...corsHeaders }
-          });
-        }
+      const authError = authorizeUploadRequest(request, UPLOAD_API_KEY, corsHeaders);
+      if (authError) return authError;
+      if (!BOT_TOKEN || !CHAT_ID) {
+        return new Response(JSON.stringify({ error: "BOT_TOKEN hoặc CHAT_ID chưa được cấu hình." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
       }
 
       try {
@@ -307,15 +325,13 @@ export default {
     // =========================================================================
     if (request.method === "POST" && (url.pathname === "/upload" || url.pathname === "/api/upload")) {
       const corsHeaders = getCorsHeaders(request);
-
-      if (UPLOAD_API_KEY) {
-        const clientKey = request.headers.get("X-Upload-Key") || "";
-        if (clientKey !== UPLOAD_API_KEY) {
-          return new Response(JSON.stringify({ error: "Unauthorized: API Key không hợp lệ" }), {
-            status: 401,
-            headers: { "Content-Type": "application/json", ...corsHeaders }
-          });
-        }
+      const authError = authorizeUploadRequest(request, UPLOAD_API_KEY, corsHeaders);
+      if (authError) return authError;
+      if (!BOT_TOKEN || !CHAT_ID) {
+        return new Response(JSON.stringify({ error: "BOT_TOKEN hoặc CHAT_ID chưa được cấu hình." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
       }
 
       try {
@@ -431,15 +447,13 @@ export default {
     // =========================================================================
     if (request.method === "POST" && (url.pathname === "/delete-messages" || url.pathname === "/api/delete-messages" || url.pathname === "/delete" || url.pathname === "/api/delete")) {
       const corsHeaders = getCorsHeaders(request);
-
-      if (UPLOAD_API_KEY) {
-        const clientKey = request.headers.get("X-Upload-Key") || "";
-        if (clientKey !== UPLOAD_API_KEY) {
-          return new Response(JSON.stringify({ error: "Unauthorized: API Key không hợp lệ" }), {
-            status: 401,
-            headers: { "Content-Type": "application/json", ...corsHeaders }
-          });
-        }
+      const authError = authorizeUploadRequest(request, UPLOAD_API_KEY, corsHeaders);
+      if (authError) return authError;
+      if (!BOT_TOKEN || !CHAT_ID) {
+        return new Response(JSON.stringify({ error: "BOT_TOKEN hoặc CHAT_ID chưa được cấu hình." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        });
       }
 
       try {
@@ -532,6 +546,12 @@ export default {
     // 3. CDN PHÁT ẢNH + EDGE CACHING (HỖ TRỢ CẢ SEO URL & THƯỜNG)
     // =========================================================================
     if (url.pathname.startsWith("/file/")) {
+      if (!BOT_TOKEN) {
+        return new Response("Worker chưa cấu hình BOT_TOKEN.", {
+          status: 500,
+          headers: { "Cache-Control": "no-cache, no-store", "Access-Control-Allow-Origin": "*" }
+        });
+      }
       let rawPath = url.pathname.replace(/^\/file\//, "").trim();
       rawPath = rawPath.replace(/\.(jpg|jpeg|png|webp|gif|bmp)$/i, "");
 

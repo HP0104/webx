@@ -743,30 +743,7 @@
           win = null;
         }
 
-        // Fallback: If direct window.open was blocked, attempt hidden anchor click
-        if (!win || win.closed || typeof win.closed === "undefined") {
-          try {
-            var a = document.createElement("a");
-            a.href = targetUrl;
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-            a.style.display = "none";
-            document.body.appendChild(a);
-            var clickEvt = new MouseEvent("click", {
-              bubbles: false,
-              cancelable: true,
-              view: window,
-            });
-            a.dispatchEvent(clickEvt);
-            setTimeout(function () {
-              try { a.remove(); } catch (err) {}
-            }, 100);
-            win = { closed: false };
-          } catch (err) {
-            win = null;
-          }
-        }
-
+        // Chỉ ghi nhận đã mở popunder khi window.open thực sự tạo được cửa sổ mới hợp lệ
         if (win && !win.closed && typeof win.closed !== "undefined") {
           popMagic.setAsOpened(e);
           popMagic.executeOnRedirect();
