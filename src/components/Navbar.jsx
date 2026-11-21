@@ -99,10 +99,7 @@ function Navbar() {
       dropdown: [
         { name: 'Tất Cả Phim', path: '/videos/all' },
         { name: 'VAM', path: '/videos/vam' },
-        { name: '3D Anime', path: '/videos/3d' },
-        { name: 'Cosplay 18+', path: '/videos/cosplay' },
-        { name: 'JAV Vietsub', path: '/videos/vietsub' },
-        { name: 'Hentai 2D', path: '/videos/hentai' }
+        { name: '3D Anime', path: '/videos/3d' }
       ]
     },
     { name: 'Truyện', path: '/manga' },

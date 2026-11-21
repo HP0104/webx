@@ -146,6 +146,7 @@ test('Phase 5 source fixes: Home URLSearchParams, Contact Firestore submit, Repo
   assert.doesNotMatch(cssSrc, /body\s*\{[\s\S]{0,300}overflow-x:\s*hidden/);
   assert.doesNotMatch(cssSrc, /body\s*\{[\s\S]{0,300}cursor:\s*pointer/);
   assert.doesNotMatch(cssSrc, /html\s*\{[\s\S]{0,200}overflow-x:\s*hidden/);
+  assert.doesNotMatch(cssSrc, /\.chat-container\s*\{[\s\S]{0,260}position:\s*sticky/);
   assert.match(cssSrc, /\.spin-anim/);
 
   // AdBanner & VideoAdBanner & popunder
